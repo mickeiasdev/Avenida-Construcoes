@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, Search, Users } from 'lucide-react'
+import { Download, Loader2, Search, Users } from 'lucide-react'
+import { downloadCsv } from '../../lib/csv'
 import { supabase } from '../../lib/supabaseClient'
 import { formatBRL, formatDate } from '../../lib/utils'
 
@@ -41,11 +42,29 @@ export default function ClientsAdmin() {
     )
   }, [clients, filter])
 
+  function exportCsv() {
+    downloadCsv('clientes.csv', (clients ?? []).map((c) => ({
+      nome: c.full_name ?? '',
+      telefone: c.phone ?? '',
+      cidade: [c.city, c.state].filter(Boolean).join('/'),
+      pedidos: c.count,
+      em_aberto: c.open,
+      total_gasto: c.spent,
+      ultimo_pedido: c.last ? new Date(c.last).toLocaleDateString('pt-BR') : '',
+      cadastrado_em: c.created_at ? new Date(c.created_at).toLocaleDateString('pt-BR') : '',
+    })))
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-800">Clientes</h1>
-        <p className="text-sm text-gray-500">{clients?.length ?? '...'} cadastrados na loja</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Clientes</h1>
+          <p className="text-sm text-gray-500">{clients?.length ?? '...'} cadastrados na loja</p>
+        </div>
+        <button type="button" className="btn-primary px-4" onClick={exportCsv} disabled={!clients || clients.length === 0}>
+          <Download className="h-4 w-4" /> Exportar CSV
+        </button>
       </div>
 
       <div className="relative max-w-sm">

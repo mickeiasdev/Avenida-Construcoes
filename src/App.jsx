@@ -1,8 +1,9 @@
-import { lazy } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { lazy, useEffect } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { StoreProvider } from './context/StoreContext'
 import { CartProvider } from './context/CartContext'
+import { FavoritesProvider } from './context/FavoritesContext'
 import { RequireAdmin, RequireAuth } from './components/ProtectedRoute'
 import { OrderAlerts } from './components/OrderAlerts'
 import StoreLayout from './layouts/StoreLayout'
@@ -13,6 +14,14 @@ import Login from './pages/Login'
 import Profile from './pages/Profile'
 import Orders from './pages/Orders'
 import Cart from './pages/Cart'
+import Favorites from './pages/Favorites'
+// SPA mantém o scroll ao trocar de rota — voltamos sempre ao topo
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => { window.scrollTo({ top: 0 }) }, [pathname])
+  return null
+}
+
 // Páginas admin carregadas sob demanda (code-splitting):
 // separa os gráficos (Recharts) do bundle principal da vitrine
 const Dashboard = lazy(() => import('./pages/admin/Dashboard'))
@@ -26,10 +35,12 @@ export default function App() {
   return (
     <AuthProvider>
       <StoreProvider>
+        <FavoritesProvider>
         <CartProvider>
           <BrowserRouter>
             {/* popup de "Novo pedido" para o admin (Realtime) */}
             <OrderAlerts />
+            <ScrollToTop />
 
             <Routes>
               {/* ============ LADO DO CLIENTE (Vitrine) ============ */}
@@ -38,6 +49,7 @@ export default function App() {
                 <Route path="/produto/:id" element={<ProductPage />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/carrinho" element={<Cart />} />
+                <Route path="/favoritos" element={<Favorites />} />
                 <Route path="/perfil" element={<RequireAuth><Profile /></RequireAuth>} />
                 <Route path="/pedidos" element={<RequireAuth><Orders /></RequireAuth>} />
               </Route>
@@ -56,6 +68,7 @@ export default function App() {
             </Routes>
           </BrowserRouter>
         </CartProvider>
+        </FavoritesProvider>
       </StoreProvider>
     </AuthProvider>
   )

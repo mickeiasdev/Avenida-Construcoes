@@ -15,17 +15,34 @@ export default function Dashboard() {
   const [recent, setRecent] = useState([])
   const [topProducts, setTopProducts] = useState([])
   const [salesByDay, setSalesByDay] = useState([])
+  const [topSold, setTopSold] = useState([])
 
   useEffect(() => {
     async function load() {
       setLoading(true)
 
-      const [ordersRes, clientsRes, productsRes, topRes] = await Promise.all([
+      const [ordersRes, clientsRes, productsRes, topRes, itemsRes] = await Promise.all([
         supabase.from('orders').select('id, total, status, created_at, customer_name'),
         supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'client'),
         supabase.from('products').select('id', { count: 'exact', head: true }).eq('active', true),
         supabase.from('products').select('name, views').order('views', { ascending: false }).limit(8),
+        supabase.from('order_items').select('product_name, quantity, unit_price'),
       ])
+
+      // Ranking de mais vendidos: agregação por nome do produto
+      const soldMap = {}
+      ;(itemsRes.data ?? []).forEach((it) => {
+        const s = soldMap[it.product_name] ?? { qty: 0, revenue: 0 }
+        s.qty += it.quantity
+        s.revenue += Number(it.unit_price) * it.quantity
+        soldMap[it.product_name] = s
+      })
+      setTopSold(
+        Object.entries(soldMap)
+          .map(([name, s]) => ({ name, ...s }))
+          .sort((a, b) => b.qty - a.qty)
+          .slice(0, 5)
+      )
 
       const orders = ordersRes.data ?? []
       const delivered = orders.filter((o) => o.status === 'delivered')
@@ -160,6 +177,31 @@ export default function Dashboard() {
                 </span>
                 <span className="text-xs text-gray-400">{formatDateTime(o.created_at)}</span>
                 <span className="font-bold text-primary">{formatBRL(o.total)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ============ MAIS VENDIDOS ============ */}
+      <div className="card space-y-3">
+        <h2 className="flex items-center gap-2 font-bold text-gray-800">
+          <Package className="h-5 w-5 text-primary" /> Produtos mais vendidos
+        </h2>
+        {topSold.length === 0 ? (
+          <p className="py-6 text-center text-sm text-gray-400">
+            Nenhuma venda registrada ainda — o ranking aparece aqui conforme os pedidos forem feitos.
+          </p>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {topSold.map((p, idx) => (
+              <div key={p.name} className="flex items-center gap-3 py-2.5 text-sm">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                  {idx + 1}
+                </span>
+                <span className="min-w-0 flex-1 truncate font-medium text-gray-800">{p.name}</span>
+                <span className="shrink-0 text-xs text-gray-400">{p.qty} un</span>
+                <span className="shrink-0 font-bold text-primary">{formatBRL(p.revenue)}</span>
               </div>
             ))}
           </div>

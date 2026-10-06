@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { maskCep, maskPhone, onlyDigits } from '../lib/utils'
 
-// Formulário de dados de entrega compartilhado entre o Carrinho e a
-// finalização direta da tela do produto — mesma fonte de verdade para
-// campos, obrigatórios e pré-preenchimento do perfil.
+// Formulário de dados de entrega compartilhado entre o Carrinho (wizard)
+// e a finalização direta da tela do produto.
+// Extras: máscara de telefone/CEP e preenchimento automático do
+// endereço via ViaCEP (gratuito, sem chave) ao completar o CEP.
 export const EMPTY_FORM = {
   full_name: '', phone: '', street: '', number: '',
   complement: '', district: '', city: '', state: '', zip: '',
@@ -11,23 +13,23 @@ export const EMPTY_FORM = {
 export const REQUIRED = ['full_name', 'phone', 'street', 'number', 'district', 'city', 'state']
 
 export const FIELDS = [
-  { key: 'full_name', label: 'Nome completo *', cls: 'sm:col-span-2' },
+  { key: 'full_name', label: 'Nome completo *', cls: 'col-span-2' },
   { key: 'phone', label: 'Telefone / WhatsApp *' },
-  { key: 'zip', label: 'CEP' },
-  { key: 'street', label: 'Rua / Avenida *', cls: 'sm:col-span-2' },
+  { key: 'zip', label: 'CEP *' },
+  { key: 'street', label: 'Rua / Avenida *', cls: 'col-span-2' },
   { key: 'number', label: 'Número *' },
-  { key: 'complement', label: 'Complemento (opcional)' },
+  { key: 'complement', label: 'Complemento' },
   { key: 'district', label: 'Bairro *' },
-  { key: 'city', label: 'Cidade *' },
   { key: 'state', label: 'UF *' },
+  { key: 'city', label: 'Cidade *', cls: 'col-span-2' },
 ]
+
+const INPUT_MODE = { phone: 'tel', zip: 'numeric', number: 'numeric' }
 
 export function fieldLabel(key) {
   return (FIELDS.find((f) => f.key === key)?.label ?? key).replace(' *', '')
 }
 
-// Carrega os dados direto do usuário; se não houver nada salvo,
-// devolve o form vazio (sem forçar nada)
 export function profileToForm(profile) {
   return {
     ...EMPTY_FORM,
@@ -47,10 +49,20 @@ export function missingFields(form) {
   return REQUIRED.filter((k) => !String(form?.[k] ?? '').trim())
 }
 
-// Validação visível: campo obrigatório vazio fica com borda vermelha e
-// mensagem "Campo obrigatório" — ao digitar, o erro sai na hora.
+// Endereço formatado em uma linha (usado na revisão do pedido)
+export function formatAddress(form) {
+  const parts = []
+  parts.push((form.street || '') + ((form.street && form.number) ? ', ' + form.number : (form.number || '')))
+  if (form.complement) parts.push(form.complement)
+  if (form.district) parts.push(form.district)
+  if (form.city) parts.push(form.city + (form.state ? '/' + form.state : ''))
+  if (form.zip) parts.push('CEP ' + form.zip)
+  return parts.filter(Boolean).join(', ')
+}
+
 export function CheckoutForm({ form, set, missing }) {
   const [touched, setTouched] = useState({})
+  const [cepLoading, setCepLoading] = useState(false)
 
   function showError(key) {
     return REQUIRED.includes(key)
@@ -58,8 +70,36 @@ export function CheckoutForm({ form, set, missing }) {
       && (touched[key] || missing?.includes(key))
   }
 
+  function handleChange(key, value) {
+    if (key === 'phone') { set(key, maskPhone(value)); return }
+    if (key === 'zip') { set(key, maskCep(value)); return }
+    if (key === 'state') { set(key, String(value).toUpperCase().slice(0, 2)); return }
+    set(key, value)
+  }
+
+  // Preenche rua/bairro/cidade/UF automaticamente via ViaCEP
+  async function lookupCep() {
+    const cep = onlyDigits(form.zip)
+    if (cep.length !== 8) return
+    setCepLoading(true)
+    try {
+      const res = await fetch('https://viacep.com.br/ws/' + cep + '/json/')
+      const data = await res.json()
+      if (data && !data.erro) {
+        if (data.logradouro) set('street', data.logradouro)
+        if (data.bairro) set('district', data.bairro)
+        if (data.localidade) set('city', data.localidade)
+        if (data.uf) set('state', String(data.uf).toUpperCase())
+      }
+    } catch {
+      // offline ou CEP invalido — o usuario preenche manualmente
+    } finally {
+      setCepLoading(false)
+    }
+  }
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid grid-cols-2 gap-3">
       {FIELDS.map(({ key, label, cls }) => {
         const err = showError(key)
         return (
@@ -72,13 +112,23 @@ export function CheckoutForm({ form, set, missing }) {
             </label>
             <input
               id={'f_' + key}
-              className={'input ' + (err ? 'border-red-400 ring-2 ring-red-100' : '')}
+              type="text"
+              inputMode={INPUT_MODE[key]}
+              maxLength={key === 'state' ? 2 : key === 'phone' ? 15 : undefined}
+              placeholder={key === 'zip' ? '00000-000' : key === 'phone' ? '(11) 99999-9999' : undefined}
+              className={'input ' + (key === 'state' ? 'uppercase ' : '') + (err ? 'border-red-400 ring-2 ring-red-100' : '')}
               value={form[key]}
-              onChange={(e) => set(key, e.target.value)}
-              onBlur={() => setTouched((t) => ({ ...t, [key]: true }))}
+              onChange={(e) => handleChange(key, e.target.value)}
+              onBlur={() => {
+                setTouched((t) => ({ ...t, [key]: true }))
+                if (key === 'zip') lookupCep()
+              }}
               autoComplete="off"
             />
             {err && <p className="mt-1 text-[11px] font-medium text-red-500">Campo obrigatório</p>}
+            {key === 'zip' && cepLoading && (
+              <p className="mt-1 text-[11px] font-medium text-primary">Buscando endereço…</p>
+            )}
           </div>
         )
       })}

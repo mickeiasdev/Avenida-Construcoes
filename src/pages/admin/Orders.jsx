@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Ban, ChevronRight, ClipboardList, Loader2, MapPin, Phone, User } from 'lucide-react'
+import { Ban, ChevronRight, ClipboardList, Download, Loader2, MapPin, Phone, Search, User } from 'lucide-react'
+import { downloadCsv } from '../../lib/csv'
 import { supabase } from '../../lib/supabaseClient'
 import { formatBRL, formatDateTime, ORDER_CLS, ORDER_LABELS, ORDER_NEXT_ACTION, ORDER_PIPELINE, ORDER_SHORT } from '../../lib/utils'
 
@@ -19,6 +20,7 @@ export default function OrdersAdmin() {
   const [orders, setOrders] = useState(null)
   const [tab, setTab] = useState('all')
   const [busyId, setBusyId] = useState(null)
+  const [search, setSearch] = useState('')
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -52,7 +54,28 @@ export default function OrdersAdmin() {
     setBusyId(null)
   }
 
-  const visible = (orders ?? []).filter((o) => tab === 'all' || o.status === tab)
+  // Exporta todos os pedidos (não só os filtrados) como CSV
+  function exportCsv() {
+    downloadCsv('pedidos.csv', (orders ?? []).map((o) => ({
+      pedido: o.id.slice(0, 8),
+      cliente: o.customer_name ?? '',
+      telefone: o.customer_phone ?? '',
+      endereco: o.delivery_address ?? '',
+      itens: (o.order_items ?? []).map((i) => i.quantity + 'x ' + i.product_name).join(' | '),
+      total: Number(o.total),
+      status: ORDER_LABELS[o.status] ?? o.status,
+      data: new Date(o.created_at).toLocaleString('pt-BR'),
+    })))
+  }
+
+  const f = search.trim().toLowerCase()
+  const visible = (orders ?? []).filter((o) =>
+    (tab === 'all' || o.status === tab)
+    && (!f
+      || (o.customer_name || '').toLowerCase().includes(f)
+      || o.id.slice(0, 8).toLowerCase().includes(f)
+      || (o.delivery_address || '').toLowerCase().includes(f))
+  )
 
   return (
     <div className="space-y-6">
@@ -76,6 +99,22 @@ export default function OrdersAdmin() {
             {l}
           </button>
         ))}
+      </div>
+
+      {/* Busca + exportação */}
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            className="input pl-10"
+            placeholder="Buscar por cliente, nº do pedido ou endereço..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <button type="button" className="btn-primary shrink-0 px-4" onClick={exportCsv} disabled={!orders || orders.length === 0}>
+          <Download className="h-4 w-4" /> CSV
+        </button>
       </div>
 
       {!orders ? (

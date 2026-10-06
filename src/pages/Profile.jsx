@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Loader2, Save, CheckCircle2, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
+import { maskCep, maskPhone } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
 
 const FIELDS = [
@@ -67,7 +68,22 @@ export default function Profile() {
         {FIELDS.map(([key, label, type, cls]) => (
           <div key={key} className={cls}>
             <label className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
-            <input className="input" type={type} value={form[key]} onChange={(e) => set(key, e.target.value)} />
+            <input
+              className={'input ' + (key === 'state' ? 'uppercase ' : '')}
+              type={type}
+              inputMode={key === 'phone' ? 'tel' : key === 'zip' ? 'numeric' : undefined}
+              maxLength={key === 'state' ? 2 : key === 'phone' ? 15 : undefined}
+              value={form[key]}
+              onChange={(e) =>
+                set(key, key === 'phone'
+                  ? maskPhone(e.target.value)
+                  : key === 'zip'
+                    ? maskCep(e.target.value)
+                    : key === 'state'
+                      ? e.target.value.toUpperCase()
+                      : e.target.value)
+              }
+            />
           </div>
         ))}
 

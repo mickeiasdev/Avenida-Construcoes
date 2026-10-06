@@ -21,6 +21,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
+  const [sort, setSort] = useState('recent')
 
   const activeCat = categories.find((c) => c.slug === catSlug)
 
@@ -31,7 +32,10 @@ export default function Home() {
       .from('products')
       .select('*, categories(name, slug)')
       .eq('active', true)
-      .order('created_at', { ascending: false })
+      .order(
+        sort === 'views' ? 'views' : (sort === 'price_asc' || sort === 'price_desc') ? 'price' : 'created_at',
+        { ascending: sort === 'price_asc' }
+      )
 
     if (activeCat) query = query.eq('category_id', activeCat.id)
     if (q) {
@@ -46,7 +50,7 @@ export default function Home() {
       setHasMore(list.length === PAGE_SIZE)
     }
     if (append) setLoadingMore(false); else setLoading(false)
-  }, [activeCat, q])
+  }, [activeCat, q, sort])
 
   useEffect(() => {
     if (catSlug && categories.length === 0) return
@@ -70,6 +74,13 @@ export default function Home() {
         <div className="absolute inset-0 flex flex-col justify-center gap-2 p-6 text-white sm:p-8">
           <h1 className="max-w-md text-xl font-extrabold drop-shadow sm:text-2xl md:text-4xl">{settings.store_name}</h1>
           <p className="max-w-md text-xs text-white/85 sm:text-sm md:text-base">{settings.about}</p>
+          <button
+            type="button"
+            onClick={() => document.getElementById('produtos')?.scrollIntoView({ behavior: 'smooth' })}
+            className="btn-primary mt-2 w-fit px-4 py-2 text-sm"
+          >
+            🛒 Ver produtos
+          </button>
         </div>
       </section>
 
@@ -84,16 +95,31 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div id="produtos" className="flex flex-wrap items-center justify-between gap-2 scroll-mt-24">
         <h3 className="text-lg font-bold text-gray-800">
           {activeCat ? activeCat.name : 'Todos os produtos'}
           {q && <span className="ml-2 text-sm font-normal text-gray-500">· busca: “{q}”</span>}
         </h3>
-        <span className="text-xs text-gray-400">{products.length} produto(s)</span>
+        <div className="flex items-center gap-2">
+          <span className="hidden text-xs text-gray-400 sm:inline">{products.length} produto(s)</span>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            className="input w-36 py-1.5 text-xs"
+            aria-label="Ordenar produtos"
+          >
+            <option value="recent">Mais recentes</option>
+            <option value="views">Mais vistos</option>
+            <option value="price_asc">Menor preço</option>
+            <option value="price_desc">Maior preço</option>
+          </select>
+        </div>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16 text-gray-400"><Loader2 className="h-6 w-6 animate-spin" /></div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
+          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+        </div>
       ) : products.length === 0 ? (
         <div className="card flex flex-col items-center gap-2 py-16 text-center text-gray-500">
           <SearchX className="h-8 w-8 text-gray-300" />
@@ -116,6 +142,20 @@ export default function Home() {
           )}
         </>
       )}
+    </div>
+  )
+}
+
+// Skeleton: sensação de velocidade no mobile (sem spinner solitário)
+function SkeletonCard() {
+  return (
+    <div className="card overflow-hidden p-0">
+      <div className="aspect-square w-full animate-pulse bg-gray-200" />
+      <div className="space-y-2 p-3 sm:p-4">
+        <div className="h-3 w-3/4 animate-pulse rounded bg-gray-200" />
+        <div className="h-3 w-1/2 animate-pulse rounded bg-gray-200" />
+        <div className="h-6 w-1/3 animate-pulse rounded bg-gray-200" />
+      </div>
     </div>
   )
 }

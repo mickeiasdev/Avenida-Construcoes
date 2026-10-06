@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Mail, MessageCircle, KeyRound, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabaseClient'
 
 // Autenticação:
 //  - Magic Link por e-mail (gratuito, Supabase Auth)
@@ -50,6 +51,22 @@ export default function Login() {
     } finally {
       setBusy(false)
     }
+  }
+
+  async function handleResetPassword() {
+    if (!email) {
+      setMsg({ type: 'err', text: 'Digite seu e-mail acima para receber o link de redefinição.' })
+      return
+    }
+    setBusy(true)
+    setMsg(null)
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      emailRedirectTo: window.location.origin,
+    })
+    setMsg(error
+      ? { type: 'err', text: error.message }
+      : { type: 'ok', text: 'Link de redefinição de senha enviado! Confira seu e-mail (e o spam).' })
+    setBusy(false)
   }
 
   const TABS = [
@@ -153,6 +170,12 @@ export default function Login() {
         {tab === 'password' && (
           <button type="button" className="w-full text-center text-sm text-primary hover:underline" onClick={() => { setIsSignup((v) => !v); setMsg(null) }}>
             {isSignup ? 'Já tenho conta — fazer login' : 'Não tenho conta — criar agora'}
+          </button>
+        )}
+
+        {tab === 'password' && !isSignup && (
+          <button type="button" className="text-xs text-gray-400 transition hover:text-primary" onClick={handleResetPassword}>
+            Esqueci minha senha
           </button>
         )}
       </form>

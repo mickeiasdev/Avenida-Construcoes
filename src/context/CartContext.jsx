@@ -147,7 +147,11 @@ export function CartProvider({ children }) {
     lines.push('_Pedido enviado automaticamente pelo site._')
 
     const message = encodeURIComponent(lines.join('\n'))
-    window.open('https://wa.me/' + (store?.whatsapp ?? '') + '?text=' + message, '_blank')
+    const waUrl = 'https://wa.me/' + (store?.whatsapp ?? '') + '?text=' + message
+    // window.open pode ser bloqueado em navegadores mobile (iOS) quando
+    // chamado após um await — se for bloqueado, navega direto
+    const win = window.open(waUrl, '_blank')
+    if (!win) window.location.href = waUrl
 
     // pedido direto não mexe no carrinho
     if (!directItems) clearCart()

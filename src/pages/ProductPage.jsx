@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, MessageCircle, Minus, Plus, ShoppingCart, X } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, MessageCircle, Minus, Plus, Share2, ShoppingCart, X } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { formatBRL } from '../lib/utils'
 import { CheckoutForm, profileToForm, missingFields, fieldLabel } from '../components/CheckoutForm'
+import { FavoriteButton } from '../components/FavoriteButton'
 
 const FALLBACK_IMG = 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=800&q=80'
 
@@ -57,6 +58,17 @@ export default function ProductPage() {
     setTimeout(() => el?.focus(), 350)
   }
 
+  // Compartilhar (Web Share API nativa no celular; fallback WhatsApp)
+  async function handleShare() {
+    if (!product) return
+    const url = window.location.href
+    if (navigator.share) {
+      try { await navigator.share({ title: product.name, text: product.description || product.name, url }) } catch { /* cancelado */ }
+    } else {
+      window.open('https://wa.me/?text=' + encodeURIComponent(product.name + ' — ' + url), '_blank')
+    }
+  }
+
   async function confirmBuyNow() {
     // tentou finalizar sem preencher → NÃO permite; pergunta se quer atualizar
     const miss = missingFields(buyForm)
@@ -75,7 +87,7 @@ export default function ProductPage() {
       }])
       setBuyOpen(false)
       setBuyMissing(null)
-      navigate('/pedidos')
+      navigate('/pedidos', { state: { justOrdered: true } })
     } catch (e) {
       setBuyError(e.message)
     } finally {
@@ -157,9 +169,27 @@ export default function ProductPage() {
 
   return (
     <div className="space-y-8">
-      <button type="button" onClick={() => navigate(-1)} className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-primary">
-        <ArrowLeft className="h-4 w-4" /> Voltar
-      </button>
+      <div className="flex items-center justify-between">
+        <button type="button" onClick={() => navigate(-1)} className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-primary">
+          <ArrowLeft className="h-4 w-4" /> Voltar
+        </button>
+        <div className="flex items-center gap-1">
+          <FavoriteButton
+            productId={id}
+            className="rounded-lg p-2 hover:bg-gray-100"
+            iconClass="h-4 w-4"
+            inactiveIcon="text-gray-400"
+          />
+          <button
+            type="button"
+            onClick={handleShare}
+            className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-primary"
+            aria-label="Compartilhar produto"
+          >
+            <Share2 className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
 
       <div className="card grid gap-6 md:grid-cols-2">
         <Gallery images={images} alt={product.name} />
@@ -207,11 +237,11 @@ export default function ProductPage() {
       {/* ============ FINALIZAÇÃO DIRETA (comprar agora) ============ */}
       {buyOpen && product && (
         <div
-          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
           onClick={() => { setBuyOpen(false); setBuyMissing(null) }}
         >
           <div
-            className="max-h-[92vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+            className="max-h-[92vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-t-2xl bg-white p-5 pb-7 shadow-2xl safe-bottom sm:rounded-2xl sm:p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">

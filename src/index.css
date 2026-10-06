@@ -33,6 +33,9 @@
   .card { @apply rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100; }
 }
 
+/* Respeita o "notch" safe-area (iPhone) em barras fixas */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
 /* Animação do popup "Novo pedido" (admin) */
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(-10px); }

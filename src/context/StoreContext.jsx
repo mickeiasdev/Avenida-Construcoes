@@ -22,6 +22,9 @@ const DEFAULT_SETTINGS = {
 function applyTheme(s) {
   document.documentElement.style.setProperty('--brand-primary', s.primary_color)
   document.documentElement.style.setProperty('--brand-secondary', s.secondary_color)
+  // a barra de endereço do navegador mobile acompanha a cor da loja
+  const meta = document.querySelector('meta[name="theme-color"]')
+  if (meta) meta.setAttribute('content', s.primary_color)
 }
 
 export function StoreProvider({ children }) {

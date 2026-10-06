@@ -208,6 +208,20 @@ vercel.json                       # SPA fallback para o deploy
 
 ---
 
+## 📱 Destaques de UX mobile
+
+- **Bottom navigation** estilo app (Início · Pedidos · Carrinho · Perfil · Menu) com badge de itens;
+- **Checkout em 3 passos** (Sacola → Entrega → Revisão) com CTA fixo, total sempre visível e validação nos campos;
+- Modais como **bottom sheets** no celular; galeria de fotos e ofertas em **carrossel com swipe**;
+- **PWA manifest** (app instalável no Android) + **theme-color** que segue a cor primária da loja;
+- **Compartilhar produto** via Web Share API (fallback WhatsApp) e **redefinição de senha** por e-mail;
+- Abertura do WhatsApp com **fallback** para navegação direta (evita popup blocker do iOS);
+- **CEP automático** via ViaCEP + máscaras de telefone/CEP nos formulários;
+- **Favoritos** ❤️ (LocalStorage) com página própria em `/favoritos`;
+- **Ordenação** da vitrine (recentes, mais vistos, preço) e filtros no histórico de pedidos;
+- Admin: **busca de pedidos**, **exportação CSV** (pedidos e clientes) e ranking de **produtos mais vendidos**;
+- **Ícones PWA em PNG** gerados por `scripts/generate-icons.py` com a cor da marca.
+
 ## ✅ Checklist rápido
 
 - [x] Rodar `supabase/schema.sql` no SQL Editor
