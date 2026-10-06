@@ -54,32 +54,14 @@ export function AuthProvider({ children }) {
     return { error }
   }
 
-  // ============================================================
-  // OTP VIA WHATSAPP — UI pronta, integração pendente.
-  // Para habilitar de verdade:
-  //   1) Contrate/ configure um provedor (Twilio, Zenvia, Meta
-  //      WhatsApp Cloud API, 360dialog...) que envie o código OTP.
-  //   2) Crie uma Edge Function 'send-otp-whatsapp' no Supabase:
-  //      supabase functions new send-otp-whatsapp
-  //      Ela recebe { phone }, valida o numero, gera um OTP de 6
-  //      dígitos, envia via provedor e grava em otp_codes (tabela).
-  //   3) Plug exatamente aqui:
-  //      const { data, error } = await supabase.functions.invoke(
-  //        'send-otp-whatsapp', { body: { phone } })
-  //   4) Para autenticar após validar o OTP, crie a conta com um
-  //      e-mail derivado (5511telefone@wa.local) e use magiclink:
-  //      supabase.auth.admin.generateLink({ type: 'magiclink', email })
-  //      (admin API exige a service_role key — via Edge Function).
-  // ============================================================
-  async function requestWhatsAppOtp(phone) {
-    console.info('[WhatsApp OTP] Provedor/webhook nao configurado. Telefone recebido:', phone)
-    return {
-      error: new Error(
-        'OTP via WhatsApp ainda nao esta plugado. Conecte o webhook/provedor aqui ' +
-        '(ver comentarios no AuthContext.jsx).'
-      ),
-    }
-  }
+  // NOTA: OTP via WhatsApp foi REMOVIDO — o envio de códigos por
+  // WhatsApp exige provedor PAGO (Twilio, Zenvia ou Meta WhatsApp
+  // Cloud API, que cobram por mensagem/conversa). A autenticação do
+  // app ficou 100% gratuita (magic link + senha).
+  // Se um dia contratar um provedor, o ponto de integração é uma
+  // Edge Function que envia/valida o código e autentica com:
+  //   supabase.auth.admin.generateLink({ type: 'magiclink', email })
+  // (a service_role key só pode ficar na Edge Function, nunca no front).
 
   async function signOut() {
     await supabase.auth.signOut()
@@ -92,7 +74,7 @@ export function AuthProvider({ children }) {
   const value = {
     user, profile, loading, isAdmin,
     signInWithMagicLink, signInWithPassword, signUp,
-    requestWhatsAppOtp, signOut, refreshProfile: fetchProfile,
+    signOut, refreshProfile: fetchProfile,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

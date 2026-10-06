@@ -1,15 +1,16 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Mail, MessageCircle, KeyRound, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Mail, KeyRound, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
 
-// Autenticação:
-//  - Magic Link por e-mail (gratuito, Supabase Auth)
-//  - E-mail + senha (útil p/ usuários de teste criados no painel)
-//  - OTP via WhatsApp (UI pronta — plug do webhook comentado no AuthContext)
+// Autenticação — 100% gratuita via Supabase Auth:
+//  - Magic Link por e-mail (sem senha)
+//  - E-mail + senha (útil para os usuários de teste criados no painel)
+//  - Redefinição de senha por e-mail
+// (OTP via WhatsApp foi removido: exigiria provedor pago)
 export default function Login() {
-  const { signInWithMagicLink, signInWithPassword, signUp, requestWhatsAppOtp } = useAuth()
+  const { signInWithMagicLink, signInWithPassword, signUp } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const redirectTo = location.state?.from || '/'
@@ -18,40 +19,9 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
-  const [phone, setPhone] = useState('')
   const [isSignup, setIsSignup] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
-
-  async function handleSubmit(e) {
-    e.preventDefault()
-    setBusy(true)
-    setMsg(null)
-    try {
-      if (tab === 'magic') {
-        const { error } = await signInWithMagicLink(email)
-        setMsg(error
-          ? { type: 'err', text: error.message }
-          : { type: 'ok', text: 'Magic Link enviado! Confira sua caixa de entrada (e o spam).' })
-      } else if (tab === 'password') {
-        const { error } = isSignup
-          ? await signUp(email, password, fullName)
-          : await signInWithPassword(email, password)
-        if (error) {
-          setMsg({ type: 'err', text: error.message })
-        } else if (isSignup) {
-          setMsg({ type: 'ok', text: 'Conta criada! Se a confirmação de e-mail estiver ativa no Supabase, verifique seu e-mail antes de entrar.' })
-        } else {
-          navigate(redirectTo, { replace: true })
-        }
-      } else {
-        const { error } = await requestWhatsAppOtp(phone)
-        setMsg({ type: 'err', text: error.message })
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
 
   async function handleResetPassword() {
     if (!email) {
@@ -69,10 +39,36 @@ export default function Login() {
     setBusy(false)
   }
 
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setBusy(true)
+    setMsg(null)
+    try {
+      if (tab === 'magic') {
+        const { error } = await signInWithMagicLink(email)
+        setMsg(error
+          ? { type: 'err', text: error.message }
+          : { type: 'ok', text: 'Magic Link enviado! Confira sua caixa de entrada (e o spam).' })
+      } else {
+        const { error } = isSignup
+          ? await signUp(email, password, fullName)
+          : await signInWithPassword(email, password)
+        if (error) {
+          setMsg({ type: 'err', text: error.message })
+        } else if (isSignup) {
+          setMsg({ type: 'ok', text: 'Conta criada! Se a confirmação de e-mail estiver ativa no Supabase, verifique seu e-mail antes de entrar.' })
+        } else {
+          navigate(redirectTo, { replace: true })
+        }
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const TABS = [
     { id: 'magic', label: 'Magic Link', icon: Mail },
     { id: 'password', label: 'E-mail e Senha', icon: KeyRound },
-    { id: 'whatsapp', label: 'OTP WhatsApp', icon: MessageCircle },
   ]
 
   return (
@@ -133,25 +129,6 @@ export default function Login() {
           </>
         )}
 
-        {tab === 'whatsapp' && (
-          <div className="space-y-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">WhatsApp (DDI + DDD + número)</label>
-              <input className="input" type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="5511999999999" />
-            </div>
-            {/* UI pronta para o código de 6 dígitos que o provedor enviará */}
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Código OTP</label>
-              <input className="input tracking-[0.5em]" inputMode="numeric" maxLength={6} placeholder="••••••" disabled />
-            </div>
-            <p className="rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-700 ring-1 ring-amber-200">
-              Integração pendente: este método exige um provedor de WhatsApp (Twilio, Zenvia ou Meta Cloud API)
-              plugado via Edge Function <em>send-otp-whatsapp</em>. Os pontos de conexão estão comentados no
-              <em> AuthContext.jsx</em>.
-            </p>
-          </div>
-        )}
-
         {msg && (
           <div className={'flex items-start gap-2 rounded-lg p-3 text-sm ' +
             (msg.type === 'ok' ? 'bg-green-50 text-green-700 ring-1 ring-green-200' : 'bg-red-50 text-red-700 ring-1 ring-red-200')}>
@@ -164,19 +141,20 @@ export default function Login() {
 
         <button type="submit" className="btn-primary w-full" disabled={busy}>
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-          {tab === 'magic' ? 'Enviar Magic Link' : tab === 'whatsapp' ? 'Receber código por WhatsApp' : isSignup ? 'Criar conta' : 'Entrar'}
+          {tab === 'magic' ? 'Enviar Magic Link' : isSignup ? 'Criar conta' : 'Entrar'}
         </button>
 
         {tab === 'password' && (
-          <button type="button" className="w-full text-center text-sm text-primary hover:underline" onClick={() => { setIsSignup((v) => !v); setMsg(null) }}>
-            {isSignup ? 'Já tenho conta — fazer login' : 'Não tenho conta — criar agora'}
-          </button>
-        )}
-
-        {tab === 'password' && !isSignup && (
-          <button type="button" className="text-xs text-gray-400 transition hover:text-primary" onClick={handleResetPassword}>
-            Esqueci minha senha
-          </button>
+          <>
+            <button type="button" className="w-full text-center text-sm text-primary hover:underline" onClick={() => { setIsSignup((v) => !v); setMsg(null) }}>
+              {isSignup ? 'Já tenho conta — fazer login' : 'Não tenho conta — criar agora'}
+            </button>
+            {!isSignup && (
+              <button type="button" className="text-xs text-gray-400 transition hover:text-primary" onClick={handleResetPassword}>
+                Esqueci minha senha
+              </button>
+            )}
+          </>
         )}
       </form>
     </div>

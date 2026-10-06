@@ -150,7 +150,7 @@ npm run build    # build de produção
 |--------------------|-----------------|--------------------------------------------------------------|
 | `/`               | público         | Vitrine: banner, busca com debounce, filtro por categoria, paginação |
 | `/produto/:id`    | público         | Detalhes, galeria de fotos, ofertas em carrossel + carrinho e finalização direta (comprar agora) |
-| `/login`          | público         | Magic Link, e-mail+senha e OTP via WhatsApp (UI pronta)       |
+| `/login`          | público         | Magic Link (gratuito) e e-mail+senha                          |
 | `/carrinho`       | logado          | Carrinho persistente + checkout → grava pedido → WhatsApp     |
 | `/perfil`         | logado          | Dados pessoais e endereço completo                            |
 | `/pedidos`        | logado          | Histórico de pedidos com status e data                       |
@@ -165,11 +165,17 @@ npm run build    # build de produção
 Ao finalizar, o sistema grava `orders` + `order_items`, limpa o carrinho (LocalStorage) e
 abre `https://wa.me/<whatsapp-da-loja>?text=<resumo>` com itens, endereço e total formatados.
 
-### OTP via WhatsApp (onde plugar)
-A UI e o fluxo estão prontos em `src/context/AuthContext.jsx` (`requestWhatsAppOtp`).
-Comentários ali indicam exatamente onde conectar o provedor (Twilio, Zenvia ou Meta
-WhatsApp Cloud API) via uma Edge Function `send-otp-whatsapp` e como autenticar o usuário
-com `auth.admin.generateLink` após validar o código.
+### Autenticação — 100% gratuita
+- **Magic Link por e-mail** e **e-mail + senha**: grátis (o e-mail embutido do Supabase tem
+  limite de envios por hora; em produção, conecte um SMTP próprio em *Authentication → SMTP Settings*).
+- **OTP via WhatsApp: removido** — enviar códigos por WhatsApp exige provedor **pago**
+  (Twilio, Zenvia ou Meta WhatsApp Cloud API, cobram por mensagem/conversa). O ponto de
+  reintegração fica documentado em `src/context/AuthContext.jsx`.
+- Alternativa **grátis** de código de 6 dígitos por **e-mail**: troque `{{ .ConfirmationURL }}`
+  por `{{ .Token }}` no template *Auth → Email Templates → Magic Link* e valide com
+  `supabase.auth.verifyOtp({ email, token, type: 'email' })`.
+- O WhatsApp usado no **checkout e no botão flutuante continua** — são apenas links
+  `wa.me` (o cliente conversa direto com a loja), sem custo algum.
 
 ---
 
@@ -178,7 +184,7 @@ com `auth.admin.generateLink` após validar o código.
 ```
 src/
 ├── lib/supabaseClient.js        # cliente Supabase + helpers de upload (bucket 'store')
-├── context/AuthContext.jsx       # sessão, perfil, role, magic link, senha, OTP WhatsApp
+├── context/AuthContext.jsx       # sessão, perfil, role, magic link e senha (gratuitos)
 ├── context/StoreContext.jsx      # store_settings (tema via CSS vars), categorias, realtime
 ├── context/CartContext.jsx       # carrinho persistente + checkout (orders + WhatsApp)
 ├── components/ProtectedRoute.jsx # RequireAuth / RequireAdmin
