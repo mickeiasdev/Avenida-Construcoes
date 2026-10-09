@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, MessageCircle, Minus, Plus, Share2, ShoppingCart, X } from 'lucide-react'
+import { ArrowLeft, Banknote, ChevronLeft, ChevronRight, CreditCard, Loader2, MessageCircle, Minus, Package, Plus, QrCode, Share2, ShoppingBag, ShoppingCart, X } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
@@ -35,6 +35,8 @@ export default function ProductPage() {
   const [buyBusy, setBuyBusy] = useState(false)
   const [buyError, setBuyError] = useState(null)
   const [askGuest, setAskGuest] = useState(false)
+  const [buyDelivery, setBuyDelivery] = useState('entrega')
+  const [buyPayment, setBuyPayment] = useState('pix')
 
   // carrega os dados direto do usuário; se não houver, o form fica vazio
   useEffect(() => { setBuyForm(profileToForm(profile)) }, [profile])
@@ -70,7 +72,10 @@ export default function ProductPage() {
 
   async function confirmBuyNow() {
     // tentou finalizar sem preencher → NÃO permite; pergunta se quer atualizar
-    const miss = missingFields(buyForm)
+    // (retirada no balcão não precisa de endereço)
+    const miss = buyDelivery === 'retirada'
+      ? missingFields({ ...buyForm, street: 'ok', number: 'ok', district: 'ok', city: 'ok', state: 'ok', zip: 'ok' })
+      : missingFields(buyForm)
     if (miss.length > 0) {
       setBuyMissing(miss)
       return
@@ -90,7 +95,7 @@ export default function ProductPage() {
         name: product.name,
         price: Number(product.price),
         quantity: qty,
-      }])
+      }], { deliveryMethod: buyDelivery, paymentMethod: buyPayment })
       setBuyOpen(false)
       setBuyMissing(null)
       navigate('/pedidos', { state: { justOrdered: true } })
@@ -272,8 +277,66 @@ export default function ProductPage() {
               <span className="font-bold text-primary">{formatBRL(qty * Number(product.price))}</span>
             </div>
 
+            {/* recebimento: entrega x retirada */}
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: 'entrega', label: 'Entrega', icon: Package },
+                { id: 'retirada', label: 'Retirada no balcão', icon: ShoppingBag },
+              ].map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => { setBuyDelivery(o.id); setBuyMissing(null) }}
+                  className={'flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold ring-1 transition ' +
+                    (buyDelivery === o.id
+                      ? 'bg-primary/5 text-primary ring-2 ring-primary'
+                      : 'bg-white text-gray-600 ring-gray-200 hover:ring-primary/40')}
+                >
+                  <o.icon className="h-4 w-4" />
+                  {o.label}
+                </button>
+              ))}
+            </div>
+
+            {/* pagamento */}
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: 'pix', label: 'Pix', icon: QrCode },
+                { id: 'dinheiro', label: 'Dinheiro', icon: Banknote },
+                { id: 'cartao', label: 'Cartão', icon: CreditCard },
+              ].map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => setBuyPayment(o.id)}
+                  className={'flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-semibold ring-1 transition ' +
+                    (buyPayment === o.id
+                      ? 'bg-secondary text-white ring-secondary'
+                      : 'bg-white text-gray-600 ring-gray-200 hover:ring-primary/40')}
+                >
+                  <o.icon className="h-4 w-4" />
+                  {o.label}
+                </button>
+              ))}
+            </div>
+
             {/* dados carregados direto do usuário (se não houver, abre vazio) */}
-            {buyForm && <CheckoutForm form={buyForm} set={setBuyField} missing={buyMissing} />}
+            {buyForm && (buyDelivery === 'entrega'
+              ? <CheckoutForm form={buyForm} set={setBuyField} missing={buyMissing} />
+              : (
+                <div className="space-y-3">
+                  <div>
+                    <label htmlFor="f_full_name" className="mb-1 block text-xs font-medium text-gray-600">Seu nome *</label>
+                    <input id="f_full_name" className="input" value={buyForm.full_name}
+                      onChange={(e) => setBuyField('full_name', e.target.value)} autoComplete="off" />
+                  </div>
+                  <div>
+                    <label htmlFor="f_phone" className="mb-1 block text-xs font-medium text-gray-600">Telefone / WhatsApp *</label>
+                    <input id="f_phone" className="input" inputMode="tel" maxLength={15} value={buyForm.phone}
+                      onChange={(e) => setBuyField('phone', e.target.value)} autoComplete="off" />
+                  </div>
+                </div>
+              ))}
 
             {buyError && (
               <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">{buyError}</div>

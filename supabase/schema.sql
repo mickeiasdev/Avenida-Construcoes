@@ -54,6 +54,10 @@ create table if not exists public.orders (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid references auth.users(id) on delete cascade, -- null = convidado
   is_guest boolean not null default false,
+  delivery_method text not null default 'entrega'
+    check (delivery_method in ('entrega','retirada')),
+  payment_method text not null default 'pix'
+    check (payment_method in ('pix','dinheiro','cartao')),
   status text not null default 'pending'
     check (status in ('pending','confirmed','preparing','shipping','delivered','cancelled')),
   total numeric(10,2) not null default 0,

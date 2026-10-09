@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Ban, ChevronRight, ClipboardList, Download, Loader2, MapPin, Phone, Search, User } from 'lucide-react'
+import { Banknote, Ban, ChevronRight, ClipboardList, CreditCard, Download, Loader2, MapPin, Phone, QrCode, Search, User } from 'lucide-react'
 import { downloadCsv } from '../../lib/csv'
 import { supabase } from '../../lib/supabaseClient'
 import { formatBRL, formatDateTime, ORDER_CLS, ORDER_LABELS, ORDER_NEXT_ACTION, ORDER_PIPELINE, ORDER_SHORT } from '../../lib/utils'
@@ -156,7 +156,25 @@ export default function OrdersAdmin() {
                       <Phone className="h-4 w-4 text-gray-400" /> {o.customer_phone || '—'}
                     </p>
                     <p className="flex items-start gap-2 text-gray-600">
-                      <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" /> {o.delivery_address || '—'}
+                      <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+                      {o.delivery_method === 'retirada'
+                        ? <span className="font-semibold text-amber-700">Retirada no balcão</span>
+                        : (o.delivery_address || '—')}
+                    </p>
+                    <p className="flex items-center gap-2 text-gray-600">
+                      {o.payment_method === 'dinheiro'
+                        ? <Banknote className="h-4 w-4 text-gray-400" />
+                        : o.payment_method === 'cartao'
+                          ? <CreditCard className="h-4 w-4 text-gray-400" />
+                          : <QrCode className="h-4 w-4 text-gray-400" />}
+                      <span className="font-semibold text-gray-700">
+                        {(o.payment_method ?? 'pix') === 'pix' ? 'Pix' : o.payment_method === 'dinheiro' ? 'Dinheiro' : 'Cartão'}
+                      </span>
+                      {o.is_guest && (
+                        <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                          Visitante
+                        </span>
+                      )}
                     </p>
                   </div>
 

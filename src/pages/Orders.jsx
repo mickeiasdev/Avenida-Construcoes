@@ -102,7 +102,13 @@ export default function Orders() {
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-2">
-                  <span className="text-xs text-gray-400">{o.delivery_address}</span>
+                  <div className="text-xs text-gray-400">
+                    <span className="font-medium">
+                      {o.delivery_method === 'retirada' ? 'Retirada no balcão' : o.delivery_address}
+                    </span>
+                    {' · Pagamento: '}
+                    {(o.payment_method ?? 'pix') === 'pix' ? 'Pix' : o.payment_method === 'dinheiro' ? 'Dinheiro' : 'Cartão'}
+                  </div>
                   <span className="font-bold text-primary">{formatBRL(o.total)}</span>
                 </div>
               </div>

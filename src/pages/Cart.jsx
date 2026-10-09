@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { AlertCircle, ArrowLeft, ArrowRight, Check, Loader2, MapPin, MessageCircle, Minus, Package, Pencil, Plus, ShoppingBag, Trash2, User } from 'lucide-react'
+import { AlertCircle, ArrowLeft, ArrowRight, Banknote, Check, CreditCard, Loader2, MapPin, MessageCircle, Minus, Package, Pencil, Plus, QrCode, ShoppingBag, Trash2, User } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { formatBRL } from '../lib/utils'
@@ -29,6 +29,8 @@ export default function Cart() {
   const [msg, setMsg] = useState(null)
   const [missing, setMissing] = useState(null)
   const [askGuest, setAskGuest] = useState(false)
+  const [deliveryMethod, setDeliveryMethod] = useState('entrega') // 'entrega' | 'retirada'
+  const [paymentMethod, setPaymentMethod] = useState('pix')       // 'pix' | 'dinheiro' | 'cartao'
   const [doneOrder, setDoneOrder] = useState(null) // pedido concluído como visitante
 
   useEffect(() => { setForm(profileToForm(profile)) }, [profile])
@@ -52,7 +54,11 @@ export default function Cart() {
   }
 
   async function handleCheckout() {
-    const miss = missingFields(form)
+    // Retirada no balcão não precisa de endereço — só nome e telefone
+    const miss = deliveryMethod === 'retirada'
+      ? missingFields({ ...form, street: 'ok', number: 'ok', district: 'ok', city: 'ok', state: 'ok', zip: 'ok' })
+          .filter((k) => ['full_name', 'phone'].includes(k))
+      : missingFields(form)
     if (miss.length > 0) {
       setStep(2)
       setMissing(miss)
@@ -68,7 +74,7 @@ export default function Cart() {
     setBusy(true)
     setMsg(null)
     try {
-      const order = await checkout(form)
+      const order = await checkout(form, null, { deliveryMethod, paymentMethod })
       if (user) {
         navigate('/pedidos', { state: { justOrdered: true } })
       } else {
@@ -188,18 +194,93 @@ export default function Cart() {
         </div>
       )}
 
-      {/* ============ PASSO 2 · ENTREGA ============ */}
+      {/* ============ PASSO 2 · ENTREGA E PAGAMENTO ============ */}
       {step === 2 && (
         <div className="card space-y-4">
           <div className="flex items-center gap-2">
             <MapPin className="h-5 w-5 shrink-0 text-primary" />
             <div>
-              <h2 className="font-bold text-gray-800">Dados para entrega</h2>
-              <p className="text-xs text-gray-400">Já preenchemos com os dados da sua conta</p>
+              <h2 className="font-bold text-gray-800">Recebimento e pagamento</h2>
+              <p className="text-xs text-gray-400">Escolha como quer receber e a forma de pagar</p>
             </div>
           </div>
 
-          {form && <CheckoutForm form={form} set={set} missing={missing} />}
+          {/* entrega x retirada */}
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { id: 'entrega', label: 'Entrega', desc: 'Recebemos no seu endereço', icon: Package },
+              { id: 'retirada', label: 'Retirada', desc: 'Buscar no balcão da loja', icon: ShoppingBag },
+            ].map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => { setDeliveryMethod(o.id); setMissing(null) }}
+                className={'flex flex-col items-start gap-1 rounded-xl px-3.5 py-3 text-left ring-1 transition ' +
+                  (deliveryMethod === o.id
+                    ? 'bg-primary/5 ring-2 ring-primary shadow-sm'
+                    : 'bg-white ring-gray-200 hover:ring-primary/40')}
+              >
+                <o.icon className={'h-4 w-4 ' + (deliveryMethod === o.id ? 'text-primary' : 'text-gray-400')} />
+                <span className={'text-sm font-bold ' + (deliveryMethod === o.id ? 'text-primary' : 'text-gray-700')}>{o.label}</span>
+                <span className="text-[11px] leading-tight text-gray-400">{o.desc}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* forma de pagamento */}
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">Pagamento</p>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: 'pix', label: 'Pix', icon: QrCode },
+                { id: 'dinheiro', label: 'Dinheiro', icon: Banknote },
+                { id: 'cartao', label: 'Cartão', icon: CreditCard },
+              ].map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => setPaymentMethod(o.id)}
+                  className={'flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold ring-1 transition ' +
+                    (paymentMethod === o.id
+                      ? 'bg-secondary text-white ring-secondary'
+                      : 'bg-white text-gray-600 ring-gray-200 hover:ring-primary/40')}
+                >
+                  <o.icon className="h-4 w-4" />
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[11px] text-gray-400">
+              Pagamento combinado pelo WhatsApp: {paymentMethod === 'pix' ? 'a loja envia a chave depois do pedido' : paymentMethod === 'dinheiro' ? 'informe se precisa de troco' : 'maquininha na entrega/retirada'}.
+            </p>
+          </div>
+
+          {deliveryMethod === 'entrega'
+            ? (form && <CheckoutForm form={form} set={set} missing={missing} />)
+            : (
+              // retirada: só contato (nome + telefone)
+              form && (
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { key: 'full_name', label: 'Seu nome *', cls: 'col-span-2' },
+                    { key: 'phone', label: 'Telefone / WhatsApp *', cls: 'col-span-2 sm:col-span-1' },
+                  ].map(({ key, label, cls }) => (
+                    <div key={key} className={cls}>
+                      <label htmlFor={'f_' + key} className="mb-1 block text-xs font-medium text-gray-600">{label}</label>
+                      <input
+                        id={'f_' + key}
+                        className="input"
+                        inputMode={key === 'phone' ? 'tel' : undefined}
+                        maxLength={key === 'phone' ? 15 : undefined}
+                        value={form[key]}
+                        onChange={(e) => set(key, e.target.value)}
+                        autoComplete="off"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )
+            )}
 
           {msg && (
             <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">{msg.text}</div>
@@ -234,19 +315,24 @@ export default function Cart() {
 
           <div className="card space-y-2.5">
             <h2 className="flex items-center gap-2 font-bold text-gray-800">
-              <MapPin className="h-5 w-5 text-primary" /> Entrega
+              {deliveryMethod === 'entrega'
+                ? <><MapPin className="h-5 w-5 text-primary" /> Entrega</>
+                : <><ShoppingBag className="h-5 w-5 text-primary" /> Retirada no balcão</>}
             </h2>
             <div className="text-sm text-gray-600">
               <p className="font-medium text-gray-800">{form.full_name}</p>
               <p>{form.phone}</p>
-              <p className="leading-relaxed">{formatAddress(form)}</p>
+              {deliveryMethod === 'entrega' && <p className="leading-relaxed">{formatAddress(form)}</p>}
+              <p className="pt-1 font-semibold text-gray-800">
+                Pagamento: {paymentMethod === 'pix' ? 'Pix' : paymentMethod === 'dinheiro' ? 'Dinheiro' : 'Cartão (na entrega/retirada)'}
+              </p>
             </div>
             <button
               type="button"
               onClick={() => go(2)}
               className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
             >
-              <Pencil className="h-3.5 w-3.5" /> Editar dados de entrega
+              <Pencil className="h-3.5 w-3.5" /> Editar recebimento
             </button>
           </div>
         </div>

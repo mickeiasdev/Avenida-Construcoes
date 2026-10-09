@@ -5,6 +5,8 @@ import { useAuth } from './AuthContext'
 const CartContext = createContext(null)
 const STORAGE_KEY = 'wl_cart_v1'
 
+const paymentLabels = { pix: 'Pix', dinheiro: 'Dinheiro', cartao: 'Cartão na entrega/retirada' }
+
 // Carrinho persistente (LocalStorage) + modal "adicionado ao carrinho"
 // + checkout que grava orders/order_items, atualiza o perfil do cliente
 // e abre o WhatsApp da loja com o resumo formatado.
@@ -64,7 +66,8 @@ export function CartProvider({ children }) {
   // form = dados de entrega; directItems = quando a finalização vem
   // DIRETO da tela do produto ("comprar agora"): o pedido contém só
   // aquele item e o carrinho NÃO é mexido.
-  async function checkout(form, directItems = null) {
+  // options: { deliveryMethod: 'entrega'|'retirada', paymentMethod: 'pix'|'dinheiro'|'cartao' }
+  async function checkout(form, directItems = null, options = {}) {
     // Visitante pode finalizar: pedido grava com user_id = null e is_guest = true
     // (policy RLS da migration-3 permite insert anônimo nesse caso).
     const checkoutItems = directItems ?? items
@@ -83,13 +86,20 @@ export function CartProvider({ children }) {
       if (refreshProfile) refreshProfile(user.id)
     }
 
-    // 2) endereço em linhas legíveis (usado no pedido e na mensagem)
+    const deliveryMethod = options.deliveryMethod === 'retirada' ? 'retirada' : 'entrega'
+    const paymentMethod = ['pix', 'dinheiro', 'cartao'].includes(options.paymentMethod)
+      ? options.paymentMethod : 'pix'
+
+    // 2) endereço em linhas legíveis (usado no pedido e na mensagem);
+    //    retirada no balcão não grava endereço
     const addressParts = []
-    addressParts.push((form.street || '') + ((form.street && form.number) ? ', ' + form.number : (form.number || '')))
-    if (form.complement) addressParts.push(form.complement)
-    if (form.district) addressParts.push(form.district)
-    if (form.city) addressParts.push(form.city + (form.state ? '/' + form.state : ''))
-    if (form.zip) addressParts.push('CEP ' + form.zip)
+    if (deliveryMethod === 'entrega') {
+      addressParts.push((form.street || '') + ((form.street && form.number) ? ', ' + form.number : (form.number || '')))
+      if (form.complement) addressParts.push(form.complement)
+      if (form.district) addressParts.push(form.district)
+      if (form.city) addressParts.push(form.city + (form.state ? '/' + form.state : ''))
+      if (form.zip) addressParts.push('CEP ' + form.zip)
+    }
     const deliveryAddress = addressParts.filter(Boolean).join(', ')
 
     // 3) grava o pedido + itens
@@ -106,6 +116,8 @@ export function CartProvider({ children }) {
         customer_name: form.full_name || (user?.email ?? 'Visitante'),
         customer_phone: form.phone || '',
         delivery_address: deliveryAddress,
+        delivery_method: deliveryMethod,
+        payment_method: paymentMethod,
       })
     if (orderError) throw orderError
 
@@ -146,8 +158,16 @@ export function CartProvider({ children }) {
     lines.push('*TOTAL: ' + money(totalValue) + '*')
     lines.push(sep)
     lines.push('')
-    lines.push('*ENDEREÇO DE ENTREGA*')
-    addressParts.filter(Boolean).forEach((p) => lines.push(p))
+    if (deliveryMethod === 'retirada') {
+      lines.push('*RETIRADA NO BALCÃO*')
+      lines.push('O cliente vai buscar o pedido na loja')
+    } else {
+      lines.push('*ENDEREÇO DE ENTREGA*')
+      addressParts.filter(Boolean).forEach((p) => lines.push(p))
+    }
+    lines.push('')
+    lines.push('*PAGAMENTO*')
+    lines.push(paymentLabels[paymentMethod] || 'Pix')
     lines.push('')
     lines.push(new Date().toLocaleString('pt-BR'))
     lines.push('')
