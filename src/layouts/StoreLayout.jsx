@@ -177,7 +177,15 @@ export default function StoreLayout() {
           </div>
         </div>
         <div className="border-t border-white/10 py-4 pb-20 text-center text-xs text-white/50 md:pb-4">
-          © {new Date().getFullYear()} {settings.store_name} · Template white-label React + Supabase
+          © {new Date().getFullYear()} {settings.store_name} · Desenvolvido por{' '}
+          <a
+            href="https://github.com/mickeiasdev"
+            target="_blank"
+            rel="noreferrer"
+            className="font-semibold text-white/70 transition hover:text-white hover:underline"
+          >
+            MickeiasDev
+          </a>
         </div>
       </footer>
 

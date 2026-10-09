@@ -172,7 +172,7 @@ create policy "admin update store assets" on storage.objects
 -- são cadastrados pelo painel admin (/admin/produtos e /admin/categorias)
 insert into public.store_settings (id) values (1) on conflict (id) do nothing;
 update public.store_settings set
-  store_name = 'Avenida Construções',
+  store_name = 'Avenida Construção',
   primary_color = '#7c3aed',
   secondary_color = '#151022',
   whatsapp = '',

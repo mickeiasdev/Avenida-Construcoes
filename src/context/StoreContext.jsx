@@ -7,7 +7,7 @@ const StoreContext = createContext(null)
 // Defaults (usados antes do primeiro load ou se o seed ainda nao rodou)
 const DEFAULT_SETTINGS = {
   id: 1,
-  store_name: 'Avenida Construções',
+  store_name: 'Avenida Construção',
   logo_url: null,
   banner_url: 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=1600&q=80',
   primary_color: '#7c3aed',

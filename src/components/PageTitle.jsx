@@ -5,7 +5,7 @@ import { useStore } from '../context/StoreContext'
 export default function PageTitle() {
   const { pathname } = useLocation()
   const { settings } = useStore()
-  const storeName = settings?.store_name || 'Avenida Construções'
+  const storeName = settings?.store_name || 'Avenida Construção'
 
   useEffect(() => {
     let title = storeName
