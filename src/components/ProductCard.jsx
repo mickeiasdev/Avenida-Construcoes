@@ -46,18 +46,18 @@ export function ProductCard({ product, compact = false }) {
         {!compact && (
           <p className="line-clamp-2 hidden text-xs text-gray-500 sm:block">{product.description}</p>
         )}
-        <div className="mt-auto flex items-end justify-between gap-2 pt-2 sm:pt-3">
-          <span className="rounded-lg bg-primary/10 px-2 py-0.5 text-base font-extrabold leading-tight tracking-tight text-primary sm:text-lg">
+        <div className="mt-auto flex flex-col gap-2 pt-2 sm:flex-row sm:items-end sm:justify-between sm:pt-3">
+          <span className="w-fit rounded-lg bg-primary/10 px-2 py-0.5 text-base font-extrabold leading-tight tracking-tight text-primary sm:text-lg">
             {formatBRL(product.price)}
           </span>
           <button
             type="button"
-            className="btn-primary px-2.5 py-1.5 text-xs sm:px-3 sm:text-sm"
+            className="btn-primary w-full px-2.5 py-1.5 text-xs sm:w-auto sm:px-3 sm:text-sm"
             disabled={out}
             onClick={() => addItem(product)}
           >
             <ShoppingCart className="h-4 w-4" />
-            <span className="hidden min-[400px]:inline">{out ? 'Sem estoque' : 'Adicionar'}</span>
+            {out ? 'Sem estoque' : 'Adicionar'}
           </button>
         </div>
       </div>
