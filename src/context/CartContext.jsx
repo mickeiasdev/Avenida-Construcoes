@@ -93,9 +93,13 @@ export function CartProvider({ children }) {
     const deliveryAddress = addressParts.filter(Boolean).join(', ')
 
     // 3) grava o pedido + itens
-    const { data: order, error: orderError } = await supabase
+    // O uuid é gerado aqui no navegador: convidado não consegue LER o pedido
+    // de volta (RLS), então não podemos usar .select() após o insert.
+    const order = { id: crypto.randomUUID() }
+    const { error: orderError } = await supabase
       .from('orders')
       .insert({
+        id: order.id,
         user_id: user ? user.id : null,
         is_guest: !user,
         total: totalValue,
@@ -103,8 +107,6 @@ export function CartProvider({ children }) {
         customer_phone: form.phone || '',
         delivery_address: deliveryAddress,
       })
-      .select()
-      .single()
     if (orderError) throw orderError
 
     const { error: itemsError } = await supabase.from('order_items').insert(
