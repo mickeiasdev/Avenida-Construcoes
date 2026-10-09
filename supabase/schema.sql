@@ -137,10 +137,24 @@ drop policy if exists "items read" on public.order_items;
 create policy "items read" on public.order_items for select using (
   exists (select 1 from public.orders o
           where o.id = order_id and (o.user_id = auth.uid() or public.is_admin())));
+-- função que permite a checagem do dono mesmo sem leitura pública em orders
+create or replace function public.order_item_owner_check(p_order_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.orders o
+    where o.id = p_order_id
+      and (o.user_id = auth.uid() or (o.is_guest and o.user_id is null))
+  );
+$$;
+
 drop policy if exists "items insert" on public.order_items;
-create policy "items insert" on public.order_items for insert with check (
-  exists (select 1 from public.orders o
-          where o.id = order_id and (o.user_id = auth.uid() or o.user_id is null)));
+create policy "items insert" on public.order_items for insert
+  with check (public.order_item_owner_check(order_id));
 
 insert into storage.buckets (id, name, public) values ('store','store',true)
 on conflict (id) do nothing;
