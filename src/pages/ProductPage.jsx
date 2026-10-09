@@ -7,6 +7,7 @@ import { useCart } from '../context/CartContext'
 import { formatBRL } from '../lib/utils'
 import { CheckoutForm, profileToForm, missingFields, fieldLabel } from '../components/CheckoutForm'
 import { FavoriteButton } from '../components/FavoriteButton'
+import { GuestCheckoutModal } from '../components/GuestCheckoutModal'
 
 const FALLBACK_IMG = 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=800&q=80'
 
@@ -33,6 +34,7 @@ export default function ProductPage() {
   const [buyMissing, setBuyMissing] = useState(null)
   const [buyBusy, setBuyBusy] = useState(false)
   const [buyError, setBuyError] = useState(null)
+  const [askGuest, setAskGuest] = useState(false)
 
   // carrega os dados direto do usuário; se não houver, o form fica vazio
   useEffect(() => { setBuyForm(profileToForm(profile)) }, [profile])
@@ -43,10 +45,7 @@ export default function ProductPage() {
   }
 
   function openBuyNow() {
-    if (!user) {
-      navigate('/login', { state: { from: '/produto/' + id } })
-      return
-    }
+    // Visitante também pode: o modal de login/convidado aparece na confirmação
     setBuyOpen(true)
   }
 
@@ -76,6 +75,13 @@ export default function ProductPage() {
       setBuyMissing(miss)
       return
     }
+    // Deslogado? pergunta: entrar/criar conta ou seguir como visitante
+    if (!user) { setAskGuest(true); return }
+    finishBuyNow()
+  }
+
+  async function finishBuyNow() {
+    setAskGuest(false)
     setBuyBusy(true)
     setBuyError(null)
     try {
@@ -281,6 +287,14 @@ export default function ProductPage() {
             <p className="text-[11px] leading-relaxed text-gray-400">
               Os dados acima vêm do seu perfil e ficam salvos nele depois do pedido.
             </p>
+
+            {/* deslogado: login/criar conta ou seguir como visitante */}
+            <GuestCheckoutModal
+              open={askGuest}
+              onClose={() => setAskGuest(false)}
+              onContinueGuest={finishBuyNow}
+              from={'/produto/' + id}
+            />
 
             {/* tentou finalizar sem preencher: bloqueado — pergunta se quer atualizar */}
             {buyMissing && (

@@ -65,21 +65,23 @@ export function CartProvider({ children }) {
   // DIRETO da tela do produto ("comprar agora"): o pedido contém só
   // aquele item e o carrinho NÃO é mexido.
   async function checkout(form, directItems = null) {
-    if (!user) throw new Error('Faça login para finalizar o pedido.')
-
+    // Visitante pode finalizar: pedido grava com user_id = null e is_guest = true
+    // (policy RLS da migration-3 permite insert anônimo nesse caso).
     const checkoutItems = directItems ?? items
     if (!checkoutItems.length) throw new Error('Nada para finalizar.')
 
     const totalValue = checkoutItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
 
-    // 1) mantém o perfil atualizado (o admin vê esses dados) —
+    // 1) se estiver LOGADO, mantém o perfil atualizado (o admin vê esses dados)
     //    só sobrescreve os campos que foram preenchidos
-    const profileUpdate = {}
-    Object.keys(form).forEach((k) => {
-      if (String(form[k] ?? '').trim() !== '') profileUpdate[k] = form[k]
-    })
-    await supabase.from('profiles').update(profileUpdate).eq('id', user.id)
-    if (refreshProfile) refreshProfile(user.id)
+    if (user) {
+      const profileUpdate = {}
+      Object.keys(form).forEach((k) => {
+        if (String(form[k] ?? '').trim() !== '') profileUpdate[k] = form[k]
+      })
+      await supabase.from('profiles').update(profileUpdate).eq('id', user.id)
+      if (refreshProfile) refreshProfile(user.id)
+    }
 
     // 2) endereço em linhas legíveis (usado no pedido e na mensagem)
     const addressParts = []
@@ -94,9 +96,10 @@ export function CartProvider({ children }) {
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert({
-        user_id: user.id,
+        user_id: user ? user.id : null,
+        is_guest: !user,
         total: totalValue,
-        customer_name: form.full_name || user.email,
+        customer_name: form.full_name || (user?.email ?? 'Visitante'),
         customer_phone: form.phone || '',
         delivery_address: deliveryAddress,
       })

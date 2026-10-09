@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { formatBRL } from '../lib/utils'
 import { CheckoutForm, profileToForm, missingFields, fieldLabel, formatAddress } from '../components/CheckoutForm'
+import { GuestCheckoutModal } from '../components/GuestCheckoutModal'
 
 const STEPS = [
   { n: 1, label: 'Sacola' },
@@ -18,7 +19,7 @@ const STEPS = [
 // 3) Revisão — resumo + confirmação via WhatsApp
 // CTA fixo no rodapé (acima da bottom nav no mobile), total sempre visível.
 export default function Cart() {
-  const { profile } = useAuth()
+  const { user, profile } = useAuth()
   const { items, count, total, updateQuantity, removeItem, checkout } = useCart()
   const navigate = useNavigate()
 
@@ -27,6 +28,8 @@ export default function Cart() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [missing, setMissing] = useState(null)
+  const [askGuest, setAskGuest] = useState(false)
+  const [doneOrder, setDoneOrder] = useState(null) // pedido concluído como visitante
 
   useEffect(() => { setForm(profileToForm(profile)) }, [profile])
 
@@ -55,13 +58,27 @@ export default function Cart() {
       setMissing(miss)
       return
     }
+    // Deslogado? Pergunta se quer entrar/criar conta ou seguir como visitante
+    if (!user) { setAskGuest(true); return }
+    finishCheckout()
+  }
+
+  async function finishCheckout() {
+    setAskGuest(false)
     setBusy(true)
     setMsg(null)
     try {
-      await checkout(form)
-      navigate('/pedidos', { state: { justOrdered: true } })
+      const order = await checkout(form)
+      if (user) {
+        navigate('/pedidos', { state: { justOrdered: true } })
+      } else {
+        // Visitante não tem /pedidos — mostra confirmação na tela
+        setDoneOrder(order)
+        window.scrollTo({ top: 0 })
+      }
     } catch (e) {
       setMsg({ type: 'err', text: e.message })
+    } finally {
       setBusy(false)
     }
   }
@@ -74,6 +91,34 @@ export default function Cart() {
       el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       setTimeout(() => el?.focus(), 350)
     }
+  }
+
+  if (doneOrder) {
+    return (
+      <div className="card mx-auto flex max-w-md flex-col items-center gap-3 py-16 text-center">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-green-600">
+          <Check className="h-7 w-7" />
+        </span>
+        <h1 className="text-xl font-extrabold tracking-tight text-gray-800">Pedido enviado!</h1>
+        <p className="text-sm text-gray-500">
+          Pedido nº <b className="text-gray-800">{doneOrder.id.slice(0, 8)}</b> recebido.
+          Abrimos o WhatsApp com o resumo — é só enviar para combinarmos a entrega.
+        </p>
+        <p className="text-xs text-gray-400">
+          Criando uma conta, seus dados ficam salvos e você acompanha os próximos pedidos.
+        </p>
+        <div className="mt-2 flex w-full flex-col gap-2 sm:flex-row">
+          <Link to="/" className="btn-primary flex-1">Continuar comprando</Link>
+          <button
+            type="button"
+            className="flex-1 rounded-full bg-white py-2.5 text-sm font-bold text-primary ring-1 ring-primary/40 transition hover:bg-primary/5"
+            onClick={() => navigate('/login')}
+          >
+            Criar uma conta
+          </button>
+        </div>
+      </div>
+    )
   }
 
   if (items.length === 0) {
@@ -270,6 +315,13 @@ export default function Cart() {
           </div>
         </div>
       )}
+      {/* ============ LOGIN OU VISITANTE ============ */}
+      <GuestCheckoutModal
+        open={askGuest}
+        onClose={() => setAskGuest(false)}
+        onContinueGuest={finishCheckout}
+        from="/carrinho"
+      />
     </div>
   )
 }

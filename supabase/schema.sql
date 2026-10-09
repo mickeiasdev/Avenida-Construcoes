@@ -52,7 +52,8 @@ create table if not exists public.products (
 
 create table if not exists public.orders (
   id uuid primary key default uuid_generate_v4(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade, -- null = convidado
+  is_guest boolean not null default false,
   status text not null default 'pending'
     check (status in ('pending','confirmed','preparing','shipping','delivered','cancelled')),
   total numeric(10,2) not null default 0,
@@ -127,7 +128,7 @@ create policy "own orders read" on public.orders for select
   using (auth.uid() = user_id or public.is_admin());
 drop policy if exists "own orders insert" on public.orders;
 create policy "own orders insert" on public.orders for insert
-  with check (auth.uid() = user_id);
+  with check (user_id = auth.uid() or (user_id is null and is_guest = true));
 drop policy if exists "admin orders update" on public.orders;
 create policy "admin orders update" on public.orders for update
   using (public.is_admin());
@@ -139,7 +140,7 @@ create policy "items read" on public.order_items for select using (
 drop policy if exists "items insert" on public.order_items;
 create policy "items insert" on public.order_items for insert with check (
   exists (select 1 from public.orders o
-          where o.id = order_id and o.user_id = auth.uid()));
+          where o.id = order_id and (o.user_id = auth.uid() or o.user_id is null)));
 
 insert into storage.buckets (id, name, public) values ('store','store',true)
 on conflict (id) do nothing;
