@@ -118,33 +118,35 @@ export function CartProvider({ children }) {
     const { data: store } = await supabase
       .from('store_settings').select('store_name, whatsapp').eq('id', 1).maybeSingle()
 
-    // 4) mensagem para o WhatsApp — estruturada e fácil de ler
+    // 4) mensagem para o WhatsApp — só texto + *negrito* nativo e
+    // emojis clássicos (Unicode antigo); emojis novos/box-drawing
+    // (🧾, ━━━) aparecem como "�" no WhatsApp Web e celulares antigos.
     const money = (n) => 'R$ ' + n.toFixed(2).replace('.', ',')
-    const sep = '━━━━━━━━━━━━━━━━━━━'
+    const sep = '─────────────────'
     const lines = []
-    lines.push('🛒 *NOVO PEDIDO — ' + (store?.store_name ?? 'Loja') + '*')
+    lines.push('*NOVO PEDIDO — ' + (store?.store_name ?? 'Loja') + '*')
     lines.push(sep)
-    lines.push('🧾 *Nº do pedido:* ' + order.id.slice(0, 8))
+    lines.push('Pedido nº ' + order.id.slice(0, 8))
     lines.push('')
-    lines.push('👤 *CLIENTE*')
-    lines.push('• Nome: ' + (form.full_name || user.email))
-    if (form.phone) lines.push('• Telefone: ' + form.phone)
+    lines.push('*CLIENTE*')
+    lines.push('Nome: ' + (form.full_name || user.email))
+    if (form.phone) lines.push('Telefone: ' + form.phone)
     lines.push('')
-    lines.push('📦 *ITENS DO PEDIDO*')
+    lines.push('*ITENS DO PEDIDO*')
     checkoutItems.forEach((i, idx) => {
-      lines.push((idx + 1) + ') ' + i.quantity + '× ' + i.name + ' — ' + money(i.price * i.quantity))
+      lines.push((idx + 1) + ') ' + i.quantity + 'x ' + i.name + ' — ' + money(i.price * i.quantity))
     })
     lines.push('')
     lines.push(sep)
-    lines.push('💰 *TOTAL: ' + money(totalValue) + '*')
+    lines.push('*TOTAL: ' + money(totalValue) + '*')
     lines.push(sep)
     lines.push('')
-    lines.push('📍 *ENDEREÇO DE ENTREGA*')
+    lines.push('*ENDEREÇO DE ENTREGA*')
     addressParts.filter(Boolean).forEach((p) => lines.push(p))
     lines.push('')
-    lines.push('🕒 ' + new Date().toLocaleString('pt-BR'))
+    lines.push(new Date().toLocaleString('pt-BR'))
     lines.push('')
-    lines.push('_Pedido enviado automaticamente pelo site._')
+    lines.push('_Pedido enviado pelo site_')
 
     const message = encodeURIComponent(lines.join('\n'))
     const waUrl = 'https://wa.me/' + (store?.whatsapp ?? '') + '?text=' + message

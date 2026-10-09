@@ -235,3 +235,14 @@ vercel.json                       # SPA fallback para o deploy
 - [x] Rodar os UPDATEs para promover o admin
 - [x] Preencher `.env` com URL e anon key
 - [x] `npm run dev` → testar vitrine, login, carrinho, WhatsApp e `/admin`
+
+## ♿ Acessibilidade
+
+Recomenda-se executar auditoria de acessibilidade usando Lighthouse ou axe para garantir que o aplicativo seja utilizável por todos. Alguns pontos a verificar:
+- Contraste de cores (especialmente o tema primário #f97316 sobre fundo branco).
+- Rótulos acessíveis (aria-label) em botões de ícone (carrinho, sino, favorito).
+- Gerenciamento de foco ao abrir/fechar modais e menus.
+- Estrutura de heading hierárquica (h1, h2, etc.) para leitores de tela.
+- Navegação por teclado (Tab ordem lógica).
+
+Você pode rodar Lighthouse diretamente no Chrome DevTools ou instalar o axe-cli via npm e executar em builds de produção.

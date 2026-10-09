@@ -15,6 +15,7 @@ import Profile from './pages/Profile'
 import Orders from './pages/Orders'
 import Cart from './pages/Cart'
 import Favorites from './pages/Favorites'
+import PageTitle from './components/PageTitle'
 // SPA mantém o scroll ao trocar de rota — voltamos sempre ao topo
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -41,6 +42,7 @@ export default function App() {
             {/* popup de "Novo pedido" para o admin (Realtime) */}
             <OrderAlerts />
             <ScrollToTop />
+            <PageTitle />
 
             <Routes>
               {/* ============ LADO DO CLIENTE (Vitrine) ============ */}

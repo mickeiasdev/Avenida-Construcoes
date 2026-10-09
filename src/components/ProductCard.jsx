@@ -14,8 +14,8 @@ export function ProductCard({ product, compact = false }) {
   const out = !product.active || stock === 0
 
   return (
-    <div className="card group flex h-full flex-col overflow-hidden p-0">
-      <div className="relative aspect-square overflow-hidden bg-gray-100">
+    <div className="card group flex h-full flex-col overflow-hidden p-2">
+      <div className="relative aspect-square overflow-hidden rounded-xl bg-violet-50">
         <Link to={'/produto/' + product.id} className="block h-full w-full">
           <img
             src={product.image_url || FALLBACK_IMG}
@@ -25,7 +25,7 @@ export function ProductCard({ product, compact = false }) {
           />
         </Link>
         {product.categories?.name && (
-          <span className="absolute left-2 top-2 z-10 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
+          <span className="absolute left-2.5 top-2.5 z-10 rounded-full bg-secondary/80 px-2.5 py-1 text-[10px] font-bold tracking-wide text-violet-100 shadow-sm backdrop-blur">
             {product.categories.name}
           </span>
         )}
@@ -47,7 +47,7 @@ export function ProductCard({ product, compact = false }) {
           <p className="line-clamp-2 hidden text-xs text-gray-500 sm:block">{product.description}</p>
         )}
         <div className="mt-auto flex items-end justify-between gap-2 pt-2 sm:pt-3">
-          <span className="text-base font-bold leading-tight text-primary sm:text-lg">
+          <span className="rounded-lg bg-primary/10 px-2 py-0.5 text-base font-extrabold leading-tight tracking-tight text-primary sm:text-lg">
             {formatBRL(product.price)}
           </span>
           <button

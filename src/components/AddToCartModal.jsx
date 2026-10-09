@@ -1,14 +1,14 @@
-import { useNavigate } from 'react-router-dom'
-import { CheckCircle2, ShoppingCart, X } from 'lucide-react'
-import { useCart } from '../context/CartContext'
+import { useNavigate } from "react-router-dom";
+import { CheckCircle2, ShoppingCart, X } from "lucide-react";
+import { useCart } from "../context/CartContext";
 
 // Abre automaticamente quando um item é adicionado ao carrinho,
 // perguntando se o cliente quer finalizar ou continuar comprando
 export function AddToCartModal() {
-  const { lastAdded, dismissLastAdded, total, count } = useCart()
-  const navigate = useNavigate()
+  const { lastAdded, dismissLastAdded, total, count } = useCart();
+  const navigate = useNavigate();
 
-  if (!lastAdded) return null
+  if (!lastAdded) return null;
 
   return (
     <div
@@ -41,10 +41,13 @@ export function AddToCartModal() {
         </div>
 
         <div className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600">
-          Subtotal: <span className="font-semibold text-gray-800">{formatTotal(total)}</span>
+          Subtotal:{" "}
+          <span className="font-semibold text-gray-800">
+            {formatTotal(total)}
+          </span>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="flex flex-col gap-3 sm:flex-row mb-5">
           <button
             type="button"
             className="flex-1 rounded-lg bg-white px-4 py-2.5 font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-50"
@@ -55,16 +58,22 @@ export function AddToCartModal() {
           <button
             type="button"
             className="btn-primary flex-1"
-            onClick={() => { dismissLastAdded(); navigate('/carrinho') }}
+            onClick={() => {
+              dismissLastAdded();
+              navigate("/carrinho");
+            }}
           >
             <ShoppingCart className="h-4 w-4" /> Finalizar compra
           </button>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 function formatTotal(v) {
-  return Number(v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  return Number(v ?? 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
 }

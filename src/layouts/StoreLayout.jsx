@@ -39,7 +39,8 @@ export default function StoreLayout() {
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
       {/* ================= HEADER (sticky) ================= */}
-      <header className="sticky top-0 z-40 bg-secondary text-white shadow-md">
+      <header className="sticky top-0 z-40 bg-secondary text-white shadow-lg shadow-black/20"
+        style={{ backgroundImage: 'linear-gradient(120deg, var(--brand-secondary) 0%, color-mix(in srgb, var(--brand-primary) 35%, var(--brand-secondary)) 100%)' }}>
         <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2.5 sm:px-4">
           {/* mobile: logo + busca (resto vive na bottom nav) */}
           <Link to="/" className="flex shrink-0 items-center gap-2">
@@ -63,7 +64,7 @@ export default function StoreLayout() {
           <Link to="/carrinho" className="relative hidden shrink-0 rounded-lg p-2 transition hover:bg-white/10 md:block" aria-label="Carrinho">
             <ShoppingCart className="h-5 w-5" />
             {count > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold text-white">
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold text-white shadow-md shadow-primary/40 ring-2 ring-secondary">
                 {count}
               </span>
             )}
@@ -156,7 +157,8 @@ export default function StoreLayout() {
       )}
 
       {/* ================= FOOTER ================= */}
-      <footer className="bg-secondary text-white/80">
+      <footer className="bg-secondary text-white/80"
+        style={{ backgroundImage: 'linear-gradient(180deg, var(--brand-secondary), color-mix(in srgb, var(--brand-primary) 18%, var(--brand-secondary)))' }}>
         <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8 text-sm md:grid-cols-3">
           <div>
             <p className="mb-2 font-bold text-white">{settings.store_name}</p>

@@ -10,7 +10,7 @@ const DEFAULT_SETTINGS = {
   store_name: 'Depósito ConstruFácil',
   logo_url: null,
   banner_url: 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=1600&q=80',
-  primary_color: '#f97316',
+  primary_color: '#7c3aed',
   secondary_color: '#1e293b',
   whatsapp: '5511999999999',
   address: 'Av. das Obras, 1000 - Centro, São Paulo/SP',

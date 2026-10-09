@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { nanoid } from 'nanoid'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -20,7 +21,7 @@ export const STORAGE_BUCKET = 'store'
 // Upload de imagem para o bucket publico 'store' (logo, banner, produtos)
 export async function uploadImage(file, folder) {
   const ext = (file.name.split('.').pop() || 'png').toLowerCase()
-  const path = folder + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 10) + '.' + ext
+  const path = folder + '/' + Date.now() + '-' + nanoid(10) + '.' + ext
   const { error } = await supabase.storage
     .from(STORAGE_BUCKET)
     .upload(path, file, { upsert: true, cacheControl: '3600' })

@@ -15,7 +15,7 @@ export default function Login() {
   const location = useLocation()
   const redirectTo = location.state?.from || '/'
 
-  const [tab, setTab] = useState('magic')
+  const [tab, setTab] = useState('password')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
@@ -48,7 +48,7 @@ export default function Login() {
         const { error } = await signInWithMagicLink(email)
         setMsg(error
           ? { type: 'err', text: error.message }
-          : { type: 'ok', text: 'Magic Link enviado! Confira sua caixa de entrada (e o spam).' })
+          : { type: 'ok', text: 'Link de confirmação enviado! Confira sua caixa de entrada (e o spam).' })
       } else {
         const { error } = isSignup
           ? await signUp(email, password, fullName)
@@ -56,7 +56,7 @@ export default function Login() {
         if (error) {
           setMsg({ type: 'err', text: error.message })
         } else if (isSignup) {
-          setMsg({ type: 'ok', text: 'Conta criada! Se a confirmação de e-mail estiver ativa no Supabase, verifique seu e-mail antes de entrar.' })
+          setMsg({ type: 'ok', text: 'Conta criada! Se a confirmação de e-mail estiver ativa, verifique seu e-mail antes de entrar.' })
         } else {
           navigate(redirectTo, { replace: true })
         }
@@ -67,8 +67,8 @@ export default function Login() {
   }
 
   const TABS = [
-    { id: 'magic', label: 'Magic Link', icon: Mail },
     { id: 'password', label: 'E-mail e Senha', icon: KeyRound },
+    { id: 'magic', label: 'Magic Link', icon: Mail },
   ]
 
   return (
@@ -105,7 +105,7 @@ export default function Login() {
               placeholder="voce@exemplo.com"
             />
             <p className="mt-2 text-xs text-gray-400">
-              Enviaremos um link de acesso sem senha — gratuito via Supabase Auth.
+              Enviaremos um link de para confirmação de acesso sem senha para o seu e-mail.
             </p>
           </div>
         )}
@@ -141,7 +141,7 @@ export default function Login() {
 
         <button type="submit" className="btn-primary w-full" disabled={busy}>
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-          {tab === 'magic' ? 'Enviar Magic Link' : isSignup ? 'Criar conta' : 'Entrar'}
+          {tab === 'magic' ? 'Enviar' : isSignup ? 'Criar conta' : 'Entrar'}
         </button>
 
         {tab === 'password' && (

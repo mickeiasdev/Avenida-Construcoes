@@ -20,8 +20,8 @@ create table if not exists public.store_settings (
   store_name text not null default 'Depósito ConstruFácil',
   logo_url text,
   banner_url text,
-  primary_color text not null default '#f97316',
-  secondary_color text not null default '#1e293b',
+  primary_color text not null default '#7c3aed',
+  secondary_color text not null default '#151022',
   whatsapp text not null default '5511999999999',
   address text default 'Av. das Obras, 1000 - Centro, São Paulo/SP',
   business_hours text default 'Seg a Sex 7h-18h · Sáb 7h-13h',
@@ -157,8 +157,8 @@ create policy "admin update store assets" on storage.objects
 insert into public.store_settings (id) values (1) on conflict (id) do nothing;
 update public.store_settings set
   store_name = 'Depósito ConstruFácil',
-  primary_color = '#f97316',
-  secondary_color = '#1e293b',
+  primary_color = '#7c3aed',
+  secondary_color = '#151022',
   whatsapp = '5511999999999',
   banner_url = 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=1600&q=80',
   logo_url = null

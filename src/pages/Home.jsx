@@ -67,27 +67,32 @@ export default function Home() {
 
   return (
     <div className="space-y-6">
-      {/* BANNER PRINCIPAL */}
-      <section className="relative overflow-hidden rounded-2xl">
-        <img src={settings.banner_url} alt="" className="h-48 w-full object-cover sm:h-56 md:h-72" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent" />
-        <div className="absolute inset-0 flex flex-col justify-center gap-2 p-6 text-white sm:p-8">
-          <h1 className="max-w-md text-xl font-extrabold drop-shadow sm:text-2xl md:text-4xl">{settings.store_name}</h1>
-          <p className="max-w-md text-xs text-white/85 sm:text-sm md:text-base">{settings.about}</p>
-          <button
-            type="button"
-            onClick={() => document.getElementById('produtos')?.scrollIntoView({ behavior: 'smooth' })}
-            className="btn-primary mt-2 w-fit px-4 py-2 text-sm"
-          >
-            🛒 Ver produtos
-          </button>
+      {/* HERO — banner gigante com degradê da marca e conteúdo em destaque */}
+      <section className="relative -mx-3 overflow-hidden rounded-3xl sm:mx-0">
+        <img src={settings.banner_url} alt="" className="h-56 w-full object-cover sm:h-72 md:h-96" />
+        <div
+          className="absolute inset-0"
+          style={{ backgroundImage: 'linear-gradient(100deg, color-mix(in srgb, var(--brand-secondary) 92%, transparent) 15%, color-mix(in srgb, var(--brand-primary) 35%, transparent) 70%, transparent)' }}
+        />
+        <div className="absolute inset-0 flex flex-col justify-center gap-3 p-6 text-white sm:p-10">
+          <span className="inline-flex w-fit items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-widest backdrop-blur-sm">
+            ● Aberto agora
+          </span>
+          <h1 className="max-w-lg text-2xl font-extrabold leading-tight tracking-tight drop-shadow-lg sm:text-4xl md:text-5xl">
+            {settings.store_name}
+          </h1>
+          <p className="max-w-md text-sm text-white/90 sm:text-base md:text-lg">{settings.about}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <a href="#produtos" className="btn-primary shadow-lg">Ver ofertas</a>
+            <span className="text-xs font-medium text-white/70">{settings.business_hours}</span>
+          </div>
         </div>
       </section>
 
       {/* FILTROS POR CATEGORIA (todos os tamanhos de tela) */}
       <div>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-400">Categorias</h2>
-        <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+        <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-gray-400">Explorar categorias</h2>
+        <div className="flex gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none]">
           <Chips active={!catSlug} onClick={() => selectCategory('')} label="Todas" />
           {categories.map((c) => (
             <Chips key={c.id} active={catSlug === c.slug} onClick={() => selectCategory(c.slug)} label={c.name} />
@@ -165,9 +170,12 @@ function Chips({ active, onClick, label }) {
     <button
       type="button"
       onClick={onClick}
-      className={'shrink-0 rounded-full px-3.5 py-1.5 text-xs ring-1 transition ' +
-        (active ? 'bg-primary text-white ring-primary' : 'bg-white text-gray-600 ring-gray-200 hover:ring-primary/40')}
+      className={'inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold ring-1 transition duration-200 active:scale-95 ' +
+        (active
+          ? 'bg-secondary text-white ring-secondary shadow-md'
+          : 'bg-white text-gray-600 ring-violet-100 hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md hover:ring-primary/30')}
     >
+      {active && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
       {label}
     </button>
   )

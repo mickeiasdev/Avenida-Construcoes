@@ -4,33 +4,76 @@
    TEMA DINÂMICO (white-label)
    --brand-primary / --brand-secondary são gravadas em runtime
    pelo StoreContext a partir da tabela store_settings.
+   Novo visual padrão: violeta profundo + lavanda ("Iris").
    ============================================================ */
 @theme inline {
-  --color-primary: var(--brand-primary, #f97316);
-  --color-secondary: var(--brand-secondary, #1e293b);
+  --color-primary: var(--brand-primary, #7c3aed);
+  --color-secondary: var(--brand-secondary, #151022);
 }
 
 :root {
-  --brand-primary: #f97316;
-  --brand-secondary: #1e293b;
+  --brand-primary: #7c3aed;
+  --brand-secondary: #151022;
+
+  /* cores auxiliares do novo tema */
+  --iris-soft: #f4f1fb;
+  --iris-glow: #a78bfa;
+}
+
+html {
+  font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+body {
+  background: var(--iris-soft);
+  background-image:
+    radial-gradient(60rem 30rem at 110% -10%, color-mix(in srgb, var(--brand-primary) 10%, transparent), transparent 60%),
+    radial-gradient(50rem 26rem at -20% 110%, color-mix(in srgb, var(--brand-primary) 8%, transparent), transparent 60%);
+  background-attachment: fixed;
+  color: #1e1b2e;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--brand-primary) 25%, transparent);
 }
 
 /* IMPORTANTE: as classes de componente ficam em @layer components
    para que utilitários inline (ex.: pl-10 no input com ícone)
-   tenham precedência sobre elas. Antes estavam fora de layers,
-   e o px-3 do .input sobrescrevia o pl-9/pl-10 — era por isso que
-   o ícone de lupa ficava colado no texto "Buscar". */
+   tenham precedência sobre elas. */
 @layer components {
+  /* Botão "pill" com gradiente + glow — carinha de app premium */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2
-           font-medium text-white transition hover:brightness-110
-           disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5
+           text-sm font-bold tracking-tight text-white shadow-md
+           transition duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-lg
+           active:translate-y-0 active:scale-[0.98]
+           disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0;
+    background-image: linear-gradient(135deg,
+      var(--brand-primary),
+      color-mix(in srgb, var(--brand-primary) 55%, #d946ef));
+    box-shadow: 0 2px 10px -2px color-mix(in srgb, var(--brand-primary) 45%, transparent),
+                inset 0 1px 0 rgb(255 255 255 / 0.25);
   }
+
+  /* Input moderno: fundo branco fosco, borda suave, foco violeta */
   .input {
-    @apply w-full rounded-lg border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400
-           focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30;
+    @apply w-full rounded-xl border border-violet-100/80 bg-white px-3.5 py-2.5 text-sm
+           shadow-sm placeholder:text-gray-400
+           transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15;
   }
-  .card { @apply rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100; }
+
+  /* Card flutuante: cantos generosos, sombra em camadas, hover com elevação */
+  .card {
+    @apply rounded-2xl bg-white/90 p-4 shadow-[0_1px_2px_rgb(16_10_40/0.04),0_8px_24px_-8px_rgb(16_10_40/0.12)]
+           ring-1 ring-violet-100/60 backdrop-blur-sm
+           transition duration-200 hover:shadow-[0_4px_8px_rgb(16_10_40/0.05),0_16px_40px_-12px_rgb(16_10_40/0.18)];
+  }
+}
+
+/* Headings com personalidade */
+h1, h2, h3 {
+  letter-spacing: -0.02em;
 }
 
 /* Respeita o "notch" safe-area (iPhone) em barras fixas */
