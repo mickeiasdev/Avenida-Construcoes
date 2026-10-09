@@ -7,6 +7,13 @@ const STORAGE_KEY = 'wl_cart_v1'
 
 const paymentLabels = { pix: 'Pix', dinheiro: 'Dinheiro', cartao: 'Cartão na entrega/retirada' }
 
+// preço final do produto considerando o desconto percentual cadastrado no admin
+export function effectivePrice(product) {
+  const p = Number(product?.price ?? 0)
+  const d = Number(product?.discount_percent ?? 0)
+  return Math.round(p * (1 - d / 100) * 100) / 100
+}
+
 // Carrinho persistente (LocalStorage) + modal "adicionado ao carrinho"
 // + checkout que grava orders/order_items, atualiza o perfil do cliente
 // e abre o WhatsApp da loja com o resumo formatado.
@@ -19,6 +26,7 @@ export function CartProvider({ children }) {
     } catch { return [] }
   })
   const [lastAdded, setLastAdded] = useState(null)
+  const [coupon, setCoupon] = useState(null) // { code, kind, value, min_total } ou null
 
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)) } catch { /* storage indisponível */ }
@@ -36,7 +44,8 @@ export function CartProvider({ children }) {
       return [...prev, {
         product_id: product.id,
         name: product.name,
-        price: Number(product.price),
+        price: effectivePrice(product),
+        list_price: Number(product.price), // preço "de" (para mostrar riscado)
         image_url: product.image_url,
         quantity,
         stock: product.stock,
@@ -57,7 +66,34 @@ export function CartProvider({ children }) {
     setItems((prev) => prev.filter((i) => i.product_id !== productId))
   }
 
-  function clearCart() { setItems([]) }
+  function clearCart() { setItems([]); setCoupon(null) }
+
+  // valida o cupom no banco (público pode ler cupons ativos)
+  async function applyCoupon(code) {
+    const clean = String(code ?? '').trim().toUpperCase()
+    if (!clean) return { error: 'Digite um código de cupom.' }
+    const { data, error } = await supabase
+      .from('coupons')
+      .select('code, kind, value, min_total')
+      .ilike('code', clean)
+      .eq('active', true)
+      .maybeSingle()
+    if (error || !data) return { error: 'Cupom inválido ou inativo.' }
+    if (Number(data.min_total) > 0 && total < Number(data.min_total)) {
+      return { error: 'Esse cupom vale para compras a partir de R$ ' + Number(data.min_total).toFixed(2).replace('.', ',') }
+    }
+    setCoupon(data)
+    return { data }
+  }
+
+  function removeCoupon() { setCoupon(null) }
+
+  // desconto em reais do cupom aplicado
+  const discountValue = coupon
+    ? Math.min(total, coupon.kind === 'percent'
+        ? Math.round(total * Number(coupon.value)) / 100
+        : Number(coupon.value))
+    : 0
 
   const total = useMemo(() => items.reduce((sum, i) => sum + i.price * i.quantity, 0), [items])
   const count = useMemo(() => items.reduce((sum, i) => sum + i.quantity, 0), [items])
@@ -73,7 +109,14 @@ export function CartProvider({ children }) {
     const checkoutItems = directItems ?? items
     if (!checkoutItems.length) throw new Error('Nada para finalizar.')
 
-    const totalValue = checkoutItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
+    const subtotalValue = checkoutItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
+    const discount = Math.min(
+      subtotalValue,
+      coupon ? (coupon.kind === 'percent'
+        ? Math.round(subtotalValue * Number(coupon.value)) / 100
+        : Number(coupon.value)) : 0
+    )
+    const totalValue = subtotalValue - discount
 
     // 1) se estiver LOGADO, mantém o perfil atualizado (o admin vê esses dados)
     //    só sobrescreve os campos que foram preenchidos
@@ -118,6 +161,8 @@ export function CartProvider({ children }) {
         delivery_address: deliveryAddress,
         delivery_method: deliveryMethod,
         payment_method: paymentMethod,
+        coupon_code: discount > 0 ? coupon.code : null,
+        discount: discount,
       })
     if (orderError) throw orderError
 
@@ -155,6 +200,10 @@ export function CartProvider({ children }) {
     })
     lines.push('')
     lines.push(sep)
+    if (discount > 0) {
+      lines.push('Subtotal: ' + money(subtotalValue))
+      lines.push('Cupom ' + coupon.code + ': -' + money(discount))
+    }
     lines.push('*TOTAL: ' + money(totalValue) + '*')
     lines.push(sep)
     lines.push('')
@@ -187,7 +236,7 @@ export function CartProvider({ children }) {
 
   return (
     <CartContext.Provider
-      value={{ items, count, total, lastAdded, dismissLastAdded, addItem, updateQuantity, removeItem, clearCart, checkout }}
+      value={{ items, count, total, lastAdded, dismissLastAdded, addItem, updateQuantity, removeItem, clearCart, checkout, coupon, applyCoupon, removeCoupon, discountValue }}
     >
       {children}
     </CartContext.Provider>

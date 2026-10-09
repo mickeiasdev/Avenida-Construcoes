@@ -20,7 +20,7 @@ const STEPS = [
 // CTA fixo no rodapé (acima da bottom nav no mobile), total sempre visível.
 export default function Cart() {
   const { user, profile } = useAuth()
-  const { items, count, total, updateQuantity, removeItem, checkout } = useCart()
+  const { items, count, total, updateQuantity, removeItem, checkout, coupon, applyCoupon, removeCoupon, discountValue } = useCart()
   const navigate = useNavigate()
 
   const [step, setStep] = useState(1)
@@ -31,6 +31,8 @@ export default function Cart() {
   const [askGuest, setAskGuest] = useState(false)
   const [deliveryMethod, setDeliveryMethod] = useState('entrega') // 'entrega' | 'retirada'
   const [paymentMethod, setPaymentMethod] = useState('pix')       // 'pix' | 'dinheiro' | 'cartao'
+  const [couponInput, setCouponInput] = useState('')
+  const [couponMsg, setCouponMsg] = useState(null)
   const [doneOrder, setDoneOrder] = useState(null) // pedido concluído como visitante
 
   useEffect(() => { setForm(profileToForm(profile)) }, [profile])
@@ -194,6 +196,45 @@ export default function Cart() {
         </div>
       )}
 
+      {/* CUPOM (visível na sacola) */}
+      {step === 1 && (
+        <div className="card space-y-2 !p-3.5">
+          <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Cupom de desconto</label>
+          {coupon ? (
+            <div className="flex items-center justify-between rounded-xl bg-green-50 px-3 py-2.5 ring-1 ring-green-200">
+              <p className="text-sm font-bold text-green-700">
+                🎟️ {coupon.code} — {coupon.kind === 'percent' ? Number(coupon.value) + '% off' : formatBRL(coupon.value) + ' off'}
+              </p>
+              <button type="button" onClick={removeCoupon} className="text-xs font-semibold text-red-500 hover:underline">
+                remover
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <input
+                className="input flex-1 uppercase"
+                placeholder="Ex.: VEM10"
+                value={couponInput}
+                onChange={(e) => { setCouponInput(e.target.value); setCouponMsg(null) }}
+              />
+              <button
+                type="button"
+                className="btn-primary px-4 text-xs"
+                onClick={async () => {
+                  const r = await applyCoupon(couponInput)
+                  setCouponMsg(r.error ? { type: 'err', text: r.error } : { type: 'ok', text: 'Cupom aplicado! 🎉' })
+                }}
+              >
+                Aplicar
+              </button>
+            </div>
+          )}
+          {couponMsg && (
+            <p className={'text-xs font-medium ' + (couponMsg.type === 'ok' ? 'text-green-600' : 'text-red-500')}>{couponMsg.text}</p>
+          )}
+        </div>
+      )}
+
       {/* ============ PASSO 2 · ENTREGA E PAGAMENTO ============ */}
       {step === 2 && (
         <div className="card space-y-4">
@@ -307,9 +348,21 @@ export default function Cart() {
                 </div>
               ))}
             </div>
-            <div className="flex justify-between border-t border-gray-100 pt-2 font-bold text-gray-800">
-              <span>Total ({count} itens)</span>
-              <span className="text-primary">{formatBRL(total)}</span>
+            <div className="space-y-1 border-t border-gray-100 pt-2 text-sm font-bold text-gray-800">
+              {discountValue > 0 && (
+                <>
+                  <div className="flex justify-between font-normal text-gray-500">
+                    <span>Subtotal ({count} itens)</span><span>{formatBRL(total)}</span>
+                  </div>
+                  <div className="flex justify-between font-normal text-green-600">
+                    <span>Cupom {coupon.code}</span><span>-{formatBRL(discountValue)}</span>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between">
+                <span>Total</span>
+                <span className="text-primary">{formatBRL(total - discountValue)}</span>
+              </div>
             </div>
           </div>
 
@@ -348,7 +401,7 @@ export default function Cart() {
           <div className="flex items-center gap-3">
             <div className="shrink-0">
               <p className="text-[10px] uppercase tracking-wide text-gray-400">Total</p>
-              <p className="text-sm font-bold text-gray-800">{formatBRL(total)}</p>
+              <p className="text-sm font-bold text-gray-800">{formatBRL(total - discountValue)}</p>
             </div>
             <button type="button" className="btn-primary flex-1" onClick={() => go(step + 1)}>
               {step === 1 ? 'Continuar para entrega' : 'Continuar para revisão'}

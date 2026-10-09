@@ -1,6 +1,6 @@
 import { ShoppingCart } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { useCart } from '../context/CartContext'
+import { useCart, effectivePrice } from '../context/CartContext'
 import { FavoriteButton } from './FavoriteButton'
 import { formatBRL } from '../lib/utils'
 
@@ -29,6 +29,11 @@ export function ProductCard({ product, compact = false }) {
             {product.categories.name}
           </span>
         )}
+        {Number(product.discount_percent) > 0 && (
+          <span className="absolute left-2.5 bottom-2.5 z-10 rounded-full bg-red-500 px-2.5 py-1 text-[10px] font-extrabold text-white shadow-md">
+            -{product.discount_percent}% OFF
+          </span>
+        )}
         <FavoriteButton
           productId={product.id}
           className="absolute right-2 top-2 z-10 rounded-full bg-black/55 p-1.5 backdrop-blur"
@@ -47,9 +52,14 @@ export function ProductCard({ product, compact = false }) {
           <p className="line-clamp-2 hidden text-xs text-gray-500 sm:block">{product.description}</p>
         )}
         <div className="mt-auto flex flex-col gap-2 pt-2 sm:flex-row sm:items-end sm:justify-between sm:pt-3">
-          <span className="w-fit rounded-lg bg-primary/10 px-2 py-0.5 text-base font-extrabold leading-tight tracking-tight text-primary sm:text-lg">
-            {formatBRL(product.price)}
-          </span>
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            {Number(product.discount_percent) > 0 && (
+              <span className="text-[11px] font-medium text-gray-400 line-through">{formatBRL(product.price)}</span>
+            )}
+            <span className="w-fit rounded-lg bg-primary/10 px-2 py-0.5 text-base font-extrabold leading-tight tracking-tight text-primary sm:text-lg">
+              {formatBRL(effectivePrice(product))}
+            </span>
+          </div>
           <button
             type="button"
             className="btn-primary w-full px-2.5 py-1.5 text-xs sm:w-auto sm:px-3 sm:text-sm"

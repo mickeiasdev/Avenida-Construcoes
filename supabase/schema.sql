@@ -50,6 +50,7 @@ create table if not exists public.products (
   name text not null,
   description text,
   price numeric(10,2) not null check (price >= 0),
+  discount_percent int not null default 0 check (discount_percent between 0 and 95),
   image_url text,
   images text[] not null default '{}',  -- galeria de fotos extras
   stock int check (stock >= 0),         -- opcional: null = sem controle
@@ -72,6 +73,8 @@ create table if not exists public.orders (
   customer_name text,
   customer_phone text,
   delivery_address text,
+  coupon_code text,
+  discount numeric(10,2) not null default 0,
   created_at timestamptz not null default now()
 );
 

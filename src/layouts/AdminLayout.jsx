@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, Users, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Users, Menu, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 
@@ -9,6 +9,7 @@ const ITEMS = [
   { to: '/admin/pedidos', label: 'Pedidos', icon: ClipboardList },
   { to: '/admin/produtos', label: 'Produtos', icon: Package },
   { to: '/admin/categorias', label: 'Categorias', icon: Tags },
+  { to: '/admin/cupons', label: 'Cupons', icon: TicketPercent },
   { to: '/admin/clientes', label: 'Clientes', icon: Users },
   { to: '/admin/configuracoes', label: 'Configurações', icon: SettingsIcon },
 ]

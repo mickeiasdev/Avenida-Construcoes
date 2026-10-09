@@ -5,7 +5,7 @@ import { useStore } from '../../context/StoreContext'
 import { formatBRL } from '../../lib/utils'
 
 const EMPTY = {
-  id: null, name: '', description: '', price: '',
+  id: null, name: '', description: '', price: '', discount_percent: 0,
   category_id: '', stock: '', image_url: '', images: [], active: true,
 }
 
@@ -67,6 +67,7 @@ export default function Products() {
       name: modal.name.trim(),
       description: modal.description.trim(),
       price: Number(modal.price),
+      discount_percent: Math.min(95, Math.max(0, Number(modal.discount_percent) || 0)), // 0-95%
       category_id: modal.category_id || null,       // categoria opcional
       stock: modal.stock === '' ? null : Number(modal.stock), // estoque opcional
       image_url: modal.image_url || null,
@@ -95,6 +96,7 @@ export default function Products() {
     setModal({
       ...p,
       price: String(p.price),
+      discount_percent: p.discount_percent ?? 0,
       stock: p.stock == null ? '' : String(p.stock),
       images: p.images ?? [],
     })
@@ -225,6 +227,24 @@ export default function Products() {
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Preço (R$)</label>
                 <input className="input" type="number" step="0.01" min="0" required value={modal.price} onChange={(e) => setModal({ ...modal, price: e.target.value })} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Desconto % (opcional)</label>
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  max="95"
+                  value={modal.discount_percent}
+                  onChange={(e) => setModal({ ...modal, discount_percent: e.target.value })}
+                  placeholder="0 = preço cheio"
+                />
+                {Number(modal.discount_percent) > 0 && Number(modal.price) > 0 && (
+                  <p className="mt-1 text-xs text-green-600">
+                    De {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(modal.price))} por{' '}
+                    <b>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(modal.price) * (1 - Number(modal.discount_percent) / 100))}</b>
+                  </p>
+                )}
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Estoque (opcional)</label>

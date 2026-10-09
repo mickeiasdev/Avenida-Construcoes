@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Banknote, ChevronLeft, ChevronRight, CreditCard, Loader2, MessageCircle, Minus, Package, Plus, QrCode, Share2, ShoppingBag, ShoppingCart, X } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { useCart } from '../context/CartContext'
+import { useCart, effectivePrice } from '../context/CartContext'
 import { formatBRL } from '../lib/utils'
 import { CheckoutForm, profileToForm, missingFields, fieldLabel } from '../components/CheckoutForm'
 import { FavoriteButton } from '../components/FavoriteButton'
@@ -93,7 +93,7 @@ export default function ProductPage() {
       await checkout(buyForm, [{
         product_id: product.id,
         name: product.name,
-        price: Number(product.price),
+        price: effectivePrice(product),
         quantity: qty,
       }], { deliveryMethod: buyDelivery, paymentMethod: buyPayment })
       setBuyOpen(false)
@@ -213,7 +213,17 @@ export default function ProductPage() {
           )}
           <h1 className="text-2xl font-bold text-gray-800">{product.name}</h1>
           <p className="text-sm leading-relaxed text-gray-600">{product.description}</p>
-          <p className="text-3xl font-extrabold text-primary">{formatBRL(product.price)}</p>
+          <div className="flex items-baseline gap-2">
+            {Number(product.discount_percent) > 0 && (
+              <>
+                <span className="rounded-md bg-red-100 px-2 py-0.5 text-xs font-extrabold text-red-600">
+                  -{product.discount_percent}%
+                </span>
+                <span className="text-sm font-medium text-gray-400 line-through">{formatBRL(product.price)}</span>
+              </>
+            )}
+            <p className="text-3xl font-extrabold tracking-tight text-primary">{formatBRL(effectivePrice(product))}</p>
+          </div>
           <p className={'text-sm font-medium ' + (out ? 'text-red-500' : 'text-green-600')}>{stockLabel}</p>
 
           <div className="mt-auto space-y-2">
@@ -272,9 +282,9 @@ export default function ProductPage() {
               <img src={images[0]} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-gray-800">{product.name}</p>
-                <p className="text-xs text-gray-500">{qty}× {formatBRL(product.price)}</p>
+                <p className="text-xs text-gray-500">{qty}× {formatBRL(effectivePrice(product))}</p>
               </div>
-              <span className="font-bold text-primary">{formatBRL(qty * Number(product.price))}</span>
+              <span className="font-bold text-primary">{formatBRL(qty * effectivePrice(product))}</span>
             </div>
 
             {/* recebimento: entrega x retirada */}
