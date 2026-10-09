@@ -153,51 +153,26 @@ drop policy if exists "admin update store assets" on storage.objects;
 create policy "admin update store assets" on storage.objects
   for update using (bucket_id = 'store' and public.is_admin());
 
--- SEED
+-- SEED (produção): só a identidade da loja — produtos e categorias
+-- são cadastrados pelo painel admin (/admin/produtos e /admin/categorias)
 insert into public.store_settings (id) values (1) on conflict (id) do nothing;
 update public.store_settings set
-  store_name = 'Depósito ConstruFácil',
+  store_name = 'Avenida Construções',
   primary_color = '#7c3aed',
   secondary_color = '#151022',
-  whatsapp = '5511999999999',
+  whatsapp = '',
   banner_url = 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=1600&q=80',
   logo_url = null
 where id = 1;
 
-insert into public.categories (name, slug) values
-  ('Cimento e Argamassa','cimento-e-argamassa'),
-  ('Ferramentas','ferramentas'),
-  ('Elétrica','eletrica'),
-  ('Hidráulica','hidraulica')
-on conflict (slug) do nothing;
-
-with c as (select id, slug from public.categories)
-insert into public.products (category_id, name, description, price, image_url, stock, views)
-select * from (
-  select (select id from c where slug='cimento-e-argamassa'), 'Cimento CP-II 50kg', 'Cimento Portland composto, saco de 50kg.', 34.90, 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=800&q=80', 120, 350
-  union all select (select id from c where slug='cimento-e-argamassa'), 'Argamassa AC-II 20kg', 'Argamassa colante para cerâmica interna/externa.', 18.90, 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=800&q=80', 80, 210
-  union all select (select id from c where slug='cimento-e-argamassa'), 'Areia Média (m³)', 'Areia lavada média para concreto e reboco.', 210.00, 'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=800&q=80', 40, 90
-  union all select (select id from c where slug='ferramentas'), 'Furadeira Impacto 650W', 'Furadeira de impacto 1/2" com maleta.', 249.90, 'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=800&q=80', 15, 480
-  union all select (select id from c where slug='ferramentas'), 'Kit Chaves de Fenda 6pç', 'Jogo com 6 chaves phillips e fenda.', 49.90, 'https://images.unsplash.com/photo-1530124566582-a618bc2615dc?w=800&q=80', 30, 150
-  union all select (select id from c where slug='ferramentas'), 'Nível a Laser 360°', 'Nível laser autonivelante com tripé.', 399.00, 'https://images.unsplash.com/photo-1572981779307-38b8cabb2407?w=800&q=80', 8, 600
-  union all select (select id from c where slug='eletrica'), 'Cabo Flexível 2,5mm 100m', 'Rolo de cabo flexível 750V antichama.', 189.90, 'https://images.unsplash.com/photo-1588508065123-287b28e013da?w=800&q=80', 25, 320
-  union all select (select id from c where slug='eletrica'), 'Kit Lâmpadas LED 9W (10 un)', 'Lâmpadas LED bulbo branca fria.', 79.90, 'https://images.unsplash.com/photo-1550985616-10810253b84d?w=800&q=80', 60, 275
-  union all select (select id from c where slug='hidraulica'), 'Tubo PVC 100mm 6m', 'Tubo PVC esgoto série normal 6 metros.', 59.90, 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=800&q=80', 45, 130
-  union all select (select id from c where slug='hidraulica'), 'Torneira Abs Jato', 'Torneira de jardim/tanque 1/4 de volta.', 24.90, 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=800&q=80', 70, 190
-) as t(category_id, name, description, price, image_url, stock, views)
-where not exists (select 1 from public.products);
-
--- USUÁRIOS DE TESTE:
--- 1) Supabase Dashboard → Authentication → Users → "Add user":
---    admin@teste.com  / senha: admin123    (marque "Auto Confirm User")
---    cliente@teste.com / senha: client123
--- 2) Rode para promover o admin:
+-- APÓS RODAR ESTE SCHEMA, CRIE O USUÁRIO ADMIN NO PAINEL:
+-- 1) Supabase Dashboard → Authentication → Users → "Add user"
+--    (email real do responsável + senha forte, marque "Auto Confirm User")
+-- 2) Promova para admin:
 --    update public.profiles set role = 'admin'
---    where id = (select id from auth.users where email = 'admin@teste.com');
---    update public.profiles set full_name = 'Admin da Loja'
---    where id = (select id from auth.users where email = 'admin@teste.com');
---    update public.profiles set full_name = 'Cliente Teste'
---    where id = (select id from auth.users where email = 'cliente@teste.com');
+--    where id = (select id from auth.users where email = 'seu-email@dominio.com');
+-- 3) Em /admin/configuracoes preencha: WhatsApp real, logo, banner,
+--    endereço e horário da loja.
 
 -- ============================================================
 -- SUPLEMENTO: REALTIME + CONTADOR DE ACESSOS
@@ -239,4 +214,3 @@ $$;
 
 revoke all on function public.increment_product_views(uuid) from public;
 grant execute on function public.increment_product_views(uuid) to anon, authenticated;
-
