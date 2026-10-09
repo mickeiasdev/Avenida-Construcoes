@@ -14,7 +14,10 @@ const DEFAULT_SETTINGS = {
   secondary_color: '#1e293b',
   whatsapp: '5511999999999',
   address: 'Av. das Obras, 1000 - Centro, São Paulo/SP',
-  business_hours: 'Seg a Sex 7h-18h · Sáb 7h-13h',
+  business_hours: 'Seg a Sex 7h-18h · Sáb 7h-13h · Dom fechado',
+  weekday_open: '07:00', weekday_close: '18:00',
+  sat_open: '07:00', sat_close: '13:00',
+  sun_closed: true, sun_open: null, sun_close: null,
   about: 'Tudo para sua obra, do alicerce ao acabamento.',
 }
 

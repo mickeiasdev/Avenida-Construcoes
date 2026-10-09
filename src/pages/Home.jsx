@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Loader2, SearchX } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { useStore } from '../context/StoreContext'
+import { getOpenStatus, formatBusinessHoursText } from '../lib/utils'
 import { ProductCard } from '../components/ProductCard'
 
 const PAGE_SIZE = 6
@@ -13,6 +14,7 @@ const PAGE_SIZE = 6
 // a página até aqui — por isso os chips existem sempre no topo.
 export default function Home() {
   const { settings, categories } = useStore()
+  const openStatus = getOpenStatus(settings)
   const [searchParams, setSearchParams] = useSearchParams()
   const q = searchParams.get('q') ?? ''
   const catSlug = searchParams.get('cat') ?? ''
@@ -76,7 +78,8 @@ export default function Home() {
         />
         <div className="absolute inset-0 flex flex-col justify-center gap-3 p-6 text-white sm:p-10">
           <span className="inline-flex w-fit items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-widest backdrop-blur-sm">
-            ● Aberto agora
+            <span className={'h-2 w-2 rounded-full ' + (openStatus.open ? 'bg-green-400' : 'bg-red-400')} />
+            {openStatus.label}
           </span>
           <h1 className="max-w-lg text-2xl font-extrabold leading-tight tracking-tight drop-shadow-lg sm:text-4xl md:text-5xl">
             {settings.store_name}
@@ -84,7 +87,7 @@ export default function Home() {
           <p className="max-w-md text-sm text-white/90 sm:text-base md:text-lg">{settings.about}</p>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <a href="#produtos" className="btn-primary shadow-lg">Ver ofertas</a>
-            <span className="text-xs font-medium text-white/70">{settings.business_hours}</span>
+            <span className="text-xs font-medium text-white/70">{formatBusinessHoursText(settings) || settings.business_hours}</span>
           </div>
         </div>
       </section>

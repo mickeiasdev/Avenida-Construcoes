@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ShoppingCart, User, LogOut, Package, Settings as SettingsIcon, Home as HomeIcon, Phone, MessageCircle, Menu, X, Heart } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { formatBusinessHoursText } from '../lib/utils'
 import { useCart } from '../context/CartContext'
 import { useStore } from '../context/StoreContext'
 import { SearchBar } from '../components/SearchBar'
@@ -170,7 +171,7 @@ export default function StoreLayout() {
           </div>
           <div>
             <p className="mb-2 font-bold text-white">Funcionamento</p>
-            <p className="text-white/60">{settings.business_hours}</p>
+            <p className="text-white/60">{formatBusinessHoursText(settings) || settings.business_hours}</p>
             <a href={'https://wa.me/' + settings.whatsapp} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-white transition hover:text-primary">
               <Phone className="h-4 w-4" /> {settings.whatsapp}
             </a>

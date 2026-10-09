@@ -17,7 +17,7 @@ create table if not exists public.profiles (
 
 create table if not exists public.store_settings (
   id int primary key default 1 check (id = 1),
-  store_name text not null default 'Depósito ConstruFácil',
+  store_name text not null default 'Avenida Construção',
   logo_url text,
   banner_url text,
   primary_color text not null default '#7c3aed',
@@ -25,6 +25,14 @@ create table if not exists public.store_settings (
   whatsapp text not null default '5511999999999',
   address text default 'Av. das Obras, 1000 - Centro, São Paulo/SP',
   business_hours text default 'Seg a Sex 7h-18h · Sáb 7h-13h',
+  -- horários estruturados (usados pela vitrine para aberto/fechado)
+  weekday_open  time not null default '07:00',
+  weekday_close time not null default '18:00',
+  sat_open      time          default '07:00',
+  sat_close     time          default '13:00',
+  sun_closed    boolean not null default true,
+  sun_open      time          default null,
+  sun_close     time          default null,
   about text default 'Tudo para sua obra, do alicerce ao acabamento.',
   updated_at timestamptz not null default now()
 );
