@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Loader2, Save, CheckCircle2, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { maskCep, maskPhone } from '../lib/utils'
+import { isCepValid, isFullName, isPhoneBR, isUF } from '../lib/validation'
 import { useAuth } from '../context/AuthContext'
 
 const FIELDS = [
@@ -48,6 +49,25 @@ export default function Profile() {
     e.preventDefault()
     setBusy(true)
     setMsg(null)
+
+    // validações de formato
+    if (!isFullName(form.full_name)) {
+      setMsg({ type: 'err', text: 'Digite seu nome completo (nome + sobrenome).' })
+      setBusy(false); return
+    }
+    if (form.phone && !isPhoneBR(form.phone)) {
+      setMsg({ type: 'err', text: 'Telefone incompleto — use o formato (11) 99999-9999.' })
+      setBusy(false); return
+    }
+    if (form.zip && !isCepValid(form.zip)) {
+      setMsg({ type: 'err', text: 'CEP incompleto — deve ter 8 dígitos.' })
+      setBusy(false); return
+    }
+    if (form.state && !isUF(form.state)) {
+      setMsg({ type: 'err', text: 'UF inválida — use 2 letras (ex.: SP).' })
+      setBusy(false); return
+    }
+
     const { error } = await supabase.from('profiles').update(form).eq('id', user.id)
     if (error) setMsg({ type: 'err', text: 'Erro ao salvar: ' + error.message })
     else {

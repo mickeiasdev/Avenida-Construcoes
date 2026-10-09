@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { maskCep, maskPhone, onlyDigits } from '../lib/utils'
+import { isFullName, isPhoneBR, isCepValid, isUF, isNumber } from '../lib/validation'
 
 // Formulário de dados de entrega compartilhado entre o Carrinho (wizard)
 // e a finalização direta da tela do produto.
@@ -45,8 +46,24 @@ export function profileToForm(profile) {
   }
 }
 
+// Mensagem de erro específica por campo — '' se estiver ok
+export function fieldError(key, value) {
+  const v = String(value ?? '').trim()
+  if (REQUIRED.includes(key) && !v) return 'Campo obrigatório'
+  if (!v) return '' // opcionais vazios passam
+  switch (key) {
+    case 'full_name': return isFullName(v) ? '' : 'Digite nome e sobrenome'
+    case 'phone':     return isPhoneBR(v)  ? '' : 'Telefone incompleto — use (11) 99999-9999'
+    case 'zip':       return isCepValid(v) ? '' : 'CEP incompleto — 8 dígitos'
+    case 'state':     return isUF(v)       ? '' : 'UF inválida (só 2 letras)'
+    case 'number':    return isNumber(v)   ? '' : 'Número inválido'
+    default:          return ''
+  }
+}
+
+// Campos com erro (vazio OU formato inválido) — mesma assinatura de antes
 export function missingFields(form) {
-  return REQUIRED.filter((k) => !String(form?.[k] ?? '').trim())
+  return FIELDS.filter(({ key }) => fieldError(key, form?.[key])).map(({ key }) => key)
 }
 
 // Endereço formatado em uma linha (usado na revisão do pedido)
@@ -65,9 +82,7 @@ export function CheckoutForm({ form, set, missing }) {
   const [cepLoading, setCepLoading] = useState(false)
 
   function showError(key) {
-    return REQUIRED.includes(key)
-      && !String(form?.[key] ?? '').trim()
-      && (touched[key] || missing?.includes(key))
+    return (touched[key] || missing?.includes(key)) ? fieldError(key, form?.[key]) : ''
   }
 
   function handleChange(key, value) {
@@ -102,6 +117,7 @@ export function CheckoutForm({ form, set, missing }) {
     <div className="grid grid-cols-2 gap-3">
       {FIELDS.map(({ key, label, cls }) => {
         const err = showError(key)
+        const errMsg = err
         return (
           <div key={key} className={cls}>
             <label
@@ -125,7 +141,7 @@ export function CheckoutForm({ form, set, missing }) {
               }}
               autoComplete="off"
             />
-            {err && <p className="mt-1 text-[11px] font-medium text-red-500">Campo obrigatório</p>}
+            {err && <p className="mt-1 text-[11px] font-medium text-red-500">{errMsg}</p>}
             {key === 'zip' && cepLoading && (
               <p className="mt-1 text-[11px] font-medium text-primary">Buscando endereço…</p>
             )}

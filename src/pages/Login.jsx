@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Mail, KeyRound, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
+import { isEmail, isFullName, isPasswordStrong } from '../lib/validation'
 
 // Autenticação — 100% gratuita via Supabase Auth:
 //  - Magic Link por e-mail (sem senha)
@@ -24,8 +25,8 @@ export default function Login() {
   const [msg, setMsg] = useState(null)
 
   async function handleResetPassword() {
-    if (!email) {
-      setMsg({ type: 'err', text: 'Digite seu e-mail acima para receber o link de redefinição.' })
+    if (!isEmail(email)) {
+      setMsg({ type: 'err', text: 'Digite um e-mail válido para receber o link de redefinição.' })
       return
     }
     setBusy(true)
@@ -43,6 +44,24 @@ export default function Login() {
     e.preventDefault()
     setBusy(true)
     setMsg(null)
+
+    // validações de formato antes de chamar o Supabase
+    if (!isEmail(email)) {
+      setMsg({ type: 'err', text: 'Digite um e-mail válido (ex.: voce@exemplo.com).' })
+      setBusy(false)
+      return
+    }
+    if (isSignup && !isFullName(fullName)) {
+      setMsg({ type: 'err', text: 'Digite seu nome completo (nome + sobrenome).' })
+      setBusy(false)
+      return
+    }
+    if (tab === 'password' && !isPasswordStrong(password)) {
+      setMsg({ type: 'err', text: 'A senha precisa de pelo menos 6 caracteres.' })
+      setBusy(false)
+      return
+    }
+
     try {
       if (tab === 'magic') {
         const { error } = await signInWithMagicLink(email)

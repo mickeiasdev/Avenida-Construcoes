@@ -316,7 +316,7 @@ export default function ProductPage() {
                     ))}
                   </ul>
 
-                  <div className="flex flex-col gap-2 sm:flex-row">
+                  <div className="flex flex-col gap-2 sm:flex-row mb-5">
                     <button
                       type="button"
                       className="btn-primary flex-1"

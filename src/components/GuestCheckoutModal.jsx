@@ -48,29 +48,31 @@ export function GuestCheckoutModal({ open, onClose, onContinueGuest, from }) {
           </button>
         </div>
 
-        <button type="button" className="btn-primary w-full" onClick={goLogin}>
-          <LogIn className="h-4 w-4" /> Entrar na minha conta
-        </button>
-        <button
-          type="button"
-          className="w-full rounded-full bg-white py-2.5 text-sm font-bold text-primary ring-1 ring-primary/40 transition hover:bg-primary/5"
-          onClick={goLogin}
-        >
-          <UserPlus className="mr-1.5 inline h-4 w-4" /> Criar conta grátis
-        </button>
+        <div className="mb-5 space-y-3">
+          <button type="button" className="btn-primary w-full" onClick={goLogin}>
+            <LogIn className="h-4 w-4" /> Entrar na minha conta
+          </button>
+          <button
+            type="button"
+            className="w-full rounded-full bg-white py-2.5 text-sm font-bold text-primary ring-1 ring-primary/40 transition hover:bg-primary/5"
+            onClick={goLogin}
+          >
+            <UserPlus className="mr-1.5 inline h-4 w-4" /> Criar conta grátis
+          </button>
 
-        <div className="relative py-1 text-center">
-          <span className="bg-white px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-300">ou</span>
-          <div className="absolute inset-x-0 top-1/2 -z-10 h-px bg-gray-100" />
+          <div className="relative py-1 text-center">
+            <span className="bg-white px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-300">ou</span>
+            <div className="absolute inset-x-0 top-1/2 -z-10 h-px bg-gray-100" />
+          </div>
+
+          <button
+            type="button"
+            className="w-full py-2 text-sm font-medium text-gray-500 underline-offset-2 transition hover:text-gray-800 hover:underline"
+            onClick={onContinueGuest}
+          >
+            Continuar como visitante
+          </button>
         </div>
-
-        <button
-          type="button"
-          className="w-full py-2 text-sm font-medium text-gray-500 underline-offset-2 transition hover:text-gray-800 hover:underline"
-          onClick={onContinueGuest}
-        >
-          Continuar como visitante
-        </button>
       </div>
     </div>
   )

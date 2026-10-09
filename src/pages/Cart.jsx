@@ -300,7 +300,7 @@ export default function Cart() {
               ))}
             </ul>
 
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex flex-col gap-2 sm:flex-row mb-5">
               <button type="button" className="btn-primary flex-1" onClick={preencherAgora}>
                 Atualizar dados agora
               </button>

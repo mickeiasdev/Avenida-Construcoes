@@ -68,7 +68,7 @@ export default function Home() {
   return (
     <div className="space-y-6">
       {/* HERO — banner gigante com degradê da marca e conteúdo em destaque */}
-      <section className="relative -mx-3 overflow-hidden rounded-3xl sm:mx-0">
+      <section className="relative overflow-hidden rounded-3xl">
         <img src={settings.banner_url} alt="" className="h-56 w-full object-cover sm:h-72 md:h-96" />
         <div
           className="absolute inset-0"
