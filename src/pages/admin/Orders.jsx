@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Banknote, Ban, ChevronRight, ClipboardList, CreditCard, Download, Loader2, MapPin, Phone, QrCode, Search, User } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Banknote, Ban, Check, ChevronRight, ClipboardList, CreditCard, Download, Eraser, Loader2, MapPin, Phone, PlusCircle, QrCode, RotateCcw, Search, Store, Trash2, Truck, User } from 'lucide-react'
 import { downloadCsv } from '../../lib/csv'
 import { supabase } from '../../lib/supabaseClient'
+import { DELIVERY_LABELS, fulfillmentTotals, PAYMENT_LABELS } from '../../lib/storeOrder'
 import { formatBRL, formatDateTime, ORDER_CLS, ORDER_LABELS, ORDER_NEXT_ACTION, ORDER_PIPELINE, ORDER_SHORT } from '../../lib/utils'
+
+// janela da limpeza em lote (30 dias) — calculada fora do render para não
+// quebrar a pureza do componente (Date.now() é impuro)
+const LIMITE_ANTIGOS = Date.now() - 30 * 24 * 3600 * 1000
 
 const TABS = [
   { k: 'all', l: 'Todos' },
@@ -45,6 +51,7 @@ export default function OrdersAdmin() {
     setBusyId(o.id)
     await supabase.from('orders').update({ status: next }).eq('id', o.id)
     setBusyId(null)
+    load()
   }
 
   async function cancelOrder(o) {
@@ -52,6 +59,40 @@ export default function OrdersAdmin() {
     setBusyId(o.id)
     await supabase.from('orders').update({ status: 'cancelled' }).eq('id', o.id)
     setBusyId(null)
+    load()
+  }
+
+  // marca (ou desmarca) o item como retirado no balcão / entregue
+  async function markItems(ids, value) {
+    setBusyId('items')
+    const { error } = await supabase.from('order_items').update({ fulfilled_at: value }).in('id', ids)
+    setBusyId(null)
+    if (error) { window.alert('Não foi possível atualizar: ' + error.message); return }
+    load()
+  }
+
+  // exclui UM pedido (os itens caem junto pelo "on delete cascade")
+  async function removeOrder(o) {
+    if (!window.confirm('Excluir o pedido nº ' + o.id.slice(0, 8) + '? Os itens vão junto e não tem como desfazer.')) return
+    setBusyId(o.id)
+    const { error } = await supabase.from('orders').delete().eq('id', o.id)
+    setBusyId(null)
+    if (error) { window.alert('Não foi possível excluir: ' + error.message); return }
+    load()
+  }
+
+  // limpeza em lote: a lista não cresce para sempre
+  async function purge({ label, status, olderThanDays }) {
+    if (!window.confirm('Excluir ' + label + '? Não tem como desfazer.')) return
+    setBusyId('purge')
+    let query = supabase.from('orders').delete().eq('status', status)
+    if (olderThanDays) {
+      query = query.lt('created_at', new Date(Date.now() - olderThanDays * 24 * 3600 * 1000).toISOString())
+    }
+    const { error } = await query
+    setBusyId(null)
+    if (error) { window.alert('Não foi possível excluir: ' + error.message); return }
+    load()
   }
 
   // Exporta todos os pedidos (não só os filtrados) como CSV
@@ -61,7 +102,13 @@ export default function OrdersAdmin() {
       cliente: o.customer_name ?? '',
       telefone: o.customer_phone ?? '',
       endereco: o.delivery_address ?? '',
-      itens: (o.order_items ?? []).map((i) => i.quantity + 'x ' + i.product_name).join(' | '),
+      origem: o.origin === 'loja' ? 'Loja' : 'Site',
+      entrega: DELIVERY_LABELS[o.delivery_method] ?? o.delivery_method ?? '',
+      itens: (o.order_items ?? [])
+        .map((i) => i.quantity + 'x ' + i.product_name
+          + ((i.fulfillment ?? (o.delivery_method === 'retirada' ? 'retirada' : 'entrega')) === 'retirada'
+            ? ' [retirada]' : ' [entrega]'))
+        .join(' | '),
       total: Number(o.total),
       status: ORDER_LABELS[o.status] ?? o.status,
       data: new Date(o.created_at).toLocaleString('pt-BR'),
@@ -77,13 +124,26 @@ export default function OrdersAdmin() {
       || (o.delivery_address || '').toLowerCase().includes(f))
   )
 
+  // quantos pedidos a limpeza em lote removeria agora
+  const all = orders ?? []
+  const cancelledCount = all.filter((o) => o.status === 'cancelled').length
+  const oldDeliveredCount = all.filter(
+    (o) => o.status === 'delivered' && new Date(o.created_at).getTime() < LIMITE_ANTIGOS
+  ).length
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-800">Pedidos</h1>
-        <p className="text-sm text-gray-500">
-          Avance as etapas conforme o processo de entrega — o cliente vê cada mudança em tempo real.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Pedidos</h1>
+          <p className="text-sm text-gray-500">
+            Avance as etapas conforme o processo de entrega — o cliente vê cada mudança em tempo real.
+            Os itens aparecem separados entre <b>retirada na loja</b> e <b>entrega</b>.
+          </p>
+        </div>
+        <Link to="/admin/nova-venda" className="btn-primary shrink-0">
+          <PlusCircle className="h-4 w-4" /> Nova venda na loja
+        </Link>
       </div>
 
       {/* Filtros por etapa */}
@@ -93,7 +153,7 @@ export default function OrdersAdmin() {
             key={k}
             type="button"
             onClick={() => setTab(k)}
-            className={'shrink-0 rounded-full px-3.5 py-1.5 text-xs ring-1 transition ' +
+            className={'shrink-0 rounded-lg px-3.5 py-1.5 text-xs ring-1 transition ' +
               (tab === k ? 'bg-primary text-white ring-primary' : 'bg-white text-gray-600 ring-gray-200 hover:ring-primary/40')}
           >
             {l}
@@ -104,7 +164,7 @@ export default function OrdersAdmin() {
       {/* Busca + exportação */}
       <div className="flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
           <input
             className="input pl-10"
             placeholder="Buscar por cliente, nº do pedido ou endereço..."
@@ -112,13 +172,39 @@ export default function OrdersAdmin() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <button type="button" className="btn-primary shrink-0 px-4" onClick={exportCsv} disabled={!orders || orders.length === 0}>
-          <Download className="h-4 w-4" /> CSV
-        </button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <button type="button" className="btn-primary px-4" onClick={exportCsv} disabled={!orders || orders.length === 0}>
+            <Download className="h-4 w-4" /> CSV
+          </button>
+          {cancelledCount > 0 && (
+            <button
+              type="button"
+              disabled={busyId === 'purge'}
+              onClick={() => purge({ label: cancelledCount + ' pedido(s) cancelado(s)', status: 'cancelled' })}
+              className="btn-soft text-red-500 ring-1 ring-red-200 transition hover:bg-red-50 disabled:opacity-50"
+            >
+              <Eraser className="h-4 w-4" /> Limpar cancelados ({cancelledCount})
+            </button>
+          )}
+          {oldDeliveredCount > 0 && (
+            <button
+              type="button"
+              disabled={busyId === 'purge'}
+              onClick={() => purge({
+                label: oldDeliveredCount + ' pedido(s) entregue(s) com mais de 30 dias',
+                status: 'delivered',
+                olderThanDays: 30,
+              })}
+              className="btn-soft text-gray-500 ring-1 ring-gray-200 transition hover:bg-gray-50 disabled:opacity-50"
+            >
+              <Eraser className="h-4 w-4" /> Limpar entregues 30+ dias ({oldDeliveredCount})
+            </button>
+          )}
+        </div>
       </div>
 
       {!orders ? (
-        <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+        <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-gray-500" /></div>
       ) : visible.length === 0 ? (
         <div className="card flex flex-col items-center gap-2 py-16 text-center text-gray-500">
           <ClipboardList className="h-8 w-8 text-gray-300" />
@@ -129,16 +215,22 @@ export default function OrdersAdmin() {
           {visible.map((o) => {
             const cancelled = o.status === 'cancelled'
             const done = o.status === 'delivered'
-            const activeStep = !cancelled && !done
+            // pedidos antigos (antes da migration-9) não têm fulfillment por item:
+            // cai no modo de entrega do pedido para a separação não mentir
+            const itemList = (o.order_items ?? []).map((it) => ({
+              ...it,
+              fulfillment: it.fulfillment ?? (o.delivery_method === 'retirada' ? 'retirada' : 'entrega'),
+            }))
+            const totals = fulfillmentTotals(itemList)
             return (
               <div key={o.id} className="card space-y-4">
                 {/* Cabeçalho */}
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="font-semibold text-gray-800">Pedido nº {o.id.slice(0, 8)}</p>
-                    <p className="text-xs text-gray-400">{formatDateTime(o.created_at)}</p>
+                    <p className="text-xs text-gray-500">{formatDateTime(o.created_at)}</p>
                   </div>
-                  <span className={'rounded-full px-3 py-1 text-xs font-medium ' + (ORDER_CLS[o.status] ?? ORDER_CLS.pending)}>
+                  <span className={'rounded-lg px-3 py-1 text-xs font-medium ' + (ORDER_CLS[o.status] ?? ORDER_CLS.pending)}>
                     {ORDER_LABELS[o.status] ?? o.status}
                   </span>
                 </div>
@@ -150,42 +242,50 @@ export default function OrdersAdmin() {
                   {/* Cliente */}
                   <div className="space-y-1.5 rounded-lg bg-gray-50 p-3 text-sm">
                     <p className="flex items-center gap-2 font-medium text-gray-800">
-                      <User className="h-4 w-4 text-gray-400" /> {o.customer_name || 'Cliente'}
+                      <User className="h-4 w-4 text-gray-500" /> <span className="min-w-0 break-words">{o.customer_name || 'Cliente'}</span>
                     </p>
                     <p className="flex items-center gap-2 text-gray-600">
-                      <Phone className="h-4 w-4 text-gray-400" /> {o.customer_phone || '—'}
+                      <Phone className="h-4 w-4 text-gray-500" /> {o.customer_phone || '—'}
                     </p>
                     <p className="flex items-start gap-2 text-gray-600">
-                      <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
-                      {o.delivery_method === 'retirada'
-                        ? <span className="font-semibold text-amber-700">Retirada no balcão</span>
-                        : (o.delivery_address || '—')}
+                      <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" />
+                      {o.delivery_method === 'retirada' ? (
+                        <span className="font-semibold text-amber-700">Retirada no balcão</span>
+                      ) : (
+                        <TextoExpansivel
+                          className="flex-1"
+                          texto={(o.delivery_method === 'misto' ? 'Retirada parcial · ' : '') + (o.delivery_address || '')}
+                        />
+                      )}
+                    </p>
+                    <p className="text-[11px] font-medium text-gray-500">
+                      {DELIVERY_LABELS[o.delivery_method] ?? o.delivery_method}
                     </p>
                     <p className="flex items-center gap-2 text-gray-600">
                       {o.payment_method === 'dinheiro'
-                        ? <Banknote className="h-4 w-4 text-gray-400" />
+                        ? <Banknote className="h-4 w-4 text-gray-500" />
                         : o.payment_method === 'cartao'
-                          ? <CreditCard className="h-4 w-4 text-gray-400" />
-                          : <QrCode className="h-4 w-4 text-gray-400" />}
+                          ? <CreditCard className="h-4 w-4 text-gray-500" />
+                          : <QrCode className="h-4 w-4 text-gray-500" />}
                       <span className="font-semibold text-gray-700">
-                        {(o.payment_method ?? 'pix') === 'pix' ? 'Pix' : o.payment_method === 'dinheiro' ? 'Dinheiro' : 'Cartão'}
+                        {PAYMENT_LABELS[o.payment_method ?? 'pix'] ?? 'Pix'}
                       </span>
+                      {o.origin === 'loja' && (
+                        <span className="rounded-lg bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+                          Venda na loja
+                        </span>
+                      )}
                       {o.is_guest && (
-                        <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                        <span className="rounded-lg bg-gray-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-500">
                           Visitante
                         </span>
                       )}
                     </p>
                   </div>
 
-                  {/* Itens + total */}
-                  <div className="space-y-1.5 rounded-lg bg-gray-50 p-3 text-sm">
-                    {o.order_items.map((it) => (
-                      <div key={it.id} className="flex justify-between gap-2 text-gray-600">
-                        <span>{it.quantity}× {it.product_name}</span>
-                        <span className="text-gray-400">{formatBRL(it.quantity * it.unit_price)}</span>
-                      </div>
-                    ))}
+                  {/* Itens separados por destino: retirada na loja x entrega */}
+                  <div className="space-y-3 rounded-lg bg-gray-50 p-3 text-sm">
+                    <ItemsPanel totals={totals} onMark={markItems} busy={busyId === 'items'} hideMark={cancelled} />
                     <div className="flex justify-between border-t border-gray-200 pt-1.5 font-bold text-gray-800">
                       <span>Total</span>
                       <span className="text-primary">{formatBRL(o.total)}</span>
@@ -195,26 +295,39 @@ export default function OrdersAdmin() {
 
                 {/* Ações do processo */}
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
-                  {done ? (
-                    <span className="text-sm font-medium text-green-600">✓ Entrega concluída</span>
-                  ) : cancelled ? (
-                    <span className="text-sm font-medium text-red-500">Pedido cancelado</span>
-                  ) : (
-                    <>
-                      <button type="button" className="btn-primary" disabled={busyId === o.id} onClick={() => advance(o)}>
-                        {busyId === o.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
-                        {ORDER_NEXT_ACTION[o.status]}
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-red-500 ring-1 ring-red-200 transition hover:bg-red-50"
-                        disabled={busyId === o.id}
-                        onClick={() => cancelOrder(o)}
-                      >
-                        <Ban className="h-4 w-4" /> Cancelar pedido
-                      </button>
-                    </>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {done ? (
+                      <span className="text-sm font-medium text-green-600">
+                        ✓ {o.origin === 'loja' ? 'Venda concluída' : 'Entrega concluída'}
+                      </span>
+                    ) : cancelled ? (
+                      <span className="text-sm font-medium text-red-500">Pedido cancelado</span>
+                    ) : (
+                      <>
+                        <button type="button" className="btn-primary" disabled={busyId === o.id} onClick={() => advance(o)}>
+                          {busyId === o.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
+                          {ORDER_NEXT_ACTION[o.status]}
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-red-500 ring-1 ring-red-200 transition hover:bg-red-50"
+                          disabled={busyId === o.id}
+                          onClick={() => cancelOrder(o)}
+                        >
+                          <Ban className="h-4 w-4" /> Cancelar pedido
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-gray-500 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                    disabled={busyId === o.id}
+                    onClick={() => removeOrder(o)}
+                  >
+                    {busyId === o.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    Excluir
+                  </button>
                 </div>
               </div>
             )
@@ -236,11 +349,81 @@ function Stepper({ status }) {
             <div className={'h-2.5 w-2.5 shrink-0 rounded-full ' + (i <= idx ? 'bg-primary' : 'bg-gray-300')} />
             <div className={'h-0.5 flex-1 rounded ' + (i === ORDER_PIPELINE.length - 1 ? 'bg-transparent' : i < idx ? 'bg-primary' : 'bg-gray-200')} />
           </div>
-          <span className={'text-center text-[9px] leading-tight sm:text-[10px] ' + (i <= idx ? 'font-semibold text-primary' : 'text-gray-400')}>
+          <span className={'text-center text-[9px] leading-tight sm:text-[10px] ' + (i <= idx ? 'font-semibold text-primary' : 'text-gray-500')}>
             {ORDER_SHORT[s]}
           </span>
         </div>
       ))}
     </div>
   )
+}
+
+// Itens do pedido separados por destino (retirada no balcão x entrega), com o
+// "✓" que marca o item como retirado/entregue de verdade.
+// No mobile nomes/endereços longos não podem estourar a largura da tela:
+// mostra 2 linhas e um 'Mostrar detalhes' que abre o resto empilhado.
+function TextoExpansivel({ texto, className = '' }) {
+  const [aberto, setAberto] = useState(false)
+  const t = String(texto ?? '').trim() || '—'
+  const longo = t.length > 38
+  return (
+    <span className={'block min-w-0 ' + className}>
+      <span className={'break-words ' + (longo && !aberto ? 'line-clamp-2' : '')}>{t}</span>
+      {longo && (
+        <button
+          type="button"
+          onClick={() => setAberto(!aberto)}
+          className="mt-0.5 block text-[11px] font-semibold text-primary hover:underline"
+        >
+          {aberto ? 'Mostrar menos' : 'Mostrar detalhes'}
+        </button>
+      )}
+    </span>
+  )
+}
+
+function ItemsPanel({ totals, onMark, busy, hideMark }) {
+  const groups = [
+    { kind: 'retirada', label: 'Retirada na loja', icon: Store, cls: 'text-amber-700' },
+    { kind: 'entrega', label: 'Entrega', icon: Truck, cls: 'text-primary' },
+  ]
+  return groups
+    .filter(({ kind }) => totals[kind].items.length > 0)
+    .map(({ kind, label, icon: Icon, cls }) => (
+      <div key={kind} className="space-y-1.5">
+        <p className={'flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide ' + cls}>
+          <Icon className="h-3.5 w-3.5" /> {label} · {totals[kind].count} un.
+        </p>
+        {totals[kind].items.map((it) => (
+          <div key={it.id} className="flex items-center justify-between gap-2 text-gray-600">
+              <span className="min-w-0 flex-1">
+                <TextoExpansivel texto={it.quantity + '× ' + it.product_name} />
+              {it.fulfilled_at && (
+                <span className="ml-1.5 text-[10px] font-semibold text-green-600">
+                  ✓ {kind === 'retirada' ? 'retirado' : 'entregue'} em {formatDateTime(it.fulfilled_at).slice(0, 10)}
+                </span>
+              )}
+            </span>
+            <span className="flex shrink-0 items-center gap-2">
+              <span className="text-gray-500">{formatBRL(it.quantity * it.unit_price)}</span>
+              {!hideMark && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  title={it.fulfilled_at ? 'desfazer' : kind === 'retirada' ? 'marcar como retirado' : 'marcar como entregue'}
+                      aria-label={it.fulfilled_at ? 'Desfazer baixa do item' : kind === 'retirada' ? 'Marcar item como retirado' : 'Marcar item como entregue'}
+                  onClick={() => onMark([it.id], it.fulfilled_at ? null : new Date().toISOString())}
+                  className={'flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ring-1 transition disabled:opacity-50 ' +
+                    (it.fulfilled_at
+                      ? 'text-green-600 ring-green-200 hover:bg-white'
+                      : 'text-gray-500 ring-gray-200 hover:bg-white hover:text-green-600')}
+                >
+                  {it.fulfilled_at ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+                </button>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+    ))
 }

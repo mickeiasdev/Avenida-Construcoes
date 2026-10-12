@@ -57,23 +57,24 @@ export default function ClientsAdmin() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Clientes</h1>
-          <p className="text-sm text-gray-500">{clients?.length ?? '...'} cadastrados na loja</p>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-800">Clientes</h1>
+        <p className="text-sm text-gray-500">{clients?.length ?? '...'} cadastrados na loja</p>
+      </div>
+
+      {/* Busca + exportação na mesma linha (CSV secundário, mesma altura) */}
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="relative flex-1 sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+          <input className="input pl-10" placeholder="Buscar por nome ou telefone..." value={filter} onChange={(e) => setFilter(e.target.value)} />
         </div>
-        <button type="button" className="btn-primary px-4" onClick={exportCsv} disabled={!clients || clients.length === 0}>
+        <button type="button" className="btn-soft shrink-0" onClick={exportCsv} disabled={!clients || clients.length === 0}>
           <Download className="h-4 w-4" /> Exportar CSV
         </button>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-        <input className="input pl-10" placeholder="Buscar por nome ou telefone..." value={filter} onChange={(e) => setFilter(e.target.value)} />
-      </div>
-
       {!clients ? (
-        <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+        <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-gray-500" /></div>
       ) : visible.length === 0 ? (
         <div className="card flex flex-col items-center gap-2 py-16 text-center text-gray-500">
           <Users className="h-8 w-8 text-gray-300" />
@@ -106,14 +107,14 @@ export default function ClientsAdmin() {
                   <td className="px-4 py-3">
                     <span className="font-medium text-gray-800">{c.count}</span>
                     {c.open > 0 && (
-                      <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                      <span className="ml-2 rounded-lg bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">
                         {c.open} em aberto
                       </span>
                     )}
                   </td>
                   <td className="px-4 py-3 font-semibold text-gray-800">{formatBRL(c.spent)}</td>
                   <td className="px-4 py-3 text-gray-600">{c.last ? formatDate(c.last) : '—'}</td>
-                  <td className="px-4 py-3 text-gray-400">{formatDate(c.created_at)}</td>
+                  <td className="px-4 py-3 text-gray-500">{formatDate(c.created_at)}</td>
                 </tr>
               ))}
             </tbody>

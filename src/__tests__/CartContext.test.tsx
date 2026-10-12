@@ -1,138 +1,171 @@
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
+import type { ReactNode } from 'react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { CartProvider, useCart } from '../context/CartContext'
+import { supabase } from '../lib/supabaseClient'
 
-// Mock localStorage on window
-const localStorageMock = (() => {
-  let store = {}
+// ---------------------------------------------------------------------------
+// Mock do cliente Supabase.
+// Cada tabela devolve um "query builder" encadeável E thenável, então tanto
+// `await from(t).update().eq()` quanto `from(t).select().ilike().maybeSingle()`
+// funcionam como no supabase-js.
+// ---------------------------------------------------------------------------
+const couponRow = { code: 'VEM10', kind: 'percent', value: 10, min_total: 0 }
+
+const tableResults: Record<string, { data: unknown; error: unknown }> = {
+  coupons: { data: couponRow, error: null },
+  products: { data: [], error: null },
+  profiles: { data: null, error: null },
+  store_settings: { data: { store_name: 'Loja Teste', whatsapp: '(11) 98888-7777' }, error: null },
+}
+
+vi.mock('../lib/supabaseClient', () => {
+  function builder(result: { data: unknown; error: unknown }) {
+    const chain: Record<string, unknown> = {}
+    const self = () => chain
+    Object.assign(chain, {
+      select: vi.fn(self),
+      insert: vi.fn(self),
+      update: vi.fn(self),
+      delete: vi.fn(self),
+      eq: vi.fn(self),
+      ilike: vi.fn(self),
+      in: vi.fn(self),
+      maybeSingle: vi.fn(async () => result),
+      single: vi.fn(async () => result),
+      then: (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve),
+    })
+    return chain
+  }
   return {
-    getItem: (key: string) => store[key] ?? null,
-    setItem: (key: string, value: string) => {
-      store[key] = value.toString()
-    },
-    removeItem: (key: string) => {
-      delete store[key]
-    },
-    clear: () => {
-      store = {}
+    STORAGE_BUCKET: 'store',
+    uploadImage: vi.fn(async () => 'https://exemplo/imagem.png'),
+    supabase: {
+      from: vi.fn((table: string) => builder(tableResults[table] ?? { data: null, error: null })),
+      // o servidor recalcula o pedido: 25 - 5 = 20, ignorando o preço do cliente
+      rpc: vi.fn(async () => ({
+        data: { id: 'pedido-1', subtotal: 25, discount: 5, total: 20 },
+        error: null,
+      })),
     },
   }
-})()
-// Ensure window exists
-if (typeof window === 'undefined') {
-  global.window = {}
-}
-Object.defineProperty(window, 'localStorage', { value: localStorageMock })
+})
 
-// Mock auth context
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
-    user: { id: 'user1', email: 'test@example.com' },
+    user: { id: 'user-1', email: 'cliente@teste.com' },
+    profile: null,
     refreshProfile: vi.fn(),
   }),
 }))
 
-// Mock supabase client with minimal stubs
-vi.mock('../lib/supabaseClient', () => {
-  const mockSupabase = {
-    from: vi.fn().mockReturnThis(),
-    update: vi.fn().mockResolvedValue({ data: null, error: null }),
-    insert: vi.fn().mockResolvedValue({ data: null, error: null }),
-    select: vi.fn().mockResolvedValue({ data: null, error: null }),
-    maybeSingle: vi.fn().mockResolvedValue({ data: { store_name: 'Test Store', whatsapp: '5511999999999' }, error: null }),
-  }
-  return { supabase: mockSupabase }
-})
+// CartContext.jsx é JavaScript: sem checkJs o TypeScript não consegue inferir
+// o formato do contexto, então declaramos aqui a parte da API sob teste.
+type CartApi = {
+  items: { product_id: string; price: number; quantity: number }[]
+  count: number
+  total: number
+  coupon: { code: string } | null
+  discountValue: number
+  addItem: (product: typeof produto) => boolean
+  clearCart: () => void
+  applyCoupon: (code: string) => Promise<{ error?: string }>
+  checkout: (
+    form: Record<string, string>,
+    directItems?: { product_id: string; name: string; price: number; quantity: number }[],
+    options?: { deliveryMethod?: string; paymentMethod?: string },
+  ) => Promise<{ id: string; subtotal: number; discount: number; total: number; whatsappSent: boolean }>
+}
 
-import { CartProvider, useCart } from '../context/CartContext'
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <CartProvider>{children}</CartProvider>
+)
+
+const produto = { id: 'p1', name: 'Cimento CP-II', price: 10, image_url: '', stock: 10 }
+
+function renderCart() {
+  return renderHook(() => useCart() as unknown as CartApi, { wrapper })
+}
 
 describe('CartContext', () => {
   beforeEach(() => {
+    localStorage.clear()
     vi.clearAllMocks()
-    localStorageMock.clear()
   })
 
-  it('should add item to cart', () => {
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <CartProvider>{children}</CartProvider>
-    )
+  it('adiciona item e calcula total/quantidade', () => {
+    const { result } = renderCart()
 
-    const { result } = renderHook(() => useCart(), { wrapper })
-
-    const fakeProduct = {
-      id: '1',
-      name: 'Produto Teste',
-      price: 10,
-      image_url: '',
-      stock: 5,
-    }
-
-    act(() => {
-      result.current.addItem(fakeProduct)
-    })
+    act(() => { result.current.addItem(produto) })
 
     expect(result.current.items).toHaveLength(1)
-    expect(result.current.items[0]).toMatchObject({
-      product_id: '1',
-      name: 'Produto Teste',
-      quantity: 1,
-      price: 10,
-    })
     expect(result.current.count).toBe(1)
     expect(result.current.total).toBe(10)
   })
 
-  it('should not add item when stock is zero', () => {
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <CartProvider>{children}</CartProvider>
-    )
+  it('não adiciona item sem estoque', () => {
+    const { result } = renderCart()
 
-    const { result } = renderHook(() => useCart(), { wrapper })
-
-    const fakeProduct = {
-      id: '2',
-      name: 'Produto Sem Estoque',
-      price: 20,
-      image_url: '',
-      stock: 0,
-    }
-
-    act(() => {
-      result.current.addItem(fakeProduct)
-    })
+    act(() => { result.current.addItem({ ...produto, stock: 0 }) })
 
     expect(result.current.items).toHaveLength(0)
   })
 
-  it('should clear cart', () => {
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <CartProvider>{children}</CartProvider>
-    )
-
-    const { result } = renderHook(() => useCart(), { wrapper })
-
-    const fakeProduct = {
-      id: '3',
-      name: 'Produto Teste 2',
-      price: 15,
-      image_url: '',
-      stock: 10,
-    }
+  it('limpa o carrinho', () => {
+    const { result } = renderCart()
 
     act(() => {
-      result.current.addItem(fakeProduct)
-      result.current.addItem(fakeProduct) // quantity 2
+      result.current.addItem(produto)
+      result.current.addItem(produto) // vira quantidade 2
     })
-
     expect(result.current.items).toHaveLength(1)
     expect(result.current.items[0].quantity).toBe(2)
 
-    act(() => {
-      result.current.clearCart()
-    })
+    act(() => { result.current.clearCart() })
 
     expect(result.current.items).toHaveLength(0)
     expect(result.current.count).toBe(0)
     expect(result.current.total).toBe(0)
   })
-}
-)
+
+  it('aplica cupom sem quebrar o render (regressão: total em TDZ)', async () => {
+    const { result } = renderCart()
+
+    act(() => { result.current.addItem(produto) })
+
+    await act(async () => {
+      const res = await result.current.applyCoupon('vem10')
+      expect(res.error).toBeUndefined()
+    })
+
+    // 10% de R$ 10,00 — o cálculo lê `total` DEPOIS de ele existir
+    expect(result.current.coupon?.code).toBe('VEM10')
+    expect(result.current.discountValue).toBe(1)
+  })
+
+  it('usa os totais calculados pelo servidor no checkout', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue({} as Window)
+    const { result } = renderCart()
+
+    let pedido: Awaited<ReturnType<typeof result.current.checkout>> | undefined
+    await act(async () => {
+      pedido = await result.current.checkout(
+        { full_name: 'Maria Silva', phone: '(11) 98888-7777' },
+        // preço absurdo de propósito: o servidor é quem manda no valor
+        [{ product_id: 'p1', name: 'Cimento CP-II', price: 999, quantity: 2 }],
+        { deliveryMethod: 'retirada', paymentMethod: 'pix' },
+      )
+    })
+
+    expect(pedido?.total).toBe(20) // veio da RPC, não dos 999 * 2 do cliente
+    expect(pedido?.discount).toBe(5)
+    expect(pedido?.whatsappSent).toBe(true)
+    expect(supabase.rpc).toHaveBeenCalledWith('place_order', expect.objectContaining({
+      p_items: [{ product_id: 'p1', quantity: 2 }],
+      p_is_guest: false,
+      p_delivery_method: 'retirada',
+    }))
+
+    open.mockRestore()
+  })
+})

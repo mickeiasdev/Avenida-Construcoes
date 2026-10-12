@@ -22,10 +22,11 @@ export default function Products() {
   const [msg, setMsg] = useState(null)
 
   const load = useCallback(async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('products')
-      .select('*, categories(name)')
+      .select('*, categories!products_category_id_fkey(name)')
       .order('created_at', { ascending: false })
+    if (error) console.error('[admin/produtos] erro ao carregar:', error?.message ?? error)
     setProducts(data ?? [])
   }, [])
 
@@ -323,7 +324,7 @@ export default function Products() {
               Produto ativo (visível na vitrine)
             </label>
 
-            <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
+            <div className="flex justify-end gap-2 border-t border-gray-100 pt-4 mb-4">
               <button
                 type="button"
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-50"

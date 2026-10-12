@@ -1,9 +1,29 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Mail, KeyRound, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
 import { isEmail, isFullName, isPasswordStrong } from '../lib/validation'
+
+// Onde retomar depois de entrar/criar conta:
+//  1) location.state.from/redirect (checkout, carrinho ou ProtectedRoute);
+//  2) página de origem /carrinho ou /produto/... (mesma origem);
+//  3) cadastro avulso (sem pedido em andamento) volta para a home.
+function isInternalPath(p) {
+  return typeof p === 'string' && p.startsWith('/') && !p.startsWith('//')
+}
+function resolveRedirect(location) {
+  const stateFrom = location.state?.from ?? location.state?.redirect
+  if (isInternalPath(stateFrom)) return { to: stateFrom, inProgress: true }
+  try {
+    const ref = new URL(document.referrer)
+    const p = ref.pathname
+    if (ref.origin === window.location.origin && (p === '/carrinho' || p.startsWith('/produto/'))) {
+      return { to: p, inProgress: true }
+    }
+  } catch { /* sem referrer utilizável: segue para a home */ }
+  return { to: '/', inProgress: false }
+}
 
 // Autenticação — 100% gratuita via Supabase Auth:
 //  - Magic Link por e-mail (sem senha)
@@ -14,15 +34,23 @@ export default function Login() {
   const { signInWithMagicLink, signInWithPassword, signUp } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const redirectTo = location.state?.from || '/'
+  const { to: redirectTo, inProgress } = useMemo(() => resolveRedirect(location), [location])
 
   const [tab, setTab] = useState('password')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
-  const [isSignup, setIsSignup] = useState(false)
+  // o modal de checkout manda mode:'signup' ao clicar em "Criar conta grátis"
+  const [isSignup, setIsSignup] = useState(location.state?.mode === 'signup')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
+
+  // volta ao ponto de partida preservando o state (ex.: from=/carrinho)
+  function goAfterAuth() {
+    navigate(redirectTo, inProgress
+      ? { replace: true, state: location.state }
+      : { replace: true })
+  }
 
   async function handleResetPassword() {
     if (!isEmail(email)) {
@@ -69,15 +97,24 @@ export default function Login() {
           ? { type: 'err', text: error.message }
           : { type: 'ok', text: 'Link de confirmação enviado! Confira sua caixa de entrada (e o spam).' })
       } else {
-        const { error } = isSignup
+        const { error, session } = isSignup
           ? await signUp(email, password, fullName)
           : await signInWithPassword(email, password)
         if (error) {
           setMsg({ type: 'err', text: error.message })
-        } else if (isSignup) {
-          setMsg({ type: 'ok', text: 'Conta criada! Se a confirmação de e-mail estiver ativa, verifique seu e-mail antes de entrar.' })
+        } else if (!isSignup || session) {
+          // login, ou cadastro com a confirmação de e-mail DESLIGADA:
+          // já entra logado e segue direto para onde estava
+          goAfterAuth()
         } else {
-          navigate(redirectTo, { replace: true })
+          // confirmação ligada: avisa sem bloquear — o pedido pode ser
+          // finalizado como visitante no checkout
+          setMsg({
+            type: 'ok',
+            text: 'Enviamos um link para confirmar seu e-mail. Você já pode continuar usando a loja.',
+            continueTo: redirectTo,
+            continueLabel: redirectTo === '/' ? 'Ir para a loja' : 'Continuar para onde eu estava',
+          })
         }
       }
     } finally {
@@ -87,7 +124,7 @@ export default function Login() {
 
   const TABS = [
     { id: 'password', label: 'E-mail e Senha', icon: KeyRound },
-    { id: 'magic', label: 'Magic Link', icon: Mail },
+    { id: 'magic', label: 'Entrar sem senha', icon: Mail },
   ]
 
   return (
@@ -103,6 +140,7 @@ export default function Login() {
             key={id}
             type="button"
             onClick={() => { setTab(id); setMsg(null) }}
+                aria-label={label}
             className={'flex flex-1 items-center justify-center gap-1.5 px-2 py-2.5 transition ' +
               (tab === id ? 'bg-primary text-white' : 'text-gray-500 hover:bg-gray-50')}
           >
@@ -114,17 +152,17 @@ export default function Login() {
       <form onSubmit={handleSubmit} className="card space-y-3">
         {tab === 'magic' && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">E-mail</label>
+            <label htmlFor="l-email-magic" className="field-label">E-mail</label>
             <input
-              className="input"
+              id="l-email-magic" className="input"
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="voce@exemplo.com"
             />
-            <p className="mt-2 text-xs text-gray-400">
-              Enviaremos um link de para confirmação de acesso sem senha para o seu e-mail.
+            <p className="mt-2 text-xs text-gray-500">
+              Enviamos um link de acesso para o seu e-mail — sem senha.
             </p>
           </div>
         )}
@@ -133,17 +171,17 @@ export default function Login() {
           <>
             {isSignup && (
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Nome completo</label>
-                <input className="input" required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Seu nome" />
+                <label htmlFor="l-nome" className="field-label">Nome completo</label>
+                <input id="l-nome" className="input" required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Seu nome" />
               </div>
             )}
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">E-mail</label>
-              <input className="input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@exemplo.com" />
+              <label htmlFor="l-email-senha" className="field-label">E-mail</label>
+              <input id="l-email-senha" className="input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@exemplo.com" />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Senha</label>
-              <input className="input" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+              <label htmlFor="l-senha" className="field-label">Senha</label>
+              <input id="l-senha" className="input" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
             </div>
           </>
         )}
@@ -158,6 +196,16 @@ export default function Login() {
           </div>
         )}
 
+        {msg?.continueTo && (
+          <button
+            type="button"
+            className="btn-soft min-h-11 w-full"
+            onClick={() => navigate(msg.continueTo, { replace: true })}
+          >
+            {msg.continueLabel}
+          </button>
+        )}
+
         <button type="submit" className="btn-primary w-full" disabled={busy}>
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
           {tab === 'magic' ? 'Enviar' : isSignup ? 'Criar conta' : 'Entrar'}
@@ -169,7 +217,7 @@ export default function Login() {
               {isSignup ? 'Já tenho conta — fazer login' : 'Não tenho conta — criar agora'}
             </button>
             {!isSignup && (
-              <button type="button" className="text-xs text-gray-400 transition hover:text-primary" onClick={handleResetPassword}>
+              <button type="button" className="text-xs text-gray-500 transition hover:text-primary" onClick={handleResetPassword}>
                 Esqueci minha senha
               </button>
             )}

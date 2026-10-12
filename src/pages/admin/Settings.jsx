@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { CheckCircle2, AlertCircle, Clock, ImagePlus, Loader2, Save } from 'lucide-react'
 import { useStore } from '../../context/StoreContext'
 import { uploadImage } from '../../lib/supabaseClient'
-import { formatBusinessHoursText } from '../../lib/utils'
+import { formatBusinessHoursText, maskPhone, waLocal, waNumber } from '../../lib/utils'
 
 const HEX = /^#[0-9a-fA-F]{6}$/
 
@@ -26,7 +26,8 @@ export default function Settings() {
       sun_closed: settings.sun_closed ?? true,
       sun_open: settings.sun_open ? settings.sun_open.slice(0, 5) : '',
       sun_close: settings.sun_close ? settings.sun_close.slice(0, 5) : '',
-      whatsapp: settings.whatsapp ?? '',
+      // No formulário mostramos só DDD + número; o DDI 55 entra no save.
+      whatsapp: maskPhone(waLocal(settings.whatsapp)),
       primary_color: settings.primary_color ?? '#f97316',
       secondary_color: settings.secondary_color ?? '#1e293b',
       logo_url: settings.logo_url ?? '',
@@ -62,7 +63,8 @@ export default function Settings() {
     setBusy(true)
     setMsg(null)
     // business_hours (texto do rodapé) é gerado automaticamente dos seletores
-    const payload = { ...form, business_hours: formatBusinessHoursText(form) }
+    // Grava no banco no formato esperado pelo app: '55' + DDD + número, só dígitos.
+    const payload = { ...form, whatsapp: waNumber(form.whatsapp), business_hours: formatBusinessHoursText(form) }
     const { error } = await updateSettings(payload)
     setMsg(error
       ? { type: 'err', text: 'Erro: ' + error.message }
@@ -115,9 +117,8 @@ export default function Settings() {
           <ColorPicker label="Cor primária" value={form.primary_color} onChange={(v) => set('primary_color', v)} />
           <ColorPicker label="Cor secundária" value={form.secondary_color} onChange={(v) => set('secondary_color', v)} />
         </div>
-        <p className="text-xs leading-relaxed text-gray-400">
-          Aplicadas via variáveis CSS (--brand-primary / --brand-secondary), que o Tailwind consome através do
-          bloco <code>@theme inline</code> em <code>index.css</code>. Sem rebuild — a mudança é instantânea.
+        <p className="text-xs leading-relaxed text-gray-500">
+          Defina as cores da sua vitrine. A cor primária é usada em botões, links e destaques; a secundária é usada em textos e ícones.
         </p>
       </section>
 
@@ -125,8 +126,8 @@ export default function Settings() {
       <section className="card space-y-4">
         <h2 className="font-bold text-gray-800">Contato, endereço e horários</h2>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">WhatsApp de destino dos pedidos (DDI + DDD + número)</label>
-          <input className="input" required placeholder="5511999999999" value={form.whatsapp} onChange={(e) => set('whatsapp', e.target.value)} />
+          <label className="mb-1 block text-sm font-medium text-gray-700">WhatsApp de destino dos pedidos (DDD + número)</label>
+          <input className="input" required placeholder="(11) 99999-9999" value={form.whatsapp} onChange={(e) => set('whatsapp', maskPhone(e.target.value))} />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Endereço</label>
@@ -167,12 +168,12 @@ export default function Settings() {
             {!form.sun_closed && (
               <div className="flex items-center gap-2">
                 <input type="time" className="input w-auto px-2 py-1.5" value={form.sun_open} onChange={(e) => set('sun_open', e.target.value)} />
-                <span className="text-xs text-gray-400">até</span>
+                <span className="text-xs text-gray-500">até</span>
                 <input type="time" className="input w-auto px-2 py-1.5" value={form.sun_close} onChange={(e) => set('sun_close', e.target.value)} />
               </div>
             )}
           </div>
-          <p className="mt-1.5 text-xs text-gray-400">
+          <p className="mt-1.5 text-xs text-gray-500">
             O banner da loja mostra "Aberto agora" / "Fechado — abre às Xh" automaticamente com base nesses horários.
           </p>
         </div>
@@ -207,7 +208,7 @@ function ScheduleRow({ label, open, close, onOpen, onClose }) {
       <span className="flex-1 text-sm font-medium text-gray-700">{label}</span>
       <div className="flex items-center gap-2">
         <input type="time" className="input w-auto px-2 py-1.5" value={open} onChange={(e) => onOpen(e.target.value)} />
-        <span className="text-xs text-gray-400">até</span>
+        <span className="text-xs text-gray-500">até</span>
         <input type="time" className="input w-auto px-2 py-1.5" value={close} onChange={(e) => onClose(e.target.value)} />
       </div>
     </div>

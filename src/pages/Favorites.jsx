@@ -19,7 +19,7 @@ export default function Favorites() {
       }
       const { data } = await supabase
         .from('products')
-        .select('*, categories(name)')
+        .select('*, categories!products_category_id_fkey(name)')
         .in('id', ids)
       setProducts(data ?? [])
     }
@@ -27,7 +27,7 @@ export default function Favorites() {
   }, [ids])
 
   if (products === undefined) {
-    return <div className="flex justify-center py-24"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+    return <div className="flex justify-center py-24"><Loader2 className="h-6 w-6 animate-spin text-gray-500" /></div>
   }
 
   if (products.length === 0) {
@@ -47,7 +47,7 @@ export default function Favorites() {
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-800">
           <Heart className="h-5 w-5 fill-red-500 text-red-500" /> Favoritos
         </h1>
-        <span className="text-xs text-gray-400">{products.length} produto(s)</span>
+        <span className="text-xs text-gray-500">{products.length} produto(s)</span>
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
         {products.map((p) => <ProductCard key={p.id} product={p} />)}

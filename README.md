@@ -68,8 +68,23 @@ No `src/index.css`, importe o Tailwind e registre as cores dinâmicas:
 1. Crie uma conta e um projeto em <https://supabase.com> (plano Free).
 2. Abra **SQL Editor → New query**, cole **todo** o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e clique em **Run**.
 
-   > Já tinha rodado a versão anterior deste schema? Rode também [`supabase/migration-2.sql`](supabase/migration-2.sql)
-   > (categoria opcional, estoque opcional, galeria de fotos e novas etapas de entrega).
+   > **Já tem um banco em produção?** Rode as migrations abaixo, **em ordem**, no SQL Editor.
+   > São idempotentes (pode rodar de novo sem medo).
+
+| Migration | O que muda |
+|-----------|------------|
+| [migration-2.sql](supabase/migration-2.sql) | Categoria/estoque opcionais, galeria de fotos, novas etapas de entrega |
+| [migration-3.sql](supabase/migration-3.sql) | Checkout de visitante (pedido sem login) |
+| [migration-4.sql](supabase/migration-4.sql) | Corrige o insert de `order_items` para visitante (`SECURITY DEFINER`) |
+| [migration-5.sql](supabase/migration-5.sql) | Forma de entrega (entrega/retirada) e de pagamento |
+| [migration-6.sql](supabase/migration-6.sql) | Horários de funcionamento estruturados |
+| [migration-7.sql](supabase/migration-7.sql) | Cupons de desconto + desconto % por produto |
+| [migration-8.sql](supabase/migration-8.sql) | **Segurança**: impede usuário de se promover a admin, checkout com preço/cupom/estoque calculados **no servidor** (`place_order`), produto inativo deixa de ser público, cupons no schema |
+| [migration-9.sql](supabase/migration-9.sql) | **Venda na loja (PDV)**: `order_items.fulfillment` (retirada x entrega), `orders.origin` (site/loja), entrega `misto`, `place_order` v2 e permissão para o admin **excluir pedidos** |
+
+   > ⚠️ **A migration-8 é obrigatória para o checkout seguro.** Sem ela o app continua
+   > funcionando, mas cai no caminho antigo (preço calculado no navegador) e registra
+   > um aviso no console do navegador.
 
 O script cria:
 
@@ -79,20 +94,34 @@ O script cria:
 | `categories`     | Categorias com slug                                                    |
 | `products`       | Produtos (preço, estoque, imagem, status ativo/inativo, contador views)|
 | `profiles`       | Estende `auth.users` (role `admin`/`client`, endereço, telefone)   |
-| `orders`         | Pedidos (status, total, endereço de entrega)                           |
+| `orders`         | Pedidos (status, total, cupom, desconto, entrega, endereço)            |
 | `order_items`    | Itens de cada pedido                                                    |
+| `coupons`       | Cupons (% ou valor fixo, compra mínima, ativo/inativo)                 |
+
+Cada item do pedido tem **destino próprio** (`retirada` x `entrega`): dá para vender
+3 itens no balcão e deixar 1 para entregar depois, tudo no mesmo pedido (`delivery_method = 'misto'`).
 
 E ainda:
 
 - **Trigger `handle_new_user`**: cria automaticamente o `profile` com `role='client'`
   quando um usuário se cadastra no Auth;
-- **RLS completa**: qualquer visitante lê produtos/categorias/configurações; só admin
-  escreve; cada usuário vê apenas seus pedidos (função `is_admin()` centraliza a checagem);
+- **RLS completa**: qualquer visitante lê produtos **ativos**/categorias/configurações; só
+  admin escreve; cada usuário vê apenas seus pedidos (função `is_admin()` centraliza a checagem);
+- **Privilégio por coluna em `profiles`**: `authenticated` só pode atualizar os próprios dados
+  cadastrais — a coluna `role` fica fora do alcance da API (sem isso qualquer cliente logado
+  poderia se promover a admin com um `PATCH` na API). Promover admin é feito pelo SQL Editor,
+  que roda como owner da tabela;
 - **Bucket público `store`** no Storage (logo, banner e imagens de produtos) com
   políticas de leitura pública e upload só para admin;
 - **Realtime** nas tabelas `store_settings`, `categories`, `products` e `orders`;
 - **Função `increment_product_views()`**: incrementa o contador de acessos do produto
-  (usada no dashboard "produtos mais acessados") sem violar a RLS;
+  (usada no dashboard "produtos mais acessados") sem violar a RLS. É uma métrica
+  **indicativa**: como o incremento é aberto ao público, alguém mal-intencionado pode
+  inflá-la (para números confiáveis, use uma ferramenta de analytics);
+- **Função `place_order()` (`SECURITY DEFINER`)**: ponto único de criação de pedido (site **e** loja). Relê o
+  preço de `products`, aplica o desconto do produto, valida o cupom (ativo + compra mínima),
+  calcula subtotal/total, grava `orders` + `order_items` e baixa o estoque **na mesma
+  transação** — o navegador só informa quais itens e quantas unidades;
 - **Seed com mocks**: 1 loja de construção, 4 categorias (Cimento e Argamassa, Ferramentas,
   Elétrica, Hidráulica) e 10 produtos com imagens do Unsplash.
 
@@ -138,8 +167,11 @@ VITE_SUPABASE_ANON_KEY=sua-anon-key-publica
 ## ▶️ Rodando
 
 ```bash
-npm run dev      # http://localhost:5173
-npm run build    # build de produção
+npm run dev        # http://localhost:5173
+npm run build      # build de produção
+npm test           # vitest (jsdom + React Testing Library)
+npm run typecheck  # tsc --noEmit
+npm run lint       # oxlint
 ```
 
 ---
@@ -157,13 +189,39 @@ npm run build    # build de produção
 | `/admin`          | **role admin**  | Dashboard (Recharts): vendas, acessos, clientes               |
 | `/admin/produtos` | admin           | CRUD de produtos com upload de imagem                         |
 | `/admin/categorias`| admin          | CRUD de categorias (exclusão bloqueada se houver produtos)    |
-| `/admin/pedidos`  | admin           | Lista de pedidos com etapas de entrega (pipeline atualizável) |
+| `/admin/pedidos`  | admin           | Lista de pedidos com etapas de entrega, itens separados entre **retirada** e **entrega**, marcação item a item, exclusão de pedidos e limpeza em lote |
+| `/admin/nova-venda` | admin        | **PDV**: registra a venda do cliente que está no balcão |
 | `/admin/clientes` | admin           | Lista de clientes: contato, cidade, nº de pedidos e total gasto |
 | `/admin/configuracoes` | admin     | Nome, logo, banner, cores hex, endereço, horários, WhatsApp   |
 
 ### Checkout via WhatsApp
-Ao finalizar, o sistema grava `orders` + `order_items`, limpa o carrinho (LocalStorage) e
-abre `https://wa.me/<whatsapp-da-loja>?text=<resumo>` com itens, endereço e total formatados.
+Ao finalizar, o navegador chama a RPC `place_order` (o servidor calcula preço, cupom, total e
+baixa de estoque), limpa o carrinho (LocalStorage) e abre
+`https://wa.me/<whatsapp-da-loja>?text=<resumo>` com itens, endereço e total formatados.
+Visitante também finaliza (pedido `is_guest`) e recebe a confirmação na própria tela —
+só quem está logado tem a página `/pedidos`. Sem WhatsApp configurado, o pedido é gravado
+e o app avisa (não abre um `wa.me` vazio).
+
+### Venda na loja (PDV) — `/admin/nova-venda`
+Registra a compra do cliente que está no balcão:
+
+1. busque e toque nos produtos para montar a venda;
+2. em cada item escolha **“Leva agora”** (retirada na hora) ou **“Entregar depois”**;
+3. informe nome/telefone — telefone e endereço só são exigidos se algo ficar para entrega;
+4. escolha a forma de pagamento e finalize.
+
+A venda do PDV **não abre o WhatsApp** (o cliente está na frente) e o valor é recalculado pelo
+servidor na hora de gravar. Se sobrar item para entrega, o pedido nasce `confirmed` e segue o
+fluxo normal em `/admin/pedidos`; se o cliente levou tudo, a venda já nasce concluída.
+O que saiu do balcão fica com `fulfilled_at` preenchido (✓ retirado) e o pedido aparece com os
+selos **Venda na loja** e **Retirada parcial**.
+
+### Gestão de pedidos — a lista não cresce para sempre
+- **Marcar item**: cada item tem um ✓ para marcar como retirado/entregue (e ↺ para desfazer);
+- **Excluir um pedido**: botão *Excluir* no cartão do pedido (os itens vão junto);
+- **Limpar cancelados (N)** e **Limpar entregues 30+ dias (N)**: no topo da lista, sempre com
+  confirmação antes de apagar;
+- o CSV exportado traz `origem` (Loja/Site), `entrega` (modo do pedido) e o destino de cada item.
 
 ### Autenticação — 100% gratuita
 - **Magic Link por e-mail** e **e-mail + senha**: grátis (o e-mail embutido do Supabase tem
@@ -184,6 +242,8 @@ abre `https://wa.me/<whatsapp-da-loja>?text=<resumo>` com itens, endereço e tot
 ```
 src/
 ├── lib/supabaseClient.js        # cliente Supabase + helpers de upload (bucket 'store')
+├── lib/checkout.js              # dados de entrega: campos, máscaras e validação (puro)
+├── lib/utils.js                 # formatBRL, effectivePrice, pipeline de status, horários
 ├── context/AuthContext.jsx       # sessão, perfil, role, magic link e senha (gratuitos)
 ├── context/StoreContext.jsx      # store_settings (tema via CSS vars), categorias, realtime
 ├── context/CartContext.jsx       # carrinho persistente + checkout (orders + WhatsApp)
@@ -231,10 +291,14 @@ vercel.json                       # SPA fallback para o deploy
 ## ✅ Checklist rápido
 
 - [x] Rodar `supabase/schema.sql` no SQL Editor
+- [x] Rodar `supabase/migration-8.sql` (checkout seguro + trava do `role`)
+- [x] Rodar `supabase/migration-9.sql` (venda na loja, retirada x entrega, exclusão de pedidos)
 - [x] Criar `admin@teste.com` e `cliente@teste.com` no Auth (auto-confirm)
 - [x] Rodar os UPDATEs para promover o admin
 - [x] Preencher `.env` com URL e anon key
-- [x] `npm run dev` → testar vitrine, login, carrinho, WhatsApp e `/admin`
+- [x] Configurar nome, logo, cores, **WhatsApp** e horários em `/admin/configuracoes`
+- [x] `npm test` + `npm run typecheck` + `npm run lint`
+- [x] `npm run dev` → testar vitrine, login, carrinho, cupom, retirada, WhatsApp e `/admin`
 
 ## ♿ Acessibilidade
 

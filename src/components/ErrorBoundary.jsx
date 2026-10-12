@@ -6,7 +6,7 @@ export default class ErrorBoundary extends Component {
     this.state = { hasError: false, error: null, errorInfo: null };
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError() {
     return { hasError: true };
   }
 
@@ -28,10 +28,13 @@ export default class ErrorBoundary extends Component {
           <p className="mb-4">
             {this.state.error?.toString() ?? 'Erro desconhecido'}
           </p>
-          <details className="mb-4 space-y-2">
-            <summary className="font-medium">Detalhes do erro</summary>
-            <pre className="bg-gray-50 p-4 rounded">{this.state.errorInfo?.componentStack ?? ''}</pre>
-          </details>
+          {/* stack trace só em desenvolvimento — usuário final não precisa dele */}
+          {import.meta.env.DEV && (
+            <details className="mb-4 space-y-2">
+              <summary className="font-medium">Detalhes do erro</summary>
+              <pre className="overflow-x-auto rounded bg-gray-50 p-4 text-xs">{this.state.errorInfo?.componentStack ?? ''}</pre>
+            </details>
+          )}
           <button className="btn-primary mt-4" onClick={() => window.location.reload()}>
             Recarregar página
           </button>

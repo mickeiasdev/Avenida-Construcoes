@@ -1,17 +1,54 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { effectivePrice } from '../lib/utils'
+import { isMigrationMissing } from '../lib/storeOrder'
 import { useAuth } from './AuthContext'
 
 const CartContext = createContext(null)
 const STORAGE_KEY = 'wl_cart_v1'
 
-const paymentLabels = { pix: 'Pix', dinheiro: 'Dinheiro', cartao: 'Cartão na entrega/retirada' }
+const paymentLabels = { dinheiro: 'Dinheiro', cartao: 'Cartão na entrega/retirada', mercado_pago: 'Pix (Mercado Pago — QR + Copia e Cola)' }
 
-// preço final do produto considerando o desconto percentual cadastrado no admin
-export function effectivePrice(product) {
-  const p = Number(product?.price ?? 0)
-  const d = Number(product?.discount_percent ?? 0)
-  return Math.round(p * (1 - d / 100) * 100) / 100
+// Colunas REAIS de profiles. Usar Object.keys(form) mandaria cpf/on_behalf_of/
+// site_note no patch e o PostgREST recusaria o update INTEIRO.
+const PROFILE_COLUMNS = ['full_name', 'phone', 'street', 'number', 'complement', 'district', 'city', 'state', 'zip']
+
+// "Troco para quanto?" é texto livre (ex.: "100,00"): vira R$ 100,00 na mensagem.
+function formatChangeFor(value) {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+  const cleaned = raw.replace(/[^\d,.-]/g, '')
+  const normalized = cleaned.includes(',') ? cleaned.replace(/\./g, '').replace(',', '.') : cleaned
+  const n = Number(normalized)
+  if (!Number.isFinite(n)) return 'R$ ' + raw
+  const [int, dec] = n.toFixed(2).split('.')
+  return 'R$ ' + int.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + dec
+}
+
+// Linha de observação do checkout (só as partes preenchidas), ex.:
+// "CPF: 123.456.789-00 · Em nome de: João (Obra: Construtora X) · Troco para: R$ 100,00"
+function checkoutNote(form, changeFor) {
+  const parts = []
+  if (String(form?.cpf ?? '').trim()) parts.push('CPF: ' + form.cpf)
+  if (String(form?.on_behalf_of ?? '').trim()) {
+    let who = 'Em nome de: ' + form.on_behalf_of
+    if (String(form?.site_note ?? '').trim()) who += ' (Obra: ' + form.site_note + ')'
+    parts.push(who)
+  }
+  const change = formatChangeFor(changeFor)
+  if (change) parts.push('Troco para: ' + change)
+  return parts.join(' · ')
+}
+
+// ============ CHECKOUT NO SERVIDOR ============
+// A RPC public.place_order (supabase/migration-8.sql) recalcula os preços a
+// partir da tabela products, valida o cupom e baixa o estoque — o navegador
+// não decide mais o valor do pedido. Se a função ainda não existir no
+// projeto, caímos no caminho antigo (insert direto) para a loja não parar;
+// nesse modo os valores voltam a ser os calculados no cliente.
+// escapa % e _ para o ILIKE não interpretá-los como coringas
+function escapeLike(value) {
+  return String(value ?? '').replace(/[\\%_]/g, (m) => '\\' + m)
 }
 
 // Carrinho persistente (LocalStorage) + modal "adicionado ao carrinho"
@@ -25,14 +62,34 @@ export function CartProvider({ children }) {
       return saved ? JSON.parse(saved) : []
     } catch { return [] }
   })
-  const [lastAdded, setLastAdded] = useState(null)
+  const [lastAdded, setLastAdded] = useState(null) // modal (só na primeira vez)
+  const [addedToast, setAddedToast] = useState(null) // aviso do 2º item em diante
   const [coupon, setCoupon] = useState(null) // { code, kind, value, min_total } ou null
 
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)) } catch { /* storage indisponível */ }
   }, [items])
 
+  // ATENÇÃO: total/count PRECISAM vir antes de discountValue — `const` fica
+  // em TDZ e ler `total` antes da inicialização quebra o render inteiro.
+  const count = useMemo(() => items.reduce((sum, i) => sum + i.quantity, 0), [items])
+  const total = useMemo(() => items.reduce((sum, i) => sum + i.price * i.quantity, 0), [items])
+
+  // desconto em reais do cupom aplicado
+  const discountValue = coupon
+    ? Math.min(total, coupon.kind === 'percent'
+        ? Math.round(total * Number(coupon.value)) / 100
+        : Number(coupon.value))
+    : 0
+
   function addItem(product, quantity = 1) {
+    // estoque 0 = fora de estoque; null/undefined = sem controle numérico
+    const stock = product?.stock
+    if (stock != null && Number(stock) <= 0) return false
+
+    // modal completo só quando a sacola estava vazia; depois, aviso discreto
+    const primeiroItem = items.length === 0
+
     setItems((prev) => {
       const existing = prev.find((i) => i.product_id === product.id)
       if (existing) {
@@ -51,11 +108,18 @@ export function CartProvider({ children }) {
         stock: product.stock,
       }]
     })
-    // aciona o modal "Deseja finalizar ou continuar comprando?"
-    setLastAdded({ name: product.name, image_url: product.image_url, quantity })
+    const novidade = { name: product.name, image_url: product.image_url, quantity }
+    if (primeiroItem) {
+      setLastAdded(novidade) // "Deseja finalizar ou continuar comprando?"
+    } else {
+      setAddedToast({ ...novidade, key: Date.now() }) // apenas a notificação
+    }
+    return true
   }
 
   function dismissLastAdded() { setLastAdded(null) }
+
+  const dismissAddedToast = useCallback(() => setAddedToast(null), [])
 
   function updateQuantity(productId, quantity) {
     if (quantity <= 0) { removeItem(productId); return }
@@ -68,6 +132,32 @@ export function CartProvider({ children }) {
 
   function clearCart() { setItems([]); setCoupon(null) }
 
+  // Revalida preço/estoque dos itens guardados no LocalStorage: o admin pode
+  // ter mudado o preço (ou excluído o produto) desde a última visita. Itens
+  // cujo produto não existe mais saem do carrinho.
+  const refreshPrices = useCallback(async (productIds) => {
+    const ids = [...new Set((productIds ?? []).filter(Boolean))]
+    if (ids.length === 0) return
+    const { data } = await supabase
+      .from('products')
+      .select('id, name, price, discount_percent, stock, image_url')
+      .in('id', ids)
+    if (!data) return
+    const byId = new Map(data.map((p) => [p.id, p]))
+    setItems((prev) => prev.flatMap((i) => {
+      const p = byId.get(i.product_id)
+      if (!p) return []
+      return [{
+        ...i,
+        name: p.name,
+        price: effectivePrice(p),
+        list_price: Number(p.price),
+        stock: p.stock,
+        image_url: p.image_url,
+      }]
+    }))
+  }, [])
+
   // valida o cupom no banco (público pode ler cupons ativos)
   async function applyCoupon(code) {
     const clean = String(code ?? '').trim().toUpperCase()
@@ -75,7 +165,7 @@ export function CartProvider({ children }) {
     const { data, error } = await supabase
       .from('coupons')
       .select('code, kind, value, min_total')
-      .ilike('code', clean)
+      .ilike('code', escapeLike(clean))
       .eq('active', true)
       .maybeSingle()
     if (error || !data) return { error: 'Cupom inválido ou inativo.' }
@@ -88,16 +178,6 @@ export function CartProvider({ children }) {
 
   function removeCoupon() { setCoupon(null) }
 
-  // desconto em reais do cupom aplicado
-  const discountValue = coupon
-    ? Math.min(total, coupon.kind === 'percent'
-        ? Math.round(total * Number(coupon.value)) / 100
-        : Number(coupon.value))
-    : 0
-
-  const total = useMemo(() => items.reduce((sum, i) => sum + i.price * i.quantity, 0), [items])
-  const count = useMemo(() => items.reduce((sum, i) => sum + i.quantity, 0), [items])
-
   // ---------- CHECKOUT VIA WHATSAPP ----------
   // form = dados de entrega; directItems = quando a finalização vem
   // DIRETO da tela do produto ("comprar agora"): o pedido contém só
@@ -105,33 +185,33 @@ export function CartProvider({ children }) {
   // options: { deliveryMethod: 'entrega'|'retirada', paymentMethod: 'pix'|'dinheiro'|'cartao' }
   async function checkout(form, directItems = null, options = {}) {
     // Visitante pode finalizar: pedido grava com user_id = null e is_guest = true
-    // (policy RLS da migration-3 permite insert anônimo nesse caso).
     const checkoutItems = directItems ?? items
     if (!checkoutItems.length) throw new Error('Nada para finalizar.')
-
-    const subtotalValue = checkoutItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
-    const discount = Math.min(
-      subtotalValue,
-      coupon ? (coupon.kind === 'percent'
-        ? Math.round(subtotalValue * Number(coupon.value)) / 100
-        : Number(coupon.value)) : 0
-    )
-    const totalValue = subtotalValue - discount
 
     // 1) se estiver LOGADO, mantém o perfil atualizado (o admin vê esses dados)
     //    só sobrescreve os campos que foram preenchidos
     if (user) {
       const profileUpdate = {}
-      Object.keys(form).forEach((k) => {
-        if (String(form[k] ?? '').trim() !== '') profileUpdate[k] = form[k]
+      PROFILE_COLUMNS.forEach((k) => {
+        if (String(form?.[k] ?? '').trim() !== '') profileUpdate[k] = form[k]
       })
-      await supabase.from('profiles').update(profileUpdate).eq('id', user.id)
+      if (Object.keys(profileUpdate).length > 0) {
+        await supabase.from('profiles').update(profileUpdate).eq('id', user.id)
+      }
+      // CPF é gravado à parte e de forma best-effort: a coluna pode não
+      // existir ainda (migration-10). Qualquer erro aqui é IGNORADO.
+      if (String(form?.cpf ?? '').trim() !== '') {
+        try {
+          await supabase.from('profiles').update({ cpf: form.cpf }).eq('id', user.id)
+        } catch { /* coluna ausente / RLS — o pedido segue normalmente */ }
+      }
       if (refreshProfile) refreshProfile(user.id)
     }
 
     const deliveryMethod = options.deliveryMethod === 'retirada' ? 'retirada' : 'entrega'
-    const paymentMethod = ['pix', 'dinheiro', 'cartao'].includes(options.paymentMethod)
-      ? options.paymentMethod : 'pix'
+    const paymentMethod = ['dinheiro', 'cartao', 'mercado_pago'].includes(options.paymentMethod)
+      ? options.paymentMethod : 'mercado_pago'
+      ? options.paymentMethod : 'mercado_pago'
 
     // 2) endereço em linhas legíveis (usado no pedido e na mensagem);
     //    retirada no balcão não grava endereço
@@ -148,51 +228,132 @@ export function CartProvider({ children }) {
     // 3) grava o pedido + itens
     // O uuid é gerado aqui no navegador: convidado não consegue LER o pedido
     // de volta (RLS), então não podemos usar .select() após o insert.
-    const order = { id: crypto.randomUUID() }
-    const { error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        id: order.id,
-        user_id: user ? user.id : null,
-        is_guest: !user,
-        total: totalValue,
-        customer_name: form.full_name || (user?.email ?? 'Visitante'),
-        customer_phone: form.phone || '',
-        delivery_address: deliveryAddress,
-        delivery_method: deliveryMethod,
-        payment_method: paymentMethod,
-        coupon_code: discount > 0 ? coupon.code : null,
-        discount: discount,
-      })
-    if (orderError) throw orderError
+    const orderId = crypto.randomUUID()
+    const customerName = form.full_name || user?.email || 'Visitante'
+    let totals = null // { subtotal, discount, total }
 
-    const { error: itemsError } = await supabase.from('order_items').insert(
-      checkoutItems.map((i) => ({
-        order_id: order.id,
-        product_id: i.product_id,
-        product_name: i.name,
-        quantity: i.quantity,
-        unit_price: i.price,
-      }))
-    )
-    if (itemsError) throw itemsError
+    const rpc = await supabase.rpc('place_order', {
+      p_order_id: orderId,
+      p_items: checkoutItems.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
+      p_coupon_code: coupon?.code ?? null,
+      p_customer_name: customerName,
+      p_customer_phone: form.phone || '',
+      p_delivery_address: deliveryAddress,
+      p_delivery_method: deliveryMethod,
+      p_payment_method: paymentMethod,
+      p_user_id: user ? user.id : null,
+      p_is_guest: !user,
+    })
+
+    if (!rpc.error) {
+      // valores autoritativos, calculados no banco
+      totals = {
+        subtotal: Number(rpc.data?.subtotal ?? 0),
+        discount: Number(rpc.data?.discount ?? 0),
+        total: Number(rpc.data?.total ?? 0),
+      }
+    } else if (isMigrationMissing(rpc.error)) {
+      // --- caminho legado (migration-8 ainda não rodada) --------------
+      // Mantém a loja funcionando: aqui o valor volta a vir do cliente.
+      console.warn('[checkout] RPC place_order não encontrada — usando o caminho legado. ' +
+        'Rode supabase/migration-8.sql para o servidor calcular preços, cupom e estoque.')
+      const subtotal = checkoutItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
+      const discount = Math.min(
+        subtotal,
+        coupon ? (coupon.kind === 'percent'
+          ? Math.round(subtotal * Number(coupon.value)) / 100
+          : Number(coupon.value)) : 0
+      )
+      totals = { subtotal, discount, total: subtotal - discount }
+
+      const { error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          id: orderId,
+          user_id: user ? user.id : null,
+          is_guest: !user,
+          total: totals.total,
+          customer_name: customerName,
+          customer_phone: form.phone || '',
+          delivery_address: deliveryAddress,
+          delivery_method: deliveryMethod,
+          payment_method: paymentMethod,
+          coupon_code: totals.discount > 0 ? (coupon?.code ?? null) : null,
+          discount: totals.discount,
+        })
+      if (orderError) throw orderError
+
+      const { error: itemsError } = await supabase.from('order_items').insert(
+        checkoutItems.map((i) => ({
+          order_id: orderId,
+          product_id: i.product_id,
+          product_name: i.name,
+          quantity: i.quantity,
+          unit_price: i.price,
+        }))
+      )
+      if (itemsError) throw itemsError
+    } else {
+      throw rpc.error
+    }
+
+    const { subtotal, discount, total: totalValue } = totals
+
+    // Extras do checkout numa linha só (CPF, em nome de quem recebe/obra, troco)
+    const observacao = checkoutNote(form, options.changeFor)
+
+    // Best-effort: guarda a observação no pedido. Convidado/RLS/coluna
+    // inexistente retornam erro — IGNORADO, o pedido NUNCA depende disso.
+    try {
+      await supabase.from('orders').update({ customer_note: observacao }).eq('id', orderId)
+    } catch { /* sem permissão ou coluna ausente — segue o fluxo normal */ }
 
     const { data: store } = await supabase
       .from('store_settings').select('store_name, whatsapp').eq('id', 1).maybeSingle()
 
-    // 4) mensagem para o WhatsApp — só texto + *negrito* nativo e
-    // emojis clássicos (Unicode antigo); emojis novos/box-drawing
-    // (🧾, ━━━) aparecem como "�" no WhatsApp Web e celulares antigos.
-    const money = (n) => 'R$ ' + n.toFixed(2).replace('.', ',')
+    // Mercado Pago Orders API: se escolheu mercado_pago, cria a Order no MP (Pix QR + Copia e Cola)
+    // O pedido já existe no banco com total autoritativo; a Edge Function lê e cria a cobrança.
+    let mpPix = null
+    if (paymentMethod === 'mercado_pago') {
+      try {
+        const { data: mpData, error: mpError } = await supabase.functions.invoke('create-mp-order', {
+          body: { orderId },
+        })
+        if (mpError) throw mpError
+        // mpData: { qr_code, qr_code_base64, mp_order_id, mp_payment_id, status }
+        if (mpData?.qr_code) {
+          mpPix = {
+            qr_code: mpData.qr_code,               // Pix Copia e Cola
+            qr_code_base64: mpData.qr_code_base64,  // Imagem QR
+            ticket_url: mpData.ticket_url ?? null,
+            mp_order_id: mpData.mp_order_id ?? null,
+            mp_payment_id: mpData.mp_payment_id ?? null,
+            status: mpData.status ?? 'pending',
+          }
+        } else {
+          console.warn('[checkout] create-mp-order sem qr_code:', mpData)
+        }
+      } catch (mpErr) {
+        // Não quebra o pedido: o pedido já foi criado; apenas avisa.
+        // O admin pode reenviar o Pix ou o cliente pode tentar novamente.
+        console.error('[checkout] Falha ao criar Pix no Mercado Pago:', mpErr?.message ?? mpErr)
+      }
+    }
+
+    // 4) mensagem para o WhatsApp — só texto, *negrito* nativo e emojis
+    // clássicos; emojis novos e box-drawing costumam virar caractere
+    // quebrado no WhatsApp Web e em celulares antigos.
+    const money = (n) => 'R$ ' + Number(n).toFixed(2).replace('.', ',')
     const sep = '─────────────────'
     const lines = []
     lines.push('*NOVO PEDIDO — ' + (store?.store_name ?? 'Loja') + '*')
     lines.push(sep)
-    lines.push('Pedido nº ' + order.id.slice(0, 8))
+    lines.push('Pedido nº ' + orderId.slice(0, 8))
     lines.push('')
     lines.push('*CLIENTE*')
-    lines.push('Nome: ' + (form.full_name || user.email))
+    lines.push('Nome: ' + customerName)
     if (form.phone) lines.push('Telefone: ' + form.phone)
+    if (observacao) lines.push(observacao)
     lines.push('')
     lines.push('*ITENS DO PEDIDO*')
     checkoutItems.forEach((i, idx) => {
@@ -201,8 +362,8 @@ export function CartProvider({ children }) {
     lines.push('')
     lines.push(sep)
     if (discount > 0) {
-      lines.push('Subtotal: ' + money(subtotalValue))
-      lines.push('Cupom ' + coupon.code + ': -' + money(discount))
+      lines.push('Subtotal: ' + money(subtotal))
+      lines.push('Cupom ' + (coupon?.code ?? '') + ': -' + money(discount))
     }
     lines.push('*TOTAL: ' + money(totalValue) + '*')
     lines.push(sep)
@@ -222,21 +383,52 @@ export function CartProvider({ children }) {
     lines.push('')
     lines.push('_Pedido enviado pelo site_')
 
-    const message = encodeURIComponent(lines.join('\n'))
-    const waUrl = 'https://wa.me/' + (store?.whatsapp ?? '') + '?text=' + message
-    // window.open pode ser bloqueado em navegadores mobile (iOS) quando
-    // chamado após um await — se for bloqueado, navega direto
-    const win = window.open(waUrl, '_blank')
-    if (!win) window.location.href = waUrl
+    // WhatsApp: para Mercado Pago (Pix QR) NÃO abre agora — só depois do pagamento aprovado (webhook).
+    // Se o usuário escolheu Pix MP, o fluxo mostra o QR; o WhatsApp será enviado pela loja após confirmação,
+    // ou o cliente pode compartilhar o comprovante manualmente.
+    const waNumber = String(store?.whatsapp ?? '').replace(/\D/g, '')
+    let whatsappSent = false
+    if (paymentMethod !== 'mercado_pago') {
+      if (waNumber) {
+        const waUrl = 'https://wa.me/' + waNumber + '?text=' + encodeURIComponent(lines.join('\n'))
+        const win = window.open(waUrl, '_blank')
+        if (!win) window.location.href = waUrl
+        whatsappSent = true
+      } else {
+        console.warn('[checkout] WhatsApp da loja não configurado em /admin/configuracoes — ' +
+          'o pedido foi registrado, mas o resumo não foi aberto.')
+      }
+    } else {
+      // Pix Mercado Pago: não abre WhatsApp antes do Pix ser pago. Deixa o QR em tela.
+      whatsappSent = false
+    }
 
-    // pedido direto não mexe no carrinho
-    if (!directItems) clearCart()
-    return order
+    // Carrinho: para Pix MP mantém até o pagamento confirmar (evita perder itens se o QR expirar)
+    if (!directItems && paymentMethod !== 'mercado_pago') clearCart()
+    if (paymentMethod === 'mercado_pago' && mpPix) {
+      return { id: orderId, subtotal, discount, total: totalValue, whatsappSent, mpPix, paymentMethod }
+    }
+    if (paymentMethod === 'mercado_pago') {
+      return { id: orderId, subtotal, discount, total: totalValue, whatsappSent, mpPix: null, paymentMethod, mpError: true }
+    }
+    return { id: orderId, subtotal, discount, total: totalValue, whatsappSent, paymentMethod }
   }
+
+  // Helper para polling do status do Pix (Orders API)
+  const getOrderPaymentStatus = useCallback(async (orderId) => {
+    const { data } = await supabase.from('orders').select('payment_status, status, mp_order_id').eq('id', orderId).maybeSingle()
+    return data
+  }, [])
+
+  const checkMpOrderAgain = useCallback(async (orderId) => {
+    const { data, error } = await supabase.functions.invoke('create-mp-order', { body: { orderId } })
+    if (error) throw error
+    return data
+  }, [])
 
   return (
     <CartContext.Provider
-      value={{ items, count, total, lastAdded, dismissLastAdded, addItem, updateQuantity, removeItem, clearCart, checkout, coupon, applyCoupon, removeCoupon, discountValue }}
+      value={{ items, count, total, lastAdded, dismissLastAdded, addedToast, dismissAddedToast, addItem, updateQuantity, removeItem, clearCart, checkout, coupon, applyCoupon, removeCoupon, discountValue, refreshPrices, getOrderPaymentStatus, checkMpOrderAgain }}
     >
       {children}
     </CartContext.Provider>

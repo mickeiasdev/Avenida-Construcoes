@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, Save, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Loader2, Save, CheckCircle2, AlertCircle, MailWarning, Send } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { maskCep, maskPhone } from '../lib/utils'
 import { isCepValid, isFullName, isPhoneBR, isUF } from '../lib/validation'
@@ -22,6 +22,11 @@ export default function Profile() {
   const [form, setForm] = useState(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [resendBusy, setResendBusy] = useState(false)
+  const [resendMsg, setResendMsg] = useState(null)
+  // confirmação de e-mail ligada: o Supabase deixa o usuário entrar, mas
+  // email_confirmed_at/confirmed_at continuam vazios até clicar no link
+  const emailConfirmed = Boolean(user?.email_confirmed_at || user?.confirmed_at)
 
   useEffect(() => {
     if (profile) {
@@ -40,7 +45,7 @@ export default function Profile() {
   }, [profile])
 
   if (!form) {
-    return <div className="flex justify-center py-24"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+    return <div className="flex justify-center py-24"><Loader2 className="h-6 w-6 animate-spin text-gray-500" /></div>
   }
 
   function set(k, v) { setForm((f) => ({ ...f, [k]: v })) }
@@ -77,12 +82,49 @@ export default function Profile() {
     setBusy(false)
   }
 
+  async function handleResendConfirmation() {
+    setResendBusy(true)
+    setResendMsg(null)
+    const { error } = await supabase.auth.resend({ type: 'signup', email: user.email })
+    setResendMsg(error
+      ? { type: 'err', text: 'Não foi possível reenviar: ' + error.message }
+      : { type: 'ok', text: 'Link reenviado! Confira sua caixa de entrada (e o spam).' })
+    setResendBusy(false)
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-gray-800">Meu perfil</h1>
         <p className="text-sm text-gray-500">{user.email}</p>
       </div>
+
+      {!emailConfirmed && (
+        <div role="status" className="flex flex-col gap-3 rounded-2xl bg-amber-50 p-4 ring-1 ring-amber-200 sm:flex-row sm:items-start">
+          <MailWarning className="h-5 w-5 shrink-0 text-amber-600" />
+          <div className="flex-1 space-y-1">
+            <p className="text-sm font-bold text-gray-800">Confirme seu e-mail</p>
+            <p className="text-sm text-gray-500">
+              Enviamos um link de confirmação para <b className="text-gray-700">{user.email}</b>.
+              Você já pode usar a loja normalmente — confirmar só garante a recuperação da conta.
+            </p>
+            {resendMsg && (
+              <p className={'text-xs font-medium ' + (resendMsg.type === 'err' ? 'text-red-600' : 'text-green-700')}>
+                {resendMsg.text}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            className="btn-soft min-h-11 shrink-0"
+            onClick={handleResendConfirmation}
+            disabled={resendBusy}
+          >
+            {resendBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            Reenviar e-mail
+          </button>
+        </div>
+      )}
 
       <form onSubmit={handleSave} className="card grid gap-4 sm:grid-cols-2">
         {FIELDS.map(([key, label, type, cls]) => (

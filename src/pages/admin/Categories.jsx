@@ -58,13 +58,18 @@ export default function Categories() {
         <p className="text-sm text-gray-500">Organizam o menu da vitrine e os filtros de produtos.</p>
       </div>
 
-      <form onSubmit={handleCreate} className="card flex gap-2">
-        <input
-          className="input"
-          placeholder="Nova categoria (ex.: Tintas)"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-        />
+      {/* Mesmo padrão de busca de Pedidos: input sem caixa de fundo, ícone à
+          esquerda e botão ao lado, na mesma linha */}
+      <form onSubmit={handleCreate} className="flex flex-col gap-2 sm:flex-row">
+        <div className="relative flex-1">
+          <Tags className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+          <input
+            className="input pl-10"
+            placeholder="Nova categoria (ex.: Tintas)"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+          />
+        </div>
         <button type="submit" className="btn-primary shrink-0" disabled={busy || !newName.trim()}>
           <Plus className="h-4 w-4" /> Criar
         </button>
@@ -92,18 +97,18 @@ export default function Categories() {
                 <button type="button" className="btn-primary shrink-0 px-3 py-1.5 text-xs" onClick={() => handleUpdate(c.id)} disabled={busy}>
                   Salvar
                 </button>
-                <button type="button" className="p-2 text-gray-400 hover:text-gray-600" onClick={() => setEditing(null)} aria-label="Cancelar">
+                <button type="button" className="p-2 text-gray-500 hover:text-gray-600" onClick={() => setEditing(null)} aria-label="Cancelar">
                   <X className="h-4 w-4" />
                 </button>
               </>
             ) : (
               <>
-                <span className="flex-1 font-medium text-gray-800">{c.name}</span>
-                <span className="shrink-0 text-xs text-gray-400">{counts[c.id] ?? 0} produto(s)</span>
-                <button type="button" className="p-2 text-gray-400 transition hover:text-primary" onClick={() => setEditing({ id: c.id, name: c.name })} aria-label="Editar">
+                <span className="min-w-0 flex-1 truncate font-medium text-gray-800" title={c.name}>{c.name}</span>
+                <span className="shrink-0 text-xs text-gray-500">{counts[c.id] ?? 0} produto(s)</span>
+                <button type="button" className="shrink-0 p-2 text-gray-500 transition hover:text-primary" onClick={() => setEditing({ id: c.id, name: c.name })} aria-label="Editar">
                   <Pencil className="h-4 w-4" />
                 </button>
-                <button type="button" className="p-2 text-gray-400 transition hover:text-red-500" onClick={() => handleDelete(c.id)} disabled={busy} aria-label="Excluir">
+                <button type="button" className="shrink-0 p-2 text-gray-500 transition hover:text-red-500" onClick={() => handleDelete(c.id)} disabled={busy} aria-label="Excluir">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </>
@@ -111,7 +116,7 @@ export default function Categories() {
           </div>
         ))}
         {categories.length === 0 && (
-          <div className="card py-12 text-center text-gray-400">Nenhuma categoria cadastrada.</div>
+          <div className="card py-12 text-center text-gray-500">Nenhuma categoria cadastrada.</div>
         )}
       </div>
     </div>

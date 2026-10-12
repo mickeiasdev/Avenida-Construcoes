@@ -1,16 +1,29 @@
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Users, Menu, X } from 'lucide-react'
-import { useAuth } from '../context/AuthContext'
+import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Percent, Users, Menu, X, PlusCircle } from 'lucide-react';import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
+import { supabase } from '../lib/supabaseClient'
+import { ORDER_PIPELINE } from '../lib/utils'
+
+// Pendente = ainda não finalizado (delivered) nem cancelado. Os valores
+// reais vêm do pipeline de status do projeto — nada de chutar strings.
+const PENDING_STATUSES = ORDER_PIPELINE.filter((s) => s !== 'delivered')
+
+// Selo do menu: some sozinho quando a contagem zera.
+function PendingBadge({ count }) {
+  if (!count) return null
+  return <span className="badge-count ml-auto" aria-hidden="true">{count > 99 ? '99+' : count}</span>
+}
 
 const ITEMS = [
-  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, group: 'Operação' },
   { to: '/admin/pedidos', label: 'Pedidos', icon: ClipboardList },
-  { to: '/admin/produtos', label: 'Produtos', icon: Package },
+  { to: '/admin/nova-venda', label: 'Nova venda', icon: PlusCircle },
+  { to: '/admin/produtos', label: 'Produtos', icon: Package, group: 'Catálogo' },
   { to: '/admin/categorias', label: 'Categorias', icon: Tags },
   { to: '/admin/cupons', label: 'Cupons', icon: TicketPercent },
-  { to: '/admin/clientes', label: 'Clientes', icon: Users },
+  { to: '/admin/promocoes', label: 'Promoções', icon: Percent },
+  { to: '/admin/clientes', label: 'Clientes', icon: Users, group: 'Loja' },
   { to: '/admin/configuracoes', label: 'Configurações', icon: SettingsIcon },
 ]
 
@@ -18,10 +31,30 @@ export default function AdminLayout() {
   const { signOut, profile } = useAuth()
   const { settings } = useStore()
   const [drawer, setDrawer] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
   const location = useLocation()
 
   // fecha o drawer ao navegar
   useEffect(() => { setDrawer(false) }, [location.pathname])
+
+  // Selo de pedidos pendentes: contagem exata no banco + UMA subscription
+  // realtime em orders (INSERT/UPDATE/DELETE) para manter o número vivo.
+  const loadPending = useCallback(async () => {
+    const { count } = await supabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .in('status', PENDING_STATUSES)
+    setPendingCount(count ?? 0)
+  }, [])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-pending-orders')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, loadPending)
+      // primeira contagem quando o canal conecta; depois, a cada mudança em orders
+      .subscribe((status) => { if (status === 'SUBSCRIBED') loadPending() })
+    return () => { supabase.removeChannel(channel) }
+  }, [loadPending])
 
   const brand = (
     <div className="flex min-w-0 items-center gap-2">
@@ -40,32 +73,42 @@ export default function AdminLayout() {
   )
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
+    <div className="flex min-h-screen bg-gray-100 md:pl-60">
       {/* ============ SIDEBAR (desktop) ============ */}
-      <aside className="hidden w-60 shrink-0 flex-col bg-secondary text-white md:flex">
+      <aside className="hidden w-60 shrink-0 flex-col bg-secondary text-white md:fixed md:inset-y-0 md:left-0 md:z-40 md:flex">
         <div className="flex items-center gap-2 px-5 py-5">{brand}</div>
 
-        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
-          {ITEMS.map(({ to, label, icon: Icon, end }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={({ isActive }) =>
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ' +
-                (isActive ? 'bg-primary text-white' : 'text-white/70 hover:bg-white/10 hover:text-white')
-              }
-            >
-              <Icon className="h-4 w-4" /> {label}
-            </NavLink>
-          ))}
+        <nav className="scrollbar-dark flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
+            {ITEMS.map(({ to, label, icon: Icon, end, group }) => (
+              <div key={to}>
+                {group && (
+                  <p className="mt-4 px-3 pb-1 text-[11px] font-semibold uppercase tracking-widest text-white/60">
+                    {group}
+                  </p>
+                )}
+                <NavLink
+                  to={to}
+                  end={end}
+                  aria-label={to === '/admin/pedidos' && pendingCount > 0
+                    ? `Pedidos, ${pendingCount} pendente${pendingCount > 1 ? 's' : ''}`
+                    : undefined}
+                  className={({ isActive }) =>
+                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ' +
+                    (isActive ? 'bg-primary text-white' : 'text-white/70 hover:bg-white/10 hover:text-white') + ' '
+                  }
+                >
+                  <Icon className="h-4 w-4" /> {label}
+                  {to === '/admin/pedidos' && <PendingBadge count={pendingCount} />}
+                </NavLink>
+              </div>
+            ))}
         </nav>
 
         <div className="flex flex-col gap-1 border-t border-white/10 px-3 py-3 text-sm">
           <Link to="/" className="flex items-center gap-3 rounded-lg px-3 py-2 text-white/70 transition hover:bg-white/10 hover:text-white">
             <Store className="h-4 w-4" /> Ver loja
           </Link>
-          <div className="px-3 py-2 text-[11px] text-white/40">{profile?.full_name || 'Admin'}</div>
+          <div className="px-3 py-2 text-[11px] text-white/70">{profile?.full_name || 'Admin'}</div>
           <button type="button" onClick={signOut} className="flex items-center gap-3 rounded-lg px-3 py-2 text-left text-red-300 transition hover:bg-red-500/10">
             <LogOut className="h-4 w-4" /> Sair
           </button>
@@ -74,10 +117,10 @@ export default function AdminLayout() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* ============ TOPBAR MOBILE (hambúrguer) ============ */}
-        <header className="flex items-center gap-2 border-b bg-secondary px-3 py-2.5 text-white md:hidden">
+        <header className="sticky top-0 z-30 flex items-center gap-2 border-b bg-secondary px-3 py-2.5 text-white md:hidden">
           <button
             type="button"
-            className="shrink-0 rounded-lg p-2 transition hover:bg-white/10"
+            className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg transition hover:bg-white/10"
             onClick={() => setDrawer(true)}
             aria-label="Abrir menu"
           >
@@ -89,7 +132,7 @@ export default function AdminLayout() {
         <main className="flex-1 p-4 md:p-8">
           <Suspense
             fallback={
-              <div className="flex justify-center py-24 text-gray-400">
+              <div className="flex justify-center py-24 text-gray-500">
                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-primary" />
               </div>
             }
@@ -111,27 +154,37 @@ export default function AdminLayout() {
               </button>
             </div>
 
-            <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-3 text-sm">
-              {ITEMS.map(({ to, label, icon: Icon, end }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={end}
-                  className={({ isActive }) =>
-                    'flex items-center gap-3 rounded-lg px-3 py-2.5 transition ' +
-                    (isActive ? 'bg-primary text-white' : 'text-white/75 hover:bg-white/10 hover:text-white')
-                  }
-                >
-                  <Icon className="h-4 w-4" /> {label}
-                </NavLink>
-              ))}
+            <nav className="scrollbar-dark flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-3 text-sm">
+          {ITEMS.map(({ to, label, icon: Icon, end, group }) => (
+            <div key={to}>
+              {group && (
+                <p className="mt-4 px-2 pb-1 text-[11px] font-semibold uppercase tracking-widest text-white/60">
+                  {group}
+                </p>
+              )}
+              <NavLink
+                to={to}
+                end={end}
+                aria-label={to === '/admin/pedidos' && pendingCount > 0
+                  ? `Pedidos, ${pendingCount} pendente${pendingCount > 1 ? 's' : ''}`
+                  : undefined}
+                className={({ isActive }) =>
+                  'flex items-center gap-3 rounded-lg px-3 py-2.5 transition ' +
+                  (isActive ? 'bg-primary text-white' : 'text-white/75 hover:bg-white/10 hover:text-white')
+                }
+              >
+                <Icon className="h-4 w-4" /> {label}
+                {to === '/admin/pedidos' && <PendingBadge count={pendingCount} />}
+              </NavLink>
+            </div>
+          ))}
             </nav>
 
             <div className="space-y-1.5 border-t border-white/10 px-2 py-3 text-sm">
               <Link to="/" className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-white/75 transition hover:bg-white/10 hover:text-white">
                 <Store className="h-4 w-4" /> Ver loja
               </Link>
-              <div className="px-3 py-1.5 text-[11px] text-white/40">{profile?.full_name || 'Admin'}</div>
+              <div className="px-3 py-1.5 text-[11px] text-white/70">{profile?.full_name || 'Admin'}</div>
               <button type="button" onClick={signOut} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-red-300 transition hover:bg-red-500/10">
                 <LogOut className="h-4 w-4" /> Sair
               </button>

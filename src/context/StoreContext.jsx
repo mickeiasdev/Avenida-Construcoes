@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { applyBrand, readCachedBrand, writeCachedBrand } from '../lib/brandTheme'
 import { slugify } from '../lib/utils'
 
 const StoreContext = createContext(null)
@@ -10,9 +11,11 @@ const DEFAULT_SETTINGS = {
   store_name: 'Avenida Construção',
   logo_url: null,
   banner_url: 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=1600&q=80',
-  primary_color: '#7c3aed',
+  primary_color: '#475569',
   secondary_color: '#1e293b',
-  whatsapp: '5511999999999',
+  // vazio de propósito: o app esconde os atalhos de WhatsApp até o admin
+  // configurar o número real em /admin/configuracoes (evita link wa.me/ vazio)
+  whatsapp: '',
   address: 'Av. das Obras, 1000 - Centro, São Paulo/SP',
   business_hours: 'Seg a Sex 7h-18h · Sáb 7h-13h · Dom fechado',
   weekday_open: '07:00', weekday_close: '18:00',
@@ -22,23 +25,32 @@ const DEFAULT_SETTINGS = {
 }
 
 // PASSO 4: aplica as cores dinâmicas vindas do banco nas variáveis CSS
+// e guarda em cache para a próxima visita já abrir na cor certa (sem flash)
 function applyTheme(s) {
-  document.documentElement.style.setProperty('--brand-primary', s.primary_color)
-  document.documentElement.style.setProperty('--brand-secondary', s.secondary_color)
-  // a barra de endereço do navegador mobile acompanha a cor da loja
-  const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.setAttribute('content', s.primary_color)
+  applyBrand(s.primary_color, s.secondary_color)
+  writeCachedBrand(s.primary_color, s.secondary_color)
 }
 
 export function StoreProvider({ children }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
+  // Cor em cache = já sabemos a cor da loja: pinta na hora. Sem cache (primeira
+  // visita neste navegador) seguramos o primeiro paint até a cor chegar, senão o
+  // roxo padrão do template piscaria antes de virar a cor configurada.
+  const [themeReady, setThemeReady] = useState(() => readCachedBrand() !== null)
 
   async function loadSettings() {
-    const { data } = await supabase.from('store_settings').select('*').eq('id', 1).maybeSingle()
-    if (data) { setSettings(data); applyTheme(data) }
-    setLoading(false)
+    try {
+      const { data } = await supabase.from('store_settings').select('*').eq('id', 1).maybeSingle()
+      if (data) { setSettings(data); applyTheme(data) }
+    } catch (err) {
+      // rede/banco fora do ar não pode travar a loja nem sumir com o tema padrão
+      console.warn('[store] não foi possível carregar as configurações da loja:', err?.message ?? err)
+    } finally {
+      setThemeReady(true)
+      setLoading(false)
+    }
   }
 
   async function loadCategories() {
@@ -57,7 +69,10 @@ export function StoreProvider({ children }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, loadCategories)
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    // trava de segurança: requisição lenta não deixa a loja presa no splash neutro
+    const liberar = setTimeout(() => setThemeReady(true), 2500)
+
+    return () => { clearTimeout(liberar); supabase.removeChannel(channel) }
   }, [])
 
   async function updateSettings(updates) {
@@ -73,26 +88,28 @@ export function StoreProvider({ children }) {
 
   // ---------- CRUD de categorias ----------
   async function createCategory(name) {
-    const { data, error } = await supabase
-      .from('categories').insert({ name, slug: slugify(name) }).select().single()
+    const { data, error } = await supabase.from('categories').insert({ name, slug: slugify(name) }).select().single()
     return { data, error }
   }
 
   async function updateCategory(id, name) {
-    const { data, error } = await supabase
-      .from('categories').update({ name, slug: slugify(name) }).eq('id', id).select().single()
+    const { data, error } = await supabase.from('categories').update({ name, slug: slugify(name) }).eq('id', id).select().single()
     return { data, error }
   }
 
   // Regra: não excluir categoria com produtos (bloqueia no app e no banco via FK restrict)
   async function deleteCategory(id) {
-    const { count } = await supabase
-      .from('products').select('id', { count: 'exact', head: true }).eq('category_id', id)
+    const { count } = await supabase.from('products').select('id', { count: 'exact', head: true }).eq('category_id', id)
     if (count && count > 0) {
       return { error: new Error('Esta categoria possui ' + count + ' produto(s). Mova ou exclua os produtos primeiro.') }
     }
     const { error } = await supabase.from('categories').delete().eq('id', id)
     return { error }
+  }
+
+  // Primeira visita sem cor em cache: fundo neutro por um instante, nunca o roxo padrão
+  if (!themeReady) {
+    return <div aria-hidden="true" className="min-h-screen bg-slate-100" />
   }
 
   return (

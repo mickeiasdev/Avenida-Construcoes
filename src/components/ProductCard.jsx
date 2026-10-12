@@ -1,8 +1,8 @@
 import { ShoppingCart } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { useCart, effectivePrice } from '../context/CartContext'
+import { useCart } from '../context/CartContext'
 import { FavoriteButton } from './FavoriteButton'
-import { formatBRL } from '../lib/utils'
+import { formatBRL, effectivePrice, hasActivePromo, promoPercent } from '../lib/utils'
 
 const FALLBACK_IMG = 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=800&q=80'
 
@@ -12,10 +12,13 @@ export function ProductCard({ product, compact = false }) {
   // estoque null = sem controle numérico → apenas "Em estoque"
   const stock = product.stock
   const out = !product.active || stock === 0
+  // promoção ativa tem prioridade sobre o desconto percentual do cadastro
+  const promo = hasActivePromo(product)
+  const promoOff = promo ? promoPercent(product) : 0
 
   return (
     <div className="card group flex h-full flex-col overflow-hidden p-2">
-      <div className="relative aspect-square overflow-hidden rounded-xl bg-violet-50">
+      <div className="relative aspect-square overflow-hidden rounded-xl bg-gray-100">
         <Link to={'/produto/' + product.id} className="block h-full w-full">
           <img
             src={product.image_url || FALLBACK_IMG}
@@ -25,13 +28,13 @@ export function ProductCard({ product, compact = false }) {
           />
         </Link>
         {product.categories?.name && (
-          <span className="absolute left-2.5 top-2.5 z-10 rounded-full bg-secondary/80 px-2.5 py-1 text-[10px] font-bold tracking-wide text-violet-100 shadow-sm backdrop-blur">
+          <span className="absolute left-2.5 top-2.5 z-10 max-w-[calc(100%-3.5rem)] truncate rounded-lg bg-secondary/80 px-2.5 py-1 text-[10px] font-bold tracking-wide text-gray-100 shadow-sm backdrop-blur">
             {product.categories.name}
           </span>
         )}
-        {Number(product.discount_percent) > 0 && (
-          <span className="absolute left-2.5 bottom-2.5 z-10 rounded-full bg-red-500 px-2.5 py-1 text-[10px] font-extrabold text-white shadow-md">
-            -{product.discount_percent}% OFF
+        {(promo || Number(product.discount_percent) > 0) && (
+          <span className="absolute bottom-2.5 left-2.5 z-10 rounded-lg bg-red-500 px-2.5 py-1 text-[10px] font-extrabold text-white shadow-md">
+            {promo ? 'OFERTA' + (promoOff > 0 ? ' -' + promoOff + '%' : '') : '-' + product.discount_percent + '% OFF'}
           </span>
         )}
         <FavoriteButton
@@ -53,8 +56,8 @@ export function ProductCard({ product, compact = false }) {
         )}
         <div className="mt-auto flex flex-col gap-2 pt-2 sm:flex-row sm:items-end sm:justify-between sm:pt-3">
           <div className="flex flex-wrap items-baseline gap-x-2">
-            {Number(product.discount_percent) > 0 && (
-              <span className="text-[11px] font-medium text-gray-400 line-through">{formatBRL(product.price)}</span>
+            {(promo || Number(product.discount_percent) > 0) && (
+              <span className="text-[11px] font-medium text-gray-500 line-through">{formatBRL(product.price)}</span>
             )}
             <span className="w-fit rounded-lg bg-primary/10 px-2 py-0.5 text-base font-extrabold leading-tight tracking-tight text-primary sm:text-lg">
               {formatBRL(effectivePrice(product))}

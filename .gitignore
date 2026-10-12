@@ -27,3 +27,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Supabase CLI — estado local (project-ref, versões): nunca versionar
+supabase/.temp/
+
+# Tooling local de agente (skills do assistente): não faz parte da loja
+.agents/
+skills-lock.json

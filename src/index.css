@@ -1,50 +1,140 @@
 @import "tailwindcss";
 
 /* ============================================================
+   DESIGN SYSTEM — white-label
+   ------------------------------------------------------------
+   REGRA DE RAIO (pedido do lojista: "botões menos arredondados")
+     • CONTROLES  (botão, input, tab, stepper, chip) -> rounded-lg
+     • SUPERFÍCIES (card, modal, painel)             -> rounded-2xl
+     • CÍRCULO    (badge de contagem, avatar)        -> rounded-full
+   Cara de ferramenta: pill em tudo parece app genérico.
+
    TEMA DINÂMICO (white-label)
-   --brand-primary / --brand-secondary são gravadas em runtime
-   pelo StoreContext a partir da tabela store_settings.
-   Novo visual padrão: violeta profundo + lavanda ("Iris").
+     --brand-primary / --brand-secondary são gravadas em runtime
+     pelo StoreContext a partir da tabela store_settings.
+     NUNCA use cor fixa de marca: o lojista troca a primária.
    ============================================================ */
 @theme inline {
-  --color-primary: var(--brand-primary, #7c3aed);
-  --color-secondary: var(--brand-secondary, #151022);
+  --color-primary: var(--brand-primary, #475569);
+  --color-secondary: var(--brand-secondary, #1e293b);
 }
 
 :root {
-  --brand-primary: #7c3aed;
-  --brand-secondary: #151022;
+  --brand-primary: #475569;
+  --brand-secondary: #1e293b;
 
-  /* cores auxiliares do novo tema */
-  --iris-soft: #f4f1fb;
-  --iris-glow: #a78bfa;
+  /* neutros do template: a cor de marca de verdade vem do banco (--brand-primary) */
+  --surface-soft: #f3f4f6;
 }
 
-html {
-  font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+/* ------------------------------------------------------------
+   BASE
+   Tudo que é seletor de elemento vive em @layer base: no Tailwind v4
+   o CSS SEM camada vence as camadas e anula os utilitários.
+   (bug corrigido: h1,h2,h3 estava fora de qualquer @layer e matava
+   todos os utilitários tracking-*.)
+   ------------------------------------------------------------ */
+@layer base {
+
+  /* ------------------------------------------------------------
+     BARRA DE ROLAGEM (design próprio)
+     A barra nativa do sistema aparecia clara/quadrada sobre o painel
+     escuro do admin e destoava do resto. Aqui ela é fina, arredondada
+     e usa a linguagem do tema (branco translúcido no escuro, cinza no claro).
+     ------------------------------------------------------------ */
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background-color: #cbd5e1;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background-color: #94a3b8; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+  html {
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+
+  body {
+    background: var(--surface-soft);
+    background-image:
+      radial-gradient(60rem 30rem at 110% -10%, color-mix(in srgb, var(--brand-primary) 10%, transparent), transparent 60%),
+      radial-gradient(50rem 26rem at -20% 110%, color-mix(in srgb, var(--brand-primary) 8%, transparent), transparent 60%);
+    background-attachment: fixed;
+    color: #1f2937;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--brand-primary) 25%, transparent);
+  }
+
+  /* Preços, quantidades e tabelas usam algarismos tabulares: valores alinham na vertical */
+  .card, table, td, th, .list-row { font-variant-numeric: tabular-nums; }
+
+  /* Sanfonas: nada de marcador/triângulo padrão do navegador */
+  summary { cursor: pointer; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::marker { content: ''; }
+
+  /* Headings com personalidade — agora DENTRO da camada base,
+     então utilitários como tracking-tight voltam a vencer. */
+  h1, h2, h3 {
+    letter-spacing: -0.02em;
+  }
 }
 
-body {
-  background: var(--iris-soft);
-  background-image:
-    radial-gradient(60rem 30rem at 110% -10%, color-mix(in srgb, var(--brand-primary) 10%, transparent), transparent 60%),
-    radial-gradient(50rem 26rem at -20% 110%, color-mix(in srgb, var(--brand-primary) 8%, transparent), transparent 60%);
-  background-attachment: fixed;
-  color: #1e1b2e;
-  -webkit-font-smoothing: antialiased;
-}
-
-::selection {
-  background: color-mix(in srgb, var(--brand-primary) 25%, transparent);
-}
-
-/* IMPORTANTE: as classes de componente ficam em @layer components
-   para que utilitários inline (ex.: pl-10 no input com ícone)
-   tenham precedência sobre elas. */
+/* ------------------------------------------------------------
+   COMPONENTES
+   Ficam em @layer components para que utilitários inline
+   (ex.: pl-10 no input com ícone) tenham precedência.
+   ------------------------------------------------------------ */
 @layer components {
-  /* Botão "pill" com gradiente + glow — carinha de app premium */
+  /* Selects (filtros/ordenar): fora o visual padrão do sistema */
+  .select {
+    @apply w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 pr-10 text-sm text-gray-800 outline-none transition;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem 1rem;
+  }
+  .select:focus { @apply border-primary ring-2 ring-primary/15; }
+  /* qualquer <select> com .input também perde o visual padrão do navegador */
+  .input:is(select) {
+    appearance: none;
+    padding-right: 2.5rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem 1rem;
+  }
+
+  /* Barra de rolagem dos painéis escuros (menu do admin: sidebar e drawer) */
+  .scrollbar-dark {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+  }
+  .scrollbar-dark::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scrollbar-dark::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background-color: rgba(255, 255, 255, 0.24);
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .scrollbar-dark::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.45); }
+  /* ===== CONTROLES (rounded-lg) ===== */
+
+  /* Botão primário: bloco, gradiente da marca + sombra em camadas.
+     Antes era rounded-full (pill) — virou rounded-lg.
+     O glow vive no box-shadow, então o foco usa outline (não ring). */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5
            text-sm font-bold tracking-tight text-white shadow-md
            transition duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-lg
            active:translate-y-0 active:scale-[0.98]
@@ -56,24 +146,117 @@ body {
                 inset 0 1px 0 rgb(255 255 255 / 0.25);
   }
 
-  /* Input moderno: fundo branco fosco, borda suave, foco violeta */
+  /* Foco visível: o glow do box-shadow impede usar ring: */
+  .btn-primary:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--brand-primary) 45%, transparent);
+    outline-offset: 2px;
+  }
+
+  /* Botão secundário: mesma forma do primário, sem o gradiente da marca */
+  .btn-soft {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-bold
+           text-gray-700 ring-1 ring-gray-200 transition duration-200 hover:bg-gray-50
+           active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* Botão compacto (ações de linha, filtros) */
+  .btn-sm {
+    @apply px-3 py-2 text-xs;
+  }
+
+  /* Input: fundo branco fosco, borda suave, foco neutro */
   .input {
-    @apply w-full rounded-xl border border-violet-100/80 bg-white px-3.5 py-2.5 text-sm
+    @apply w-full rounded-lg border border-gray-200/80 bg-white px-3.5 py-2.5 text-sm
            shadow-sm placeholder:text-gray-400
            transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15;
   }
 
-  /* Card flutuante: cantos generosos, sombra em camadas, hover com elevação */
-  .card {
-    @apply rounded-2xl bg-white/90 p-4 shadow-[0_1px_2px_rgb(16_10_40/0.04),0_8px_24px_-8px_rgb(16_10_40/0.12)]
-           ring-1 ring-violet-100/60 backdrop-blur-sm
-           transition duration-200 hover:shadow-[0_4px_8px_rgb(16_10_40/0.05),0_16px_40px_-12px_rgb(16_10_40/0.18)];
+  /* Stepper de quantidade (controle) */
+  .stepper {
+    @apply flex h-11 w-11 items-center justify-center rounded-lg bg-white ring-1 ring-gray-200
+           transition hover:ring-primary/40;
   }
-}
 
-/* Headings com personalidade */
-h1, h2, h3 {
-  letter-spacing: -0.02em;
+  /* ===== SUPERFÍCIES (rounded-2xl) ===== */
+
+  /* Card flutuante: cantos generosos, sombra em camadas, hover com elevação.
+     radius via variável para linhas (list-row) poderem sobrescrever. */
+  .card {
+    @apply bg-white/90 p-4 shadow-[0_1px_2px_rgb(16_10_40/0.04),0_8px_24px_-8px_rgb(16_10_40/0.12)]
+           ring-1 ring-gray-200/60 backdrop-blur-sm
+           transition duration-200 hover:shadow-[0_4px_8px_rgb(16_10_40/0.05),0_16px_40px_-12px_rgb(16_10_40/0.18)];
+    --card-radius: 1rem;
+    border-radius: var(--card-radius, 1rem);
+  }
+
+  /* Card que É uma linha de lista: vira superfície de lista (hover +
+     ring discretos) em vez de card flutuante. Usa :where() para
+     zerar a especificidade do composto. */
+  :where(.card).list-row {
+    --card-radius: 0.75rem;
+    @apply ring-gray-100 hover:bg-gray-50 hover:shadow-none;
+  }
+
+  /* Mídia dentro do card (área da imagem do produto) */
+  .card-media {
+    @apply overflow-hidden p-2;
+  }
+
+  /* ===== TIPOGRAFIA (escala única, substitui 3 níveis soltos) ===== */
+  .page-title {
+    @apply text-2xl font-bold tracking-tight text-gray-800;
+  }
+  .page-sub {
+    @apply text-sm text-gray-500;
+  }
+  .section-title {
+    @apply text-lg font-bold text-gray-800;
+  }
+  .eyebrow {
+    @apply text-[11px] font-bold uppercase tracking-widest text-gray-500;
+  }
+  .card-title {
+    @apply text-sm font-bold text-gray-800;
+  }
+  .field-label {
+    @apply mb-1 block text-xs font-medium text-gray-600;
+  }
+  .meta {
+    @apply text-xs text-gray-500;
+  }
+  .micro {
+    @apply text-[11px] leading-tight text-gray-500;
+  }
+
+  /* ===== BADGES ===== */
+  /* CÍRCULO: contagem (carrinho, filtros) e avatar */
+  .badge-count {
+    @apply inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1
+           text-[11px] font-bold leading-none text-white;
+  }
+  .badge-tag {
+    @apply rounded-full bg-secondary/80 px-2.5 py-1 text-[10px] font-bold tracking-wide text-gray-100;
+  }
+  .badge-off {
+    @apply rounded-full bg-red-500 px-2.5 py-1 text-[10px] font-extrabold text-white;
+  }
+
+  /* ===== ESTADO VAZIO (substitui 3 desenhos diferentes) ===== */
+  .empty-state {
+    @apply flex flex-col items-center gap-2 py-14 text-center;
+  }
+  .empty-icon {
+    @apply h-8 w-8 text-gray-300;
+  }
+
+  /* ===== LINHA DE LISTA ===== */
+  .list-row {
+    @apply flex w-full items-center gap-3 rounded-xl bg-white p-2.5 text-left ring-1 ring-gray-100
+           transition hover:ring-primary/40;
+  }
+  .list-row-name {
+    @apply line-clamp-2 text-sm font-medium leading-snug text-gray-800;
+  }
 }
 
 /* Respeita o "notch" safe-area (iPhone) em barras fixas */

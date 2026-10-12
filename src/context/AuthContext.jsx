@@ -46,12 +46,15 @@ export function AuthProvider({ children }) {
   }
 
   async function signUp(email, password, fullName) {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { full_name: fullName }, emailRedirectTo: window.location.origin },
     })
-    return { error }
+    // session só vem quando a confirmação de e-mail está DESLIGADA no projeto.
+    // Com a confirmação ligada vem null — quem chama decide se avisa ou se
+    // deixa o usuário seguir como visitante (sem travar).
+    return { error, session: data?.session ?? null }
   }
 
   // NOTA: OTP via WhatsApp foi REMOVIDO — o envio de códigos por

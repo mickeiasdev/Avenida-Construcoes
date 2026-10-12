@@ -32,7 +32,7 @@ export default function Home() {
 
     let query = supabase
       .from('products')
-      .select('*, categories(name, slug)')
+      .select('*, categories!products_category_id_fkey(name, slug)')
       .eq('active', true)
       .order(
         sort === 'views' ? 'views' : (sort === 'price_asc' || sort === 'price_desc') ? 'price' : 'created_at',
@@ -50,6 +50,8 @@ export default function Home() {
       const list = data ?? []
       setProducts((prev) => (append ? [...prev, ...list] : list))
       setHasMore(list.length === PAGE_SIZE)
+    } else {
+      console.error('[vitrine] erro ao carregar produtos:', error?.message ?? error)
     }
     if (append) setLoadingMore(false); else setLoading(false)
   }, [activeCat, q, sort])

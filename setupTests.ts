@@ -1,2 +1,3 @@
 // Setup file for vitest
-// can extend globals or add custom matchers if needed
+// matchers do jest-dom (toBeInTheDocument, toBeDisabled, ...) no expect do vitest
+import '@testing-library/jest-dom/vitest'

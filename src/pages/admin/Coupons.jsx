@@ -200,7 +200,7 @@ export default function Coupons() {
               Cupom ativo (visível para uso imediato)
             </label>
 
-            <div className="mb-5 flex gap-2">
+            <div className="flex gap-2">
               <button
                 type="button"
                 className="flex-1 rounded-full bg-white py-2.5 text-sm font-bold text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-50"

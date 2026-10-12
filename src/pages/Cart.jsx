@@ -4,8 +4,10 @@ import { AlertCircle, ArrowLeft, ArrowRight, Banknote, Check, CreditCard, Loader
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { formatBRL } from '../lib/utils'
-import { CheckoutForm, profileToForm, missingFields, fieldLabel, formatAddress } from '../components/CheckoutForm'
+import { CheckoutForm } from '../components/CheckoutForm'
+import { profileToForm, missingFields, fieldLabel, formatAddress } from '../lib/checkout'
 import { GuestCheckoutModal } from '../components/GuestCheckoutModal'
+import { MpPixDisplay } from '../components/MpPixDisplay'
 
 const STEPS = [
   { n: 1, label: 'Sacola' },
@@ -20,7 +22,7 @@ const STEPS = [
 // CTA fixo no rodapé (acima da bottom nav no mobile), total sempre visível.
 export default function Cart() {
   const { user, profile } = useAuth()
-  const { items, count, total, updateQuantity, removeItem, checkout, coupon, applyCoupon, removeCoupon, discountValue } = useCart()
+  const { items, count, total, updateQuantity, removeItem, checkout, coupon, applyCoupon, removeCoupon, discountValue, getOrderPaymentStatus } = useCart()
   const navigate = useNavigate()
 
   const [step, setStep] = useState(1)
@@ -30,10 +32,11 @@ export default function Cart() {
   const [missing, setMissing] = useState(null)
   const [askGuest, setAskGuest] = useState(false)
   const [deliveryMethod, setDeliveryMethod] = useState('entrega') // 'entrega' | 'retirada'
-  const [paymentMethod, setPaymentMethod] = useState('pix')       // 'pix' | 'dinheiro' | 'cartao'
+  const [paymentMethod, setPaymentMethod] = useState('mercado_pago')       // 'mercado_pago' | 'cartao' | 'dinheiro'
   const [couponInput, setCouponInput] = useState('')
   const [couponMsg, setCouponMsg] = useState(null)
   const [doneOrder, setDoneOrder] = useState(null) // pedido concluído como visitante
+  const [mpPendingOrder, setMpPendingOrder] = useState(null) // { id, mpPix, total } do Pix MP
 
   useEffect(() => { setForm(profileToForm(profile)) }, [profile])
 
@@ -99,6 +102,30 @@ export default function Cart() {
       el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       setTimeout(() => el?.focus(), 350)
     }
+  }
+
+  if (mpPendingOrder && mpPendingOrder.mpPix) {
+    return (
+      <div className="mx-auto max-w-xl space-y-4">
+        <h1 className="page-title">Pague com Pix</h1>
+        <MpPixDisplay
+          mpPix={mpPendingOrder.mpPix}
+          orderId={mpPendingOrder.id}
+          total={mpPendingOrder.total}
+          getOrderPaymentStatus={getOrderPaymentStatus}
+          onApproved={() => navigate('/pedidos', { state: { justOrdered: true } })}
+        />
+        <div className="card space-y-2 text-sm text-gray-600">
+          <p className="font-medium text-gray-800">Pedido nº {String(mpPendingOrder.id).slice(0,8)}</p>
+          <p>Total: <b className="text-gray-800">{formatBRL(mpPendingOrder.total)}</b></p>
+          <p className="text-xs text-gray-500">Após o pagamento o status muda automaticamente para confirmado.</p>
+        </div>
+        <div className="flex gap-2">
+          <Link to="/pedidos" className="btn-primary flex-1 text-center">Ver meus pedidos</Link>
+          <Link to="/" className="flex-1 rounded-lg bg-white py-2.5 text-center text-sm font-bold text-primary ring-1 ring-primary/40">Continuar comprando</Link>
+        </div>
+      </div>
+    )
   }
 
   if (doneOrder) {
@@ -273,7 +300,7 @@ export default function Cart() {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">Pagamento</p>
             <div className="grid grid-cols-3 gap-2">
               {[
-                { id: 'pix', label: 'Pix', icon: QrCode },
+                { id: 'mercado_pago', label: 'Pix', icon: QrCode },
                 { id: 'dinheiro', label: 'Dinheiro', icon: Banknote },
                 { id: 'cartao', label: 'Cartão', icon: CreditCard },
               ].map((o) => (
@@ -292,7 +319,7 @@ export default function Cart() {
               ))}
             </div>
             <p className="mt-1.5 text-[11px] text-gray-400">
-              Pagamento combinado pelo WhatsApp: {paymentMethod === 'pix' ? 'a loja envia a chave depois do pedido' : paymentMethod === 'dinheiro' ? 'informe se precisa de troco' : 'maquininha na entrega/retirada'}.
+              {paymentMethod === 'mercado_pago' ? 'Pix instantâneo: QR Code + Copia e Cola (Mercado Pago).' : paymentMethod === 'cartao' ? 'Cartão: processado pelo Mercado Pago.' : 'Dinheiro: informe se precisa de troco.'}
             </p>
           </div>
 
@@ -377,7 +404,7 @@ export default function Cart() {
               <p>{form.phone}</p>
               {deliveryMethod === 'entrega' && <p className="leading-relaxed">{formatAddress(form)}</p>}
               <p className="pt-1 font-semibold text-gray-800">
-                Pagamento: {paymentMethod === 'pix' ? 'Pix' : paymentMethod === 'dinheiro' ? 'Dinheiro' : 'Cartão (na entrega/retirada)'}
+                Pagamento: {paymentMethod === 'mercado_pago' ? 'Pix (Mercado Pago)' : paymentMethod === 'cartao' ? 'Cartão (Mercado Pago)' : 'Dinheiro'}
               </p>
             </div>
             <button
@@ -411,7 +438,7 @@ export default function Cart() {
         ) : (
           <button type="button" className="btn-primary w-full" disabled={busy} onClick={handleCheckout}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
-            {busy ? 'Processando...' : 'Confirmar pedido via WhatsApp'}
+            {busy ? 'Processando...' : paymentMethod === 'mercado_pago' ? 'Gerar QR Pix (Copia e Cola)' : 'Confirmar pedido via WhatsApp'}
           </button>
         )}
       </div>

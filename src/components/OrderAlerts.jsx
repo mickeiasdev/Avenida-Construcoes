@@ -18,6 +18,10 @@ export function OrderAlerts() {
       .channel('admin-order-alerts')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
         const o = payload.new
+        // Venda registrada pelo próprio painel (PDV) e só de retirada no balcão:
+        // o admin acabou de fechar a venda, não faz sentido avisar ele mesmo.
+        // Pedidos do site (origin = 'site') continuam notificando normalmente.
+        if (o.origin === 'loja' && o.delivery_method === 'retirada') return
         setAlerts((prev) => [
           ...prev,
           { key: o.id + '-' + Date.now(), id: o.id, name: o.customer_name, total: o.total },
@@ -48,7 +52,7 @@ export function OrderAlerts() {
             </div>
             <button
               type="button"
-              className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"
+              className="rounded-lg p-1 text-gray-500 hover:bg-gray-100"
               onClick={() => dismiss(a.key)}
               aria-label="Fechar"
             >

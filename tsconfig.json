@@ -3,22 +3,22 @@
     "target": "ESNext",
     "useDefineForClassFields": true,
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
-    "allowJs": false,
+    // a fonte do projeto é .jsx: allowJs=true para o editor resolver os
+    // módulos; checkJs=false porque JSX de aplicação não é tipado (ainda)
+    "allowJs": true,
+    "checkJs": false,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
-    "moduleResolution": "Node",
+    "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["vite/client"]
+    "types": ["vite/client", "node", "vitest/globals"]
   },
-  "include": [
-    "src"
-  ],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src", "setupTests.ts", "vite.config.js", "vitest.config.ts"]
 }

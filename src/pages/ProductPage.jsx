@@ -3,18 +3,20 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Banknote, ChevronLeft, ChevronRight, CreditCard, Loader2, MessageCircle, Minus, Package, Plus, QrCode, Share2, ShoppingBag, ShoppingCart, X } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { useCart, effectivePrice } from '../context/CartContext'
-import { formatBRL } from '../lib/utils'
-import { CheckoutForm, profileToForm, missingFields, fieldLabel } from '../components/CheckoutForm'
+import { useCart } from '../context/CartContext'
+import { formatBRL, effectivePrice } from '../lib/utils'
+import { CheckoutForm } from '../components/CheckoutForm'
+import { profileToForm, missingFields, fieldLabel } from '../lib/checkout'
 import { FavoriteButton } from '../components/FavoriteButton'
 import { GuestCheckoutModal } from '../components/GuestCheckoutModal'
+import { MpPixDisplay } from '../components/MpPixDisplay'
 
 const FALLBACK_IMG = 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=800&q=80'
 
 export default function ProductPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { addItem, checkout } = useCart()
+  const { addItem, checkout, getOrderPaymentStatus } = useCart()
   const { user, profile } = useAuth()
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -35,8 +37,9 @@ export default function ProductPage() {
   const [buyBusy, setBuyBusy] = useState(false)
   const [buyError, setBuyError] = useState(null)
   const [askGuest, setAskGuest] = useState(false)
+  const [buyMpPending, setBuyMpPending] = useState(null)
   const [buyDelivery, setBuyDelivery] = useState('entrega')
-  const [buyPayment, setBuyPayment] = useState('pix')
+  const [buyPayment, setBuyPayment] = useState('mercado_pago')
 
   // carrega os dados direto do usuário; se não houver, o form fica vazio
   useEffect(() => { setBuyForm(profileToForm(profile)) }, [profile])
@@ -109,11 +112,12 @@ export default function ProductPage() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('products')
-        .select('*, categories(name)')
+        .select('*, categories!products_category_id_fkey(name)')
         .eq('id', id)
         .maybeSingle()
+      if (error) console.error('[produto] erro ao carregar:', error?.message ?? error)
       setProduct(data)
       setLoading(false)
       // métrica para o dashboard: produtos mais acessados
@@ -130,7 +134,7 @@ export default function ProductPage() {
       if (product.category_id) {
         const res = await supabase
           .from('products')
-          .select('*, categories(name)')
+          .select('*, categories!products_category_id_fkey(name)')
           .eq('active', true)
           .eq('category_id', product.category_id)
           .neq('id', product.id)
@@ -141,7 +145,7 @@ export default function ProductPage() {
         const have = new Set(data.map((d) => d.id))
         const res = await supabase
           .from('products')
-          .select('*, categories(name)')
+          .select('*, categories!products_category_id_fkey(name)')
           .eq('active', true)
           .neq('id', product.id)
           .order('views', { ascending: false })
@@ -311,7 +315,7 @@ export default function ProductPage() {
             {/* pagamento */}
             <div className="grid grid-cols-3 gap-2">
               {[
-                { id: 'pix', label: 'Pix', icon: QrCode },
+                { id: 'mercado_pago', label: 'Pix', icon: QrCode },
                 { id: 'dinheiro', label: 'Dinheiro', icon: Banknote },
                 { id: 'cartao', label: 'Cartão', icon: CreditCard },
               ].map((o) => (

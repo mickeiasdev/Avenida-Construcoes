@@ -81,16 +81,16 @@ export default function Dashboard() {
   }, [])
 
   if (loading || !metrics) {
-    return <div className="flex justify-center py-24"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+    return <div className="flex justify-center py-24"><Loader2 className="h-6 w-6 animate-spin text-gray-500" /></div>
   }
 
   const accent = settings.primary_color
 
   const CARDS = [
-    { label: 'Vendas (entregues)', value: formatBRL(metrics.totalSales), icon: TrendingUp, hint: metrics.deliveredCount + ' pedido(s) finalizado(s)' },
+    { label: 'Vendas (entregues)', value: formatBRL(metrics.totalSales), icon: TrendingUp, hint: `${metrics.deliveredCount} pedidos` },
     { label: 'Pedidos em andamento', value: String(metrics.inProgress), icon: Truck, hint: 'confirmados, separando ou em rota' },
-    { label: 'Clientes cadastrados', value: String(metrics.clientsCount), icon: Users, hint: "role = 'client'" },
     { label: 'Produtos ativos', value: String(metrics.activeProducts), icon: Package, hint: 'publicados na vitrine' },
+    { label: 'Clientes cadastrados', value: String(metrics.clientsCount), icon: Users },
   ]
 
   return (
@@ -107,9 +107,9 @@ export default function Dashboard() {
               <Icon className="h-5 w-5" />
             </span>
             <div className="min-w-0">
-              <p className="text-xs text-gray-400">{label}</p>
+              <p className="text-xs text-gray-500">{label}</p>
               <p className="truncate text-xl font-bold text-gray-800">{value}</p>
-              <p className="text-[11px] text-gray-400">{hint}</p>
+              <p className="text-[11px] text-gray-500">{hint}</p>
             </div>
           </div>
         ))}
@@ -165,17 +165,17 @@ export default function Dashboard() {
         </div>
 
         {recent.length === 0 ? (
-          <p className="py-8 text-center text-sm text-gray-400">Nenhum pedido ainda. Assim que um cliente finalizar uma compra ele aparece aqui (e um popup avisa na hora).</p>
+          <p className="py-8 text-center text-sm text-gray-500">Nenhum pedido ainda. Assim que um cliente finalizar uma compra ele aparece aqui (e um popup avisa na hora).</p>
         ) : (
           <div className="divide-y divide-gray-50">
             {recent.map((o) => (
               <div key={o.id} className="flex flex-wrap items-center gap-3 py-2.5 text-sm">
                 <span className="font-semibold text-gray-800">#{o.id.slice(0, 8)}</span>
                 <span className="min-w-0 flex-1 truncate text-gray-600">{o.customer_name || 'Cliente'}</span>
-                <span className={'rounded-full px-2.5 py-0.5 text-[11px] font-medium ' + (ORDER_CLS[o.status] ?? ORDER_CLS.pending)}>
+                <span className={'rounded-lg px-2.5 py-0.5 text-[11px] font-medium ' + (ORDER_CLS[o.status] ?? ORDER_CLS.pending)}>
                   {ORDER_LABELS[o.status] ?? o.status}
                 </span>
-                <span className="text-xs text-gray-400">{formatDateTime(o.created_at)}</span>
+                <span className="text-xs text-gray-500">{formatDateTime(o.created_at)}</span>
                 <span className="font-bold text-primary">{formatBRL(o.total)}</span>
               </div>
             ))}
@@ -189,7 +189,7 @@ export default function Dashboard() {
           <Package className="h-5 w-5 text-primary" /> Produtos mais vendidos
         </h2>
         {topSold.length === 0 ? (
-          <p className="py-6 text-center text-sm text-gray-400">
+          <p className="py-6 text-center text-sm text-gray-500">
             Nenhuma venda registrada ainda — o ranking aparece aqui conforme os pedidos forem feitos.
           </p>
         ) : (
@@ -200,7 +200,7 @@ export default function Dashboard() {
                   {idx + 1}
                 </span>
                 <span className="min-w-0 flex-1 truncate font-medium text-gray-800">{p.name}</span>
-                <span className="shrink-0 text-xs text-gray-400">{p.qty} un</span>
+                <span className="shrink-0 text-xs text-gray-500">{p.qty} un</span>
                 <span className="shrink-0 font-bold text-primary">{formatBRL(p.revenue)}</span>
               </div>
             ))}

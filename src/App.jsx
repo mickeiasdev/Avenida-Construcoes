@@ -32,6 +32,8 @@ const SettingsAdmin = lazy(() => import('./pages/admin/Settings'))
 const OrdersAdmin = lazy(() => import('./pages/admin/Orders'))
 const ClientsAdmin = lazy(() => import('./pages/admin/Clients'))
 const CouponsAdmin = lazy(() => import('./pages/admin/Coupons'))
+const PromotionsAdmin = lazy(() => import('./pages/admin/Promotions'))
+const NewOrderAdmin = lazy(() => import('./pages/admin/NewOrder'))
 
 export default function App() {
   return (
@@ -61,10 +63,12 @@ export default function App() {
               <Route path="/admin" element={<RequireAdmin><AdminLayout /></RequireAdmin>}>
                 <Route index element={<Dashboard />} />
                 <Route path="pedidos" element={<OrdersAdmin />} />
+                <Route path="nova-venda" element={<NewOrderAdmin />} />
                 <Route path="produtos" element={<ProductsAdmin />} />
                 <Route path="categorias" element={<CategoriesAdmin />} />
                 <Route path="clientes" element={<ClientsAdmin />} />
                 <Route path="cupons" element={<CouponsAdmin />} />
+                <Route path="promocoes" element={<PromotionsAdmin />} />
                 <Route path="configuracoes" element={<SettingsAdmin />} />
               </Route>
 

@@ -31,6 +31,8 @@ export default function PageTitle() {
         produtos: 'Produtos Admin',
         categorias: 'Categorias Admin',
         clientes: 'Clientes Admin',
+        cupons: 'Cupons Admin',
+  'nova-venda': 'Nova venda',
         configuracoes: 'Configurações Admin',
       }
       title = (adminTitles[second] || 'Painel Admin') + ' - ' + storeName
