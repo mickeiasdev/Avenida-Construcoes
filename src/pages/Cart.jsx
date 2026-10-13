@@ -485,7 +485,7 @@ export default function Cart() {
               <p>{form.phone}</p>
               {deliveryMethod === 'entrega' && <p className="leading-relaxed">{formatAddress(form)}</p>}
               <p className="pt-1 font-semibold text-gray-800">
-                Pagamento: {paymentMethod === 'mercado_pago' ? 'Pix (Mercado Pago)' : paymentMethod === 'cartao' ? 'Cartão na entrega/retirada' : 'Dinheiro'}
+                Pagamento: {paymentMethod === 'mercado_pago' ? 'Pix online (QR)' : paymentMethod === 'cartao' ? 'Cartão na entrega/retirada' : 'Dinheiro'}
               </p>
             </div>
             <button

@@ -16,7 +16,7 @@ export const FULFILLMENT_SHORT = { retirada: 'Retirada', entrega: 'Entrega' }
 
 export const PAYMENT_LABELS = {
   pix: 'Pix',
-  mercado_pago: 'Pix (Mercado Pago)',
+  mercado_pago: 'Pix online (QR)', // nome histórico do enum; o gateway ativo vive em src/lib/payments.js
   dinheiro: 'Dinheiro',
   cartao: 'Cartão na entrega/retirada',
 }

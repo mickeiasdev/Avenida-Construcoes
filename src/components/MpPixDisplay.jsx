@@ -100,14 +100,6 @@ export function MpPixDisplay({ mpPix, orderId, total, onApproved, getOrderPaymen
     }
   }
 
-  if (!mpPix?.qr_code) {
-    return (
-      <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-700 ring-1 ring-amber-200">
-        Pix não disponível no momento. Tente novamente ou escolha outra forma de pagamento.
-      </div>
-    )
-  }
-
   if (status === OK) {
     return (
       <div className={"flex flex-col items-center gap-3 rounded-2xl bg-green-50 p-6 text-center ring-1 ring-green-200 " + (compact ? '' : 'py-8')}>
@@ -116,6 +108,14 @@ export function MpPixDisplay({ mpPix, orderId, total, onApproved, getOrderPaymen
         </span>
         <p className="font-bold text-green-800">Pagamento aprovado!</p>
         <p className="text-sm text-green-700">Recebemos seu Pix de {formatBRL(total)}. Vamos preparar seu pedido.</p>
+      </div>
+    )
+  }
+
+  if (!mpPix?.qr_code) {
+    return (
+      <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-700 ring-1 ring-amber-200">
+        Pix não disponível no momento. Use "Verificar agora" em instantes — se a cobrança já foi paga, esta tela confirma sozinha.
       </div>
     )
   }

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { effectivePrice } from '../lib/utils'
 import { isMigrationMissing } from '../lib/storeOrder'
 import { readFunctionError } from '../lib/functionError'
+import { createPixOrder } from '../lib/payments'
 import { useAuth } from './AuthContext'
 
 const CartContext = createContext(null)
@@ -312,30 +313,32 @@ export function CartProvider({ children }) {
     const { data: store } = await supabase
       .from('store_settings').select('store_name, whatsapp').eq('id', 1).maybeSingle()
 
-    // Mercado Pago Orders API: se escolheu mercado_pago, cria a Order no MP (Pix QR + Copia e Cola)
+    // PIX ONLINE: se escolheu mercado_pago (= "Pix online gerado"), cria a
+    // cobrança no gateway ativo (src/lib/payments.js — hoje: AbacatePay).
     // O pedido já existe no banco com total autoritativo; a Edge Function lê e cria a cobrança.
     let mpPix = null
     let mpErrorDetail = null
     if (paymentMethod === 'mercado_pago') {
       try {
-        const { data: mpData, error: mpError } = await supabase.functions.invoke('create-mp-order', {
-          body: { orderId },
-        })
-        if (mpError) throw mpError
-        // mpData: { qr_code, qr_code_base64, mp_order_id, mp_payment_id, status }
+        // mpData: { qr_code, qr_code_base64, status, ... } — idempotente por pedido
+        const mpData = await createPixOrder(orderId)
         if (mpData?.qr_code) {
           mpPix = {
             qr_code: mpData.qr_code,               // Pix Copia e Cola
             qr_code_base64: mpData.qr_code_base64,  // Imagem QR
             ticket_url: mpData.ticket_url ?? null,
-            mp_order_id: mpData.mp_order_id ?? null,
+            mp_order_id: mpData.payment_ref ?? mpData.mp_order_id ?? null,
             mp_payment_id: mpData.mp_payment_id ?? null,
             status: mpData.status ?? 'pending',
           }
         } else {
-          console.warn('[checkout] create-mp-order sem qr_code:', mpData)
-          mpErrorDetail = 'O Mercado Pago criou a ordem, mas ainda não devolveu o QR Code (status: ' +
-            (mpData?.status ?? '?') + (mpData?.mp_status_detail ? ', detalhe: ' + mpData.mp_status_detail : '') + '). Use "Tentar novamente".'
+          console.warn('[checkout] gateway de Pix sem qr_code:', mpData)
+          if (mpData?.already_paid || mpData?.status === 'approved') {
+            // cobrança já paga (webhook chegou primeiro): trata como sucesso
+            mpPix = { qr_code: '', qr_code_base64: null, ticket_url: null, status: 'approved' }
+          }
+          mpErrorDetail = mpErrorDetail ?? (mpPix ? null : 'O gateway criou a ordem, mas ainda não devolveu o QR Code (status: ' +
+            (mpData?.status ?? '?') + '). Use "Tentar novamente".')
         }
       } catch (mpErr) {
         // Não quebra o pedido: o pedido já foi criado; apenas avisa.
@@ -426,9 +429,8 @@ export function CartProvider({ children }) {
   }, [])
 
   const checkMpOrderAgain = useCallback(async (orderId) => {
-    const { data, error } = await supabase.functions.invoke('create-mp-order', { body: { orderId } })
-    if (error) throw error
-    return data
+    // segue o gateway ativo (src/lib/payments.js); idempotente por pedido
+    return await createPixOrder(orderId)
   }, [])
 
   return (

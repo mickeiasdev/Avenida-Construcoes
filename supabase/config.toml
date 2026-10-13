@@ -12,3 +12,14 @@ verify_jwt = true
 # chamado pelo Mercado Pago, que NÃO envia Authorization.
 # A autenticidade é garantida pela assinatura x-signature (MP_WEBHOOK_SECRET).
 verify_jwt = false
+
+# ---------- AbacatePay (Pix online) ----------
+[functions.create-abacate-order]
+# chamada pelo navegador (usa a anon key / sessão do cliente): mantém a exigência de JWT
+verify_jwt = true
+
+[functions.webhook-abacatepay]
+# chamado pela AbacatePay, que NÃO envia Authorization.
+# A autenticidade é garantida pelo ?webhookSecret= na URL (ABACATE_WEBHOOK_SECRET)
+# + assinatura X-Webhook-Signature quando presente.
+verify_jwt = false

@@ -86,6 +86,7 @@ No `src/index.css`, importe o Tailwind e registre as cores dinâmicas:
 | [migration-12.sql](supabase/migration-12.sql) | `place_order` passa a respeitar o **preço promocional** (o valor gravado é o mesmo que o site mostra) |
 | [migration-13.sql](supabase/migration-13.sql) | **Pix via Mercado Pago**: `orders.mp_order_id`, `mp_payment_id`, `payment_status` e `payment_method = 'mercado_pago'` |
 | [migration-14.sql](supabase/migration-14.sql) | **Opcional** — agregações do painel no banco (`store_dashboard_stats` / `store_client_stats`). Sem ela o Dashboard soma no navegador, sujeito ao teto de **1000 linhas por consulta** do PostgREST |
+| [migration-15.sql](supabase/migration-15.sql) | Pix por **gateway genérico** (AbacatePay): `orders.payment_provider`, `payment_ref`, `payment_qr_code`, `payment_qr_base64` + índice para o webhook achar o pedido |
 
    > ⚠️ **A migration-8 é obrigatória para o checkout seguro.** Sem ela o app continua
    > funcionando, mas cai no caminho antigo (preço calculado no navegador) e registra
@@ -210,10 +211,45 @@ Visitante também finaliza (pedido `is_guest`) e recebe a confirmação na próp
 só quem está logado tem a página `/pedidos`. Sem WhatsApp configurado, o pedido é gravado
 e o app avisa (não abre um `wa.me` vazio).
 
-### Pix automático (Mercado Pago) — opcional
-Com a **migration-13** aplicada e as Edge Functions publicadas, o cliente escolhe **Pix** no
-checkout e recebe na hora o **QR Code + Copia e Cola**, sem sair do site. O pedido é criado
-antes (pela RPC `place_order`), então o valor cobrado é sempre o do servidor.
+### Pix automático (AbacatePay) — opcional, recomendado
+Com a **migration-13**, a **migration-15** aplicadas e as Edge Functions publicadas, o cliente
+escolhe **Pix** no checkout e recebe na hora o **QR Code + Copia e Cola**, sem sair do site.
+O pedido é criado antes (pela RPC `place_order`), então o valor cobrado é sempre o do servidor.
+
+O gateway ativo fica definido em [`src/lib/payments.js`](src/lib/payments.js) — hoje
+**AbacatePay**; para voltar ao Mercado Pago basta trocar uma constante (ver seção seguinte).
+
+```bash
+# 1) secrets (Dashboard → Integração → API) e o secret que VOCÊ definiu no webhook
+supabase secrets set ABACATE_API_KEY=abc_...
+supabase secrets set ABACATE_WEBHOOK_SECRET=...
+
+# 2) publicar as funções (o supabase/config.toml já define verify_jwt)
+supabase functions deploy create-abacate-order
+supabase functions deploy webhook-abacatepay
+```
+
+- **migration-15 obrigatória**: cria `orders.payment_provider/payment_ref/payment_qr_code/payment_qr_base64`
+  (o QR é guardado no pedido porque a AbacatePay não tem endpoint para re-ler o `brCode`);
+- `create-abacate-order` (`verify_jwt = true`): confere que o pedido é de quem está chamando
+  (dono, admin ou visitante com o orderId), cria o Pix pela **API v2** (`POST /transparents/create`,
+  valor em centavos lido do banco) e **nunca cria segunda cobrança** para pedido pago;
+- `webhook-abacatepay` (`verify_jwt = false`, obrigatório): a AbacatePay chama sem token do
+  Supabase. Autenticidade: `?webhookSecret=` comparado com `ABACATE_WEBHOOK_SECRET` +
+  assinatura `X-Webhook-Signature` quando presente; todo evento é reconfirmado com
+  `GET /transparents/check` antes de tocar no pedido. Eventos a marcar no webhook:
+  `transparent.completed`, `transparent.refunded`, `transparent.disputed`, `transparent.lost`;
+- **permissões da chave de API**: marque `TRANSPARENT:CREATE` e `TRANSPARENT:READ` ao criar
+  a chave no dashboard (sem elas a API responde 403);
+- o QR expira em 1h (`expiresIn: 3600`) — expirando, o botão do site cria uma cobrança nova
+  **para o mesmo pedido**;
+- o código do QR e o status aparecem em `/carrinho` e em `/pedidos` (**Ver QR Pix**), com
+  revalidação a cada 4s e botão **Verificar agora**. Pedido pago é confirmado pelo webhook
+  mesmo que o cliente feche a página.
+
+### Pix automático (Mercado Pago) — alternativa
+Com a **migration-13** aplicada, troque `PIX_FUNCTION` para `'create-mp-order'` em
+[`src/lib/payments.js`](src/lib/payments.js) e configure abaixo:
 
 ```bash
 # 1) secrets (Project Settings → API / Mercado Pago → Credenciais)
@@ -298,8 +334,10 @@ src/
     ├── Login.jsx / Profile.jsx / Orders.jsx / Cart.jsx
     ├── admin/  Dashboard · Pedidos · Nova venda · Produtos · Categorias · Clientes · Cupons · Promoções · Configurações
 supabase/functions/
-├── create-mp-order/index.ts        # cria a Order no Mercado Pago (valor lido do banco)
-└── webhook-mercadopago/index.ts    # confirma o pagamento (HMAC-SHA256)
+├── create-mp-order/index.ts        # Pix via Mercado Pago (Orders API)
+├── webhook-mercadopago/index.ts    # confirma o pagamento do MP (HMAC-SHA256)
+├── create-abacate-order/index.ts   # Pix via AbacatePay (checkout transparente)
+└── webhook-abacatepay/index.ts     # confirma o pagamento AbacatePay (secret na URL + HMAC)
 supabase/schema.sql               # tabelas + RLS + storage + realtime + seed
 vercel.json                       # SPA fallback para o deploy
 ```
@@ -340,6 +378,7 @@ vercel.json                       # SPA fallback para o deploy
 - [x] Rodar `supabase/migration-11.sql` + `migration-12.sql` (promoções e múltiplas categorias)
 - [x] Rodar `supabase/migration-13.sql` (Pix Mercado Pago) — só se for usar Pix
 - [x] Rodar `supabase/migration-14.sql` (opcional: agregações do painel no banco)
+- [x] Rodar `supabase/migration-15.sql` (colunas do gateway de Pix — só se for usar Pix online)
 - [x] Criar `admin@teste.com` e `cliente@teste.com` no Auth (auto-confirm)
 - [x] Rodar os UPDATEs para promover o admin
 - [x] Preencher `.env` com URL e anon key

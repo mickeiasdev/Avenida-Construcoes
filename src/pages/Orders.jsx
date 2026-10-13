@@ -8,6 +8,7 @@ import { PAYMENT_LABELS } from '../lib/storeOrder'
 import { MpPixDisplay } from '../components/MpPixDisplay'
 import { useCart } from '../context/CartContext'
 import { useModalA11y } from '../lib/useModalA11y'
+import { createPixOrder } from '../lib/payments'
 
 // HISTÓRICO DE PEDIDOS com a etapa atual do processo de entrega
 // (atualizada pelo admin em /admin/pedidos)
@@ -55,8 +56,7 @@ export default function Orders() {
     setMpLoading(true)
     setActionError(null)
     try {
-      const { data, error } = await supabase.functions.invoke('create-mp-order', { body: { orderId: o.id } })
-      if (error) throw error
+      const data = await createPixOrder(o.id)
       if (!data?.qr_code) throw new Error('QR Code não disponível para este pedido.')
       setMpModal({ order: o, mpPix: { qr_code: data.qr_code, qr_code_base64: data.qr_code_base64, ticket_url: data.ticket_url, status: data.status ?? 'pending' } })
     } catch (e) {
