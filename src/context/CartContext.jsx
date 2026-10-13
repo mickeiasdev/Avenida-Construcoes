@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { supabase } from '../lib/supabaseClient'
 import { effectivePrice } from '../lib/utils'
 import { isMigrationMissing } from '../lib/storeOrder'
+import { readFunctionError } from '../lib/functionError'
 import { useAuth } from './AuthContext'
 
 const CartContext = createContext(null)
@@ -209,9 +210,9 @@ export function CartProvider({ children }) {
     }
 
     const deliveryMethod = options.deliveryMethod === 'retirada' ? 'retirada' : 'entrega'
-    const paymentMethod = ['dinheiro', 'cartao', 'mercado_pago'].includes(options.paymentMethod)
-      ? options.paymentMethod : 'mercado_pago'
-      ? options.paymentMethod : 'mercado_pago'
+    const paymentMethod = ['pix', 'dinheiro', 'cartao', 'mercado_pago'].includes(options.paymentMethod)
+      ? options.paymentMethod
+      : 'mercado_pago'
 
     // 2) endereço em linhas legíveis (usado no pedido e na mensagem);
     //    retirada no balcão não grava endereço
@@ -314,6 +315,7 @@ export function CartProvider({ children }) {
     // Mercado Pago Orders API: se escolheu mercado_pago, cria a Order no MP (Pix QR + Copia e Cola)
     // O pedido já existe no banco com total autoritativo; a Edge Function lê e cria a cobrança.
     let mpPix = null
+    let mpErrorDetail = null
     if (paymentMethod === 'mercado_pago') {
       try {
         const { data: mpData, error: mpError } = await supabase.functions.invoke('create-mp-order', {
@@ -332,11 +334,14 @@ export function CartProvider({ children }) {
           }
         } else {
           console.warn('[checkout] create-mp-order sem qr_code:', mpData)
+          mpErrorDetail = 'O Mercado Pago criou a ordem, mas ainda não devolveu o QR Code (status: ' +
+            (mpData?.status ?? '?') + (mpData?.mp_status_detail ? ', detalhe: ' + mpData.mp_status_detail : '') + '). Use "Tentar novamente".'
         }
       } catch (mpErr) {
         // Não quebra o pedido: o pedido já foi criado; apenas avisa.
         // O admin pode reenviar o Pix ou o cliente pode tentar novamente.
         console.error('[checkout] Falha ao criar Pix no Mercado Pago:', mpErr?.message ?? mpErr)
+        mpErrorDetail = await readFunctionError(mpErr)
       }
     }
 
@@ -409,7 +414,7 @@ export function CartProvider({ children }) {
       return { id: orderId, subtotal, discount, total: totalValue, whatsappSent, mpPix, paymentMethod }
     }
     if (paymentMethod === 'mercado_pago') {
-      return { id: orderId, subtotal, discount, total: totalValue, whatsappSent, mpPix: null, paymentMethod, mpError: true }
+      return { id: orderId, subtotal, discount, total: totalValue, whatsappSent, mpPix: null, paymentMethod, mpError: true, mpErrorDetail }
     }
     return { id: orderId, subtotal, discount, total: totalValue, whatsappSent, paymentMethod }
   }

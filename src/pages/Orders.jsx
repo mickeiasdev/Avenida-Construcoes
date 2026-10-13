@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, Copy, Loader2, Package, QrCode, Truck, X } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Loader2, Package, QrCode, Truck, X } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { formatBRL, formatDateTime, ORDER_CLS, ORDER_LABELS, ORDER_PIPELINE, ORDER_SHORT } from '../lib/utils'
+import { PAYMENT_LABELS } from '../lib/storeOrder'
 import { MpPixDisplay } from '../components/MpPixDisplay'
 import { useCart } from '../context/CartContext'
+import { useModalA11y } from '../lib/useModalA11y'
 
 // HISTÓRICO DE PEDIDOS com a etapa atual do processo de entrega
 // (atualizada pelo admin em /admin/pedidos)
@@ -20,7 +22,8 @@ export default function Orders() {
   const [actionError, setActionError] = useState(null)
   const [mpModal, setMpModal] = useState(null) // { order, mpPix }
   const [mpLoading, setMpLoading] = useState(false)
-  const { getOrderPaymentStatus } = useCart()
+  const { getOrderPaymentStatus, checkMpOrderAgain, clearCart } = useCart()
+  useModalA11y(!!mpModal, () => setMpModal(null))
 
   useEffect(() => {
     const load = () => {
@@ -103,7 +106,9 @@ export default function Orders() {
         <div className="flex items-start gap-2.5 rounded-lg bg-green-50 p-3.5 text-sm text-green-700 ring-1 ring-green-200">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
           <span className="flex-1">
-            Pedido registrado com sucesso! Enviamos o resumo para o WhatsApp da loja — acompanhe cada etapa abaixo.
+            Pedido registrado com sucesso! Acompanhe cada etapa abaixo.
+            {orders?.some((o) => ['mercado_pago', 'pix'].includes(o.payment_method) && String(o.payment_status).toLowerCase() !== 'approved') &&
+              ' Há um Pix aguardando pagamento — use o botão "Ver QR Pix".'}
           </span>
           <button type="button" onClick={() => setSuccess(false)} aria-label="Fechar aviso" className="shrink-0 hover:text-green-900">
             <X className="h-4 w-4" />
@@ -170,7 +175,7 @@ export default function Orders() {
                         texto={o.delivery_method === 'retirada' ? 'Retirada no balcão' : o.delivery_address || ''}
                       />
                     {' · Pagamento: '}
-                    {(o.payment_method ?? 'pix') === 'pix' ? 'Pix' : o.payment_method === 'dinheiro' ? 'Dinheiro' : 'Cartão'}
+                    {PAYMENT_LABELS[o.payment_method ?? 'pix'] ?? (o.payment_method || 'Pix')}
                   </div>
                   <span className="font-bold text-primary">{formatBRL(o.total)}</span>
                 </div>
@@ -189,7 +194,7 @@ export default function Orders() {
                     Confirmar entrega
                   </button>
                 )}
-                {o.payment_method === 'mercado_pago' && String(o.payment_status).toLowerCase() !== 'approved' && o.status !== 'cancelled' && (
+                {['mercado_pago', 'pix'].includes(o.payment_method) && String(o.payment_status).toLowerCase() !== 'approved' && o.status !== 'cancelled' && (
                   <button
                     type="button"
                     className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-primary ring-1 ring-primary/30 hover:bg-primary/5"
@@ -208,12 +213,26 @@ export default function Orders() {
       {/* Modal Pix QR + Copia e Cola (Orders API) */}
       {mpModal && mpModal.mpPix && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setMpModal(null)}>
-          <div className="w-full max-w-md rounded-2xl bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={'Pix do pedido ' + String(mpModal.order.id).slice(0, 8)}
+          >
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-bold text-gray-800">Pix — pedido {String(mpModal.order.id).slice(0,8)}</h3>
               <button type="button" onClick={() => setMpModal(null)} className="rounded-lg p-1 hover:bg-gray-100"><X className="h-5 w-5" /></button>
             </div>
-            <MpPixDisplay mpPix={mpModal.mpPix} orderId={mpModal.order.id} total={mpModal.order.total} getOrderPaymentStatus={getOrderPaymentStatus} onApproved={() => { setMpModal(null); setActionError(null) }} />
+            <MpPixDisplay
+              mpPix={mpModal.mpPix}
+              orderId={mpModal.order.id}
+              total={mpModal.order.total}
+              getOrderPaymentStatus={getOrderPaymentStatus}
+              onRefresh={checkMpOrderAgain}
+              compact
+              onApproved={() => { clearCart(); setMpModal(null); setActionError(null) }}
+            />
           </div>
         </div>
       )}

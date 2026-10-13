@@ -14,7 +14,12 @@ export const FULFILLMENT_LABELS = {
 }
 export const FULFILLMENT_SHORT = { retirada: 'Retirada', entrega: 'Entrega' }
 
-export const PAYMENT_LABELS = { pix: 'Pix', dinheiro: 'Dinheiro', cartao: 'Cartão' }
+export const PAYMENT_LABELS = {
+  pix: 'Pix',
+  mercado_pago: 'Pix (Mercado Pago)',
+  dinheiro: 'Dinheiro',
+  cartao: 'Cartão na entrega/retirada',
+}
 
 export const DELIVERY_LABELS = {
   entrega: 'Entrega',

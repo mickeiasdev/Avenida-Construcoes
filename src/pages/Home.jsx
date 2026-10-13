@@ -23,35 +23,54 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
+  const [totalCount, setTotalCount] = useState(0)
+  const [loadError, setLoadError] = useState(null)
   const [sort, setSort] = useState('recent')
 
   const activeCat = categories.find((c) => c.slug === catSlug)
 
   const fetchProducts = useCallback(async (from, append) => {
     if (append) setLoadingMore(true); else setLoading(true)
+    setLoadError(null)
 
+    // A categoria é resolvida por product_categories (N:N criado na migration-11),
+    // o MESMO lugar onde a tela de promoções vincula o produto a "Ofertas".
+    // O embed !inner só entra quando há categoria ativa: sem ele, produto sem
+    // categoria continuaria aparecendo na vitrine "Todas".
     let query = supabase
       .from('products')
-      .select('*, categories!products_category_id_fkey(name, slug)')
+      .select(
+        '*, categories!products_category_id_fkey(name, slug)' +
+          (activeCat ? ', product_categories!inner(category_id)' : ''),
+        { count: 'exact' },
+      )
       .eq('active', true)
       .order(
         sort === 'views' ? 'views' : (sort === 'price_asc' || sort === 'price_desc') ? 'price' : 'created_at',
         { ascending: sort === 'price_asc' }
       )
 
-    if (activeCat) query = query.eq('category_id', activeCat.id)
+    if (activeCat) query = query.eq('product_categories.category_id', activeCat.id)
+    // "Ofertas" só lista promoção no ar (promo_until no futuro), como no preço
+    if (activeCat?.slug === 'ofertas') {
+      query = query.not('promo_price', 'is', null).gt('promo_until', new Date().toISOString())
+    }
     if (q) {
       const safe = q.replace(/[%(),]/g, '')
       if (safe) query = query.or('name.ilike.%' + safe + '%,description.ilike.%' + safe + '%')
     }
 
-    const { data, error } = await query.range(from, from + PAGE_SIZE - 1)
+    const { data, error, count } = await query.range(from, from + PAGE_SIZE - 1)
     if (!error) {
       const list = data ?? []
       setProducts((prev) => (append ? [...prev, ...list] : list))
-      setHasMore(list.length === PAGE_SIZE)
+      if (typeof count === 'number') setTotalCount(count)
+      // com o total exato não sobra um clique extra quando o total é múltiplo da página
+      setHasMore(typeof count === 'number' ? from + list.length < count : list.length === PAGE_SIZE)
     } else {
       console.error('[vitrine] erro ao carregar produtos:', error?.message ?? error)
+      setLoadError(error.message ?? 'Falha ao carregar os produtos.')
+      if (!append) { setProducts([]); setTotalCount(0); setHasMore(false) }
     }
     if (append) setLoadingMore(false); else setLoading(false)
   }, [activeCat, q, sort])
@@ -97,7 +116,7 @@ export default function Home() {
       {/* FILTROS POR CATEGORIA (todos os tamanhos de tela) */}
       <div>
         <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-gray-400">Explorar categorias</h2>
-        <div className="flex gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none]">
+        <div className="flex gap-2.5 overflow-x-auto py-1 [scrollbar-width:none]">
           <Chips active={!catSlug} onClick={() => selectCategory('')} label="Todas" />
           {categories.map((c) => (
             <Chips key={c.id} active={catSlug === c.slug} onClick={() => selectCategory(c.slug)} label={c.name} />
@@ -111,7 +130,7 @@ export default function Home() {
           {q && <span className="ml-2 text-sm font-normal text-gray-500">· busca: “{q}”</span>}
         </h3>
         <div className="flex items-center gap-2">
-          <span className="hidden text-xs text-gray-400 sm:inline">{products.length} produto(s)</span>
+          <span className="hidden text-xs text-gray-400 sm:inline">{totalCount} produto(s)</span>
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
@@ -129,6 +148,15 @@ export default function Home() {
       {loading ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
           {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+        </div>
+      ) : loadError ? (
+        // falha de rede/RLS NÃO é "nada encontrado": o lojista precisa saber a diferença
+        <div className="card flex flex-col items-center gap-2 py-16 text-center text-gray-500">
+          <p className="font-medium text-gray-700">Não foi possível carregar os produtos</p>
+          <p className="text-sm">{loadError}</p>
+          <button type="button" className="btn-soft mt-1" onClick={() => fetchProducts(0, false)}>
+            Tentar de novo
+          </button>
         </div>
       ) : products.length === 0 ? (
         <div className="card flex flex-col items-center gap-2 py-16 text-center text-gray-500">
@@ -178,7 +206,7 @@ function Chips({ active, onClick, label }) {
       className={'inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold ring-1 transition duration-200 active:scale-95 ' +
         (active
           ? 'bg-secondary text-white ring-secondary shadow-md'
-          : 'bg-white text-gray-600 ring-violet-100 hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md hover:ring-primary/30')}
+          : 'bg-white text-gray-600 ring-gray-200 hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md hover:ring-primary/30')}
     >
       {active && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
       {label}

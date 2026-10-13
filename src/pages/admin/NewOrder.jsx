@@ -83,7 +83,13 @@ export default function NewOrderAdmin() {
 
   function changeQty(productId, delta) {
     setItems((prev) => prev
-      .map((i) => (i.product_id === productId ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i))
+      .map((i) => {
+        if (i.product_id !== productId) return i
+        let next = Math.max(0, i.quantity + delta)
+        // sem estoque cadastrado (null) não há teto; com estoque, não vende além dele
+        if (delta > 0 && i.stock != null) next = Math.min(next, Number(i.stock))
+        return { ...i, quantity: next }
+      })
       .filter((i) => i.quantity > 0))
   }
 
@@ -242,7 +248,10 @@ export default function NewOrderAdmin() {
             <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
               {visible.map((p) => {
                 const inCart = qtyOf(p.id)
-                const semEstoque = Number(p.stock) <= 0
+                // stock null = produto SEM controle de estoque (o resto do app trata
+                // assim). Number(null) é 0, então a comparação antiga marcava tudo
+                // como "sem estoque" no PDV.
+                const semEstoque = p.stock != null && Number(p.stock) <= 0
                 return (
                   <button
                     key={p.id}

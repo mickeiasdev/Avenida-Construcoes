@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Banknote, ChevronLeft, ChevronRight, CreditCard, Loader2, MessageCircle, Minus, Package, Plus, QrCode, Share2, ShoppingBag, ShoppingCart, X } from 'lucide-react'
+import { ArrowLeft, Banknote, Check, ChevronLeft, ChevronRight, CreditCard, Loader2, MessageCircle, Minus, Package, Plus, QrCode, Share2, ShoppingBag, ShoppingCart, X } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
@@ -10,13 +10,15 @@ import { profileToForm, missingFields, fieldLabel } from '../lib/checkout'
 import { FavoriteButton } from '../components/FavoriteButton'
 import { GuestCheckoutModal } from '../components/GuestCheckoutModal'
 import { MpPixDisplay } from '../components/MpPixDisplay'
+import { useModalA11y } from '../lib/useModalA11y'
+import { readFunctionError } from '../lib/functionError'
 
 const FALLBACK_IMG = 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=800&q=80'
 
 export default function ProductPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { addItem, checkout, getOrderPaymentStatus } = useCart()
+  const { addItem, checkout, getOrderPaymentStatus, checkMpOrderAgain, clearCart } = useCart()
   const { user, profile } = useAuth()
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -37,7 +39,13 @@ export default function ProductPage() {
   const [buyBusy, setBuyBusy] = useState(false)
   const [buyError, setBuyError] = useState(null)
   const [askGuest, setAskGuest] = useState(false)
-  const [buyMpPending, setBuyMpPending] = useState(null)
+  const [buyMpPending, setBuyMpPending] = useState(null) // pedido com Pix aguardando pagamento
+  const [buyDone, setBuyDone] = useState(null)            // pedido concluído como visitante
+  const [buyRetry, setBuyRetry] = useState(null)          // pedido gravado SÓ faltando o Pix
+  // ESC/foco nos dois modais (o aviso de dados incompletos é o mais interno,
+  // então só um dos dois fica ativo por vez)
+  useModalA11y(buyOpen && !buyMissing, () => { setBuyOpen(false); setBuyMissing(null) })
+  useModalA11y(!!buyMissing, () => setBuyMissing(null))
   const [buyDelivery, setBuyDelivery] = useState('entrega')
   const [buyPayment, setBuyPayment] = useState('mercado_pago')
 
@@ -93,7 +101,7 @@ export default function ProductPage() {
     setBuyBusy(true)
     setBuyError(null)
     try {
-      await checkout(buyForm, [{
+      const order = await checkout(buyForm, [{
         product_id: product.id,
         name: product.name,
         price: effectivePrice(product),
@@ -101,7 +109,29 @@ export default function ProductPage() {
       }], { deliveryMethod: buyDelivery, paymentMethod: buyPayment })
       setBuyOpen(false)
       setBuyMissing(null)
-      navigate('/pedidos', { state: { justOrdered: true } })
+
+      // PIX: mostra o QR aqui (o retorno de checkout() era descartado antes)
+      if (order.mpPix) {
+        setBuyMpPending(order)
+        window.scrollTo({ top: 0 })
+        return
+      }
+      if (order.mpError) {
+        // Cai aqui quando o MP recusa a cobrança (ex.: conta sem Pix habilitado).
+        // NÃO mostra sucesso: guarda o pedido e oferece retentativa no MESMO pedido,
+        // para o clique seguinte não criar outro.
+        setBuyRetry(order)
+        setBuyError('Não conseguimos gerar o Pix agora. Tente gerar novamente abaixo (é o mesmo pedido, nada duplicou) ou fale com a loja.' + (order.mpErrorDetail ? ' [Motivo: ' + order.mpErrorDetail + ']' : ''))
+        return
+      }
+
+      // /pedidos é rota protegida: visitante confirma na própria tela
+      if (user) {
+        navigate('/pedidos', { state: { justOrdered: true } })
+      } else {
+        setBuyDone(order)
+        window.scrollTo({ top: 0 })
+      }
     } catch (e) {
       setBuyError(e.message)
     } finally {
@@ -176,6 +206,56 @@ export default function ProductPage() {
     )
   }
 
+  // ---------- PIX aguardando pagamento ----------
+  if (buyMpPending?.mpPix) {
+    return (
+      <div className="mx-auto max-w-xl space-y-4">
+        <h1 className="page-title">Finalizar pagamento</h1>
+        <MpPixDisplay
+          mpPix={buyMpPending.mpPix}
+          orderId={buyMpPending.id}
+          total={buyMpPending.total}
+          getOrderPaymentStatus={getOrderPaymentStatus}
+          onRefresh={checkMpOrderAgain}
+          onApproved={() => {
+            clearCart()
+            if (user) navigate('/pedidos', { state: { justOrdered: true } })
+            else { setBuyDone(buyMpPending); setBuyMpPending(null) }
+          }}
+        />
+        <Link to="/" className="block rounded-lg bg-white py-2.5 text-center text-sm font-bold text-primary ring-1 ring-primary/40">
+          Continuar comprando
+        </Link>
+      </div>
+    )
+  }
+
+  // ---------- Pedido de visitante concluído ----------
+  if (buyDone) {
+    return (
+      <div className="card mx-auto flex max-w-md flex-col items-center gap-3 py-16 text-center">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-green-600">
+          <Check className="h-7 w-7" />
+        </span>
+        <h1 className="text-xl font-extrabold tracking-tight text-gray-800">Pedido enviado!</h1>
+        <p className="text-sm text-gray-500">
+          Pedido nº <b className="text-gray-800">{String(buyDone.id).slice(0, 8)}</b> recebido.
+          {buyDone.whatsappSent
+            ? ' Abrimos o WhatsApp com o resumo — é só enviar para combinarmos a entrega.'
+            : buyDone.paymentMethod === 'mercado_pago'
+              ? ' O Pix não pôde ser gerado agora — a loja vai falar com você para combinar o pagamento.'
+              : ' A loja vai combinar com você o pagamento e a entrega.'}
+        </p>
+        <div className="mt-2 flex w-full flex-col gap-2 sm:flex-row">
+          <Link to="/" className="btn-primary flex-1 text-center">Continuar comprando</Link>
+          <Link to="/login" state={{ from: '/' }} className="flex-1 rounded-lg bg-white py-2.5 text-center text-sm font-bold text-primary ring-1 ring-primary/40">
+            Criar uma conta
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   const out = !product.active || product.stock === 0
   const stockLabel = product.stock == null
     ? 'Em estoque'
@@ -184,6 +264,53 @@ export default function ProductPage() {
 
   return (
     <div className="space-y-8">
+      {buyError && (
+        <div role="alert" className="flex flex-col gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">
+          <div className="flex items-start gap-2">
+            <span className="flex-1">{buyError}</span>
+            <button type="button" onClick={() => { setBuyError(null); setBuyRetry(null) }} aria-label="Fechar aviso" className="shrink-0 hover:text-red-900">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          {buyRetry && (
+            <button
+              type="button"
+              disabled={buyBusy}
+              onClick={async () => {
+                setBuyBusy(true)
+                setBuyError(null)
+                try {
+                  const data = await checkMpOrderAgain(buyRetry.id)
+                  if (data?.qr_code) {
+                    setBuyMpPending({
+                      ...buyRetry,
+                      mpPix: {
+                        qr_code: data.qr_code,
+                        qr_code_base64: data.qr_code_base64 ?? null,
+                        ticket_url: data.ticket_url ?? null,
+                        status: data.status ?? 'pending',
+                      },
+                    })
+                    setBuyRetry(null)
+                    window.scrollTo({ top: 0 })
+                  } else {
+                    setBuyError('Ainda não conseguimos gerar o Pix (status: ' + (data?.status ?? '?') + '). Fale com a loja ou tente mais tarde.')
+                  }
+                } catch (er) {
+                  const detalhe = await readFunctionError(er)
+                  setBuyError('Erro ao gerar o Pix. ' + (detalhe ? 'Motivo: ' + detalhe : 'Tente mais tarde.'))
+                } finally {
+                  setBuyBusy(false)
+                }
+              }}
+              className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-red-700 ring-1 ring-red-300 transition hover:bg-red-100 disabled:opacity-50"
+            >
+              {buyBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <QrCode className="h-3.5 w-3.5" />}
+              Tentar gerar o Pix novamente (o mesmo pedido nº {String(buyRetry.id).slice(0, 8)})
+            </button>
+          )}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <button type="button" onClick={() => navigate(-1)} className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-primary">
           <ArrowLeft className="h-4 w-4" /> Voltar
@@ -268,6 +395,9 @@ export default function ProductPage() {
           <div
             className="max-h-[92vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-t-2xl bg-white p-5 pb-7 shadow-2xl safe-bottom sm:rounded-2xl sm:p-5"
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Finalizar pedido"
           >
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-800">Finalizar pedido</h2>
@@ -358,7 +488,7 @@ export default function ProductPage() {
 
             <button type="button" className="btn-primary w-full" disabled={buyBusy} onClick={confirmBuyNow}>
               {buyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
-              {buyBusy ? 'Processando...' : 'Confirmar pedido via WhatsApp'}
+              {buyBusy ? 'Processando...' : buyPayment === 'mercado_pago' ? 'Gerar QR Pix (Copia e Cola)' : 'Confirmar pedido via WhatsApp'}
             </button>
 
             <p className="text-[11px] leading-relaxed text-gray-400">
@@ -376,7 +506,12 @@ export default function ProductPage() {
             {/* tentou finalizar sem preencher: bloqueado — pergunta se quer atualizar */}
             {buyMissing && (
               <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
-                <div className="toast-in w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-2xl">
+                <div
+                  className="toast-in w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-2xl"
+                  role="alertdialog"
+                  aria-modal="true"
+                  aria-label="Dados de entrega incompletos"
+                >
                   <div className="flex items-start gap-3">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
                       <MessageCircle className="h-5 w-5" />

@@ -14,6 +14,10 @@ export function downloadCsv(filename, rows) {
   const link = document.createElement('a')
   link.href = url
   link.download = filename
+  // o link precisa estar no DOM em alguns navegadores, e a URL só pode ser
+  // revogada depois que o download começou — senão o arquivo vem vazio
+  document.body.appendChild(link)
   link.click()
-  URL.revokeObjectURL(url)
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }

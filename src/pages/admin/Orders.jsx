@@ -6,9 +6,6 @@ import { supabase } from '../../lib/supabaseClient'
 import { DELIVERY_LABELS, fulfillmentTotals, PAYMENT_LABELS } from '../../lib/storeOrder'
 import { formatBRL, formatDateTime, ORDER_CLS, ORDER_LABELS, ORDER_NEXT_ACTION, ORDER_PIPELINE, ORDER_SHORT } from '../../lib/utils'
 
-// janela da limpeza em lote (30 dias) — calculada fora do render para não
-// quebrar a pureza do componente (Date.now() é impuro)
-const LIMITE_ANTIGOS = Date.now() - 30 * 24 * 3600 * 1000
 
 const TABS = [
   { k: 'all', l: 'Todos' },
@@ -27,13 +24,18 @@ export default function OrdersAdmin() {
   const [tab, setTab] = useState('all')
   const [busyId, setBusyId] = useState(null)
   const [search, setSearch] = useState('')
+  // Limite de 30 dias da limpeza em lote (atualizado a cada carga, para não
+  // ficar congelado numa aba aberta por horas).
+  const [limiteAntigos, setLimiteAntigos] = useState(() => Date.now() - 30 * 24 * 3600 * 1000)
 
   const load = useCallback(async () => {
     const { data } = await supabase
       .from('orders')
       .select('*, order_items(*)')
       .order('created_at', { ascending: false })
+      .limit(500)   // teto de segurança: o Realtime recarrega a lista a cada evento
     setOrders(data ?? [])
+    setLimiteAntigos(Date.now() - 30 * 24 * 3600 * 1000)
   }, [])
 
   useEffect(() => {
@@ -49,16 +51,18 @@ export default function OrdersAdmin() {
     const idx = ORDER_PIPELINE.indexOf(o.status)
     const next = ORDER_PIPELINE[Math.min(idx + 1, ORDER_PIPELINE.length - 1)]
     setBusyId(o.id)
-    await supabase.from('orders').update({ status: next }).eq('id', o.id)
+    const { error } = await supabase.from('orders').update({ status: next }).eq('id', o.id)
     setBusyId(null)
+    if (error) { window.alert('Não foi possível avançar o pedido: ' + error.message); return }
     load()
   }
 
   async function cancelOrder(o) {
     if (!window.confirm('Cancelar o pedido nº ' + o.id.slice(0, 8) + '?')) return
     setBusyId(o.id)
-    await supabase.from('orders').update({ status: 'cancelled' }).eq('id', o.id)
+    const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', o.id)
     setBusyId(null)
+    if (error) { window.alert('Não foi possível cancelar o pedido: ' + error.message); return }
     load()
   }
 
@@ -128,7 +132,7 @@ export default function OrdersAdmin() {
   const all = orders ?? []
   const cancelledCount = all.filter((o) => o.status === 'cancelled').length
   const oldDeliveredCount = all.filter(
-    (o) => o.status === 'delivered' && new Date(o.created_at).getTime() < LIMITE_ANTIGOS
+    (o) => o.status === 'delivered' && new Date(o.created_at).getTime() < limiteAntigos
   ).length
 
   return (

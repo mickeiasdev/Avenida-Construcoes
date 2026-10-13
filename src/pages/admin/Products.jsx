@@ -3,6 +3,7 @@ import { ImagePlus, Loader2, Pencil, Plus, Search, Trash2, X } from 'lucide-reac
 import { supabase, uploadImage } from '../../lib/supabaseClient'
 import { useStore } from '../../context/StoreContext'
 import { formatBRL } from '../../lib/utils'
+import { useModalA11y } from '../../lib/useModalA11y'
 
 const EMPTY = {
   id: null, name: '', description: '', price: '', discount_percent: 0,
@@ -18,6 +19,7 @@ export default function Products() {
   const [catFilter, setCatFilter] = useState('all')
   const [modal, setModal] = useState(null)
   const [busy, setBusy] = useState(false)
+  useModalA11y(!!modal, () => setModal(null))
   const [uploading, setUploading] = useState(false)
   const [msg, setMsg] = useState(null)
 
@@ -206,6 +208,9 @@ export default function Products() {
             onSubmit={handleSubmit}
             className="max-h-[92vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-t-2xl bg-white p-5 pb-7 shadow-xl safe-bottom sm:rounded-2xl sm:p-6"
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={modal?.id ? 'Editar produto' : 'Novo produto'}
           >
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-800">{modal.id ? 'Editar produto' : 'Novo produto'}</h2>
@@ -215,19 +220,19 @@ export default function Products() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Nome</label>
-              <input className="input" required value={modal.name} onChange={(e) => setModal({ ...modal, name: e.target.value })} />
+              <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_nome">Nome</label>
+              <input id="f_nome" className="input" required value={modal.name} onChange={(e) => setModal({ ...modal, name: e.target.value })} />
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Descrição</label>
-              <textarea className="input min-h-20" value={modal.description} onChange={(e) => setModal({ ...modal, description: e.target.value })} />
+              <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_descricao">Descrição</label>
+              <textarea id="f_descricao" className="input min-h-20" value={modal.description} onChange={(e) => setModal({ ...modal, description: e.target.value })} />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Preço (R$)</label>
-                <input className="input" type="number" step="0.01" min="0" required value={modal.price} onChange={(e) => setModal({ ...modal, price: e.target.value })} />
+                <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_preco_r">Preço (R$)</label>
+                <input id="f_preco_r" className="input" type="number" step="0.01" min="0" required value={modal.price} onChange={(e) => setModal({ ...modal, price: e.target.value })} />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Desconto % (opcional)</label>
@@ -261,8 +266,8 @@ export default function Products() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Categoria (opcional)</label>
-              <select className="input" value={modal.category_id} onChange={(e) => setModal({ ...modal, category_id: e.target.value })}>
+              <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_categoria_opcional">Categoria (opcional)</label>
+              <select id="f_categoria_opcional" className="input" value={modal.category_id} onChange={(e) => setModal({ ...modal, category_id: e.target.value })}>
                 <option value="">Sem categoria</option>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>

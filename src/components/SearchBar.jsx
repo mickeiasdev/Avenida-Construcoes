@@ -27,6 +27,7 @@ export function SearchBar({ value, onChange, placeholder, delay = 400 }) {
         value={internal}
         onChange={handleChange}
         placeholder={placeholder ?? 'Buscar produtos...'}
+        aria-label={placeholder ?? 'Buscar produtos'}
       />
     </div>
   )

@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ShoppingCart, User, LogOut, Package, Settings as SettingsIcon, Home as HomeIcon, Phone, MessageCircle, Menu, X, Heart } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { formatBusinessHoursText } from '../lib/utils'
+import { formatBusinessHoursText, waNumber } from '../lib/utils'
 import { useCart } from '../context/CartContext'
 import { useStore } from '../context/StoreContext'
 import { SearchBar } from '../components/SearchBar'
 import { AddToCartModal } from '../components/AddToCartModal'
+import { useModalA11y } from '../lib/useModalA11y'
 
 const NAV_THRESHOLD = 240
+const CURRENT_YEAR = new Date().getFullYear()
 
 export default function StoreLayout() {
   const { settings, categories } = useStore()
@@ -19,6 +21,10 @@ export default function StoreLayout() {
   const [searchParams] = useSearchParams()
   const [showNav, setShowNav] = useState(false)
   const [drawer, setDrawer] = useState(false)
+  useModalA11y(drawer, () => setDrawer(false))
+  // Loja nova (seed) começa com whatsapp vazio: sem número, o atalho
+  // não pode virar um link https://wa.me/ quebrado.
+  const zap = waNumber(settings.whatsapp)
 
   // A navegação de categorias do header só aparece quando o usuário
   // rola a página (quando os chips da Home já passaram).
@@ -49,7 +55,7 @@ export default function StoreLayout() {
               <img src={settings.logo_url} alt={settings.store_name} className="h-9 w-9 rounded-full object-cover" />
             ) : (
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary font-bold">
-                {settings.store_name.charAt(0)}
+                {(settings.store_name || '?').charAt(0)}
               </span>
             )}
             <span className="hidden max-w-44 truncate text-base font-bold tracking-tight sm:inline md:max-w-none md:text-lg">
@@ -122,7 +128,12 @@ export default function StoreLayout() {
       {drawer && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setDrawer(false)} />
-          <div className="toast-in absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col bg-secondary text-white shadow-2xl">
+          <div
+            className="toast-in absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col bg-secondary text-white shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu de navegação"
+          >
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
               <span className="truncate font-bold">{settings.store_name}</span>
               <button type="button" className="rounded-lg p-1 hover:bg-white/10" onClick={() => setDrawer(false)} aria-label="Fechar menu">
@@ -172,13 +183,15 @@ export default function StoreLayout() {
           <div>
             <p className="mb-2 font-bold text-white">Funcionamento</p>
             <p className="text-white/60">{formatBusinessHoursText(settings) || settings.business_hours}</p>
-            <a href={'https://wa.me/' + settings.whatsapp} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-white transition hover:text-primary">
-              <Phone className="h-4 w-4" /> {settings.whatsapp}
-            </a>
+            {zap && (
+              <a href={'https://wa.me/' + zap} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-white transition hover:text-primary">
+                <Phone className="h-4 w-4" /> {settings.whatsapp}
+              </a>
+            )}
           </div>
         </div>
         <div className="border-t border-white/10 py-4 pb-20 text-center text-xs text-white/50 md:pb-4">
-          © {new Date().getFullYear()} {settings.store_name} · Desenvolvido por{' '}
+          © {CURRENT_YEAR} {settings.store_name} · Desenvolvido por{' '}
           <a
             href="https://github.com/mickeiasdev"
             target="_blank"
@@ -191,15 +204,17 @@ export default function StoreLayout() {
       </footer>
 
       {/* WHATSAPP FLUTUANTE (acima da bottom nav no mobile) */}
-      <a
-        href={'https://wa.me/' + settings.whatsapp + '?text=' + encodeURIComponent('Olá! Vim pela loja e tenho uma dúvida.')}
-        target="_blank"
-        rel="noreferrer"
-        className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-green-500 text-white shadow-lg transition hover:scale-105 md:bottom-5 md:right-5"
-        aria-label="Falar no WhatsApp"
-      >
-        <MessageCircle className="h-6 w-6" />
-      </a>
+      {zap && (
+        <a
+          href={'https://wa.me/' + zap + '?text=' + encodeURIComponent('Olá! Vim pela loja e tenho uma dúvida.')}
+          target="_blank"
+          rel="noreferrer"
+          className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-green-500 text-white shadow-lg transition hover:scale-105 md:bottom-5 md:right-5"
+          aria-label="Falar no WhatsApp"
+        >
+          <MessageCircle className="h-6 w-6" />
+        </a>
+      )}
 
       {/* ================= BOTTOM NAV (mobile, estilo app) ================= */}
       <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_12px_rgba(0,0,0,0.04)] backdrop-blur-md md:hidden">

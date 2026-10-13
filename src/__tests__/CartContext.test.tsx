@@ -41,6 +41,13 @@ vi.mock('../lib/supabaseClient', () => {
     STORAGE_BUCKET: 'store',
     uploadImage: vi.fn(async () => 'https://exemplo/imagem.png'),
     supabase: {
+      functions: {
+        // create-mp-order: devolve o QR do Pix como a Edge Function real
+        invoke: vi.fn(async () => ({
+          data: { qr_code: '000201PIXTESTE', qr_code_base64: null, mp_order_id: 'mp-1', status: 'pending' },
+          error: null,
+        })),
+      },
       from: vi.fn((table: string) => builder(tableResults[table] ?? { data: null, error: null })),
       // o servidor recalcula o pedido: 25 - 5 = 20, ignorando o preço do cliente
       rpc: vi.fn(async () => ({
@@ -74,7 +81,16 @@ type CartApi = {
     form: Record<string, string>,
     directItems?: { product_id: string; name: string; price: number; quantity: number }[],
     options?: { deliveryMethod?: string; paymentMethod?: string },
-  ) => Promise<{ id: string; subtotal: number; discount: number; total: number; whatsappSent: boolean }>
+  ) => Promise<{
+    id: string
+    subtotal: number
+    discount: number
+    total: number
+    whatsappSent: boolean
+    paymentMethod: string
+    mpPix: { qr_code: string } | null
+    mpError?: boolean
+  }>
 }
 
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -165,6 +181,27 @@ describe('CartContext', () => {
       p_is_guest: false,
       p_delivery_method: 'retirada',
     }))
+
+    open.mockRestore()
+  })
+
+  it('usa Pix (Mercado Pago) quando nenhuma forma de pagamento é informada', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue({} as Window)
+    const { result } = renderCart()
+
+    let pedido: Awaited<ReturnType<typeof result.current.checkout>> | undefined
+    await act(async () => {
+      pedido = await result.current.checkout(
+        { full_name: 'Maria Silva', phone: '(11) 98888-7777' },
+        [{ product_id: 'p1', name: 'Cimento CP-II', price: 999, quantity: 1 }],
+      )
+    })
+
+    // o fallback do CartContext ('mercado_pago') precisa ser aplicado de verdade
+    expect(pedido?.paymentMethod).toBe('mercado_pago')
+    expect(pedido?.mpPix?.qr_code).toBe('000201PIXTESTE')
+    expect(pedido?.whatsappSent).toBe(false)
+    expect(window.open).not.toHaveBeenCalled()
 
     open.mockRestore()
   })

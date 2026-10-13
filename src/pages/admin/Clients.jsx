@@ -9,23 +9,39 @@ import { formatBRL, formatDate } from '../../lib/utils'
 export default function ClientsAdmin() {
   const [clients, setClients] = useState(null)
   const [filter, setFilter] = useState('')
+  const [loadError, setLoadError] = useState(null)
 
   useEffect(() => {
     async function load() {
-      const [profilesRes, ordersRes] = await Promise.all([
+      const [profilesRes, ordersRes, statsRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('role', 'client').order('created_at', { ascending: false }),
-        supabase.from('orders').select('user_id, total, status, created_at'),
+        supabase.from('orders').select('user_id, total, status, created_at').limit(1000),
+        // agregação por cliente no banco (migration-14); se faltar, calcula aqui
+        supabase.rpc('store_client_stats'),
       ])
 
+      if (profilesRes.error) setLoadError(profilesRes.error.message)
+
       const stats = {}
-      ;(ordersRes.data ?? []).forEach((o) => {
-        const s = stats[o.user_id] ?? { count: 0, open: 0, spent: 0, last: null }
-        s.count += 1
-        if (o.status === 'delivered') s.spent += Number(o.total)
-        if (!['delivered', 'cancelled'].includes(o.status)) s.open += 1
-        if (!s.last || o.created_at > s.last) s.last = o.created_at
-        stats[o.user_id] = s
-      })
+      if (!statsRes.error && statsRes.data) {
+        statsRes.data.forEach((s) => {
+          stats[s.user_id] = {
+            count: Number(s.orders_count ?? 0),
+            open: Number(s.open_count ?? 0),
+            spent: Number(s.spent ?? 0),
+            last: s.last_order ?? null,
+          }
+        })
+      } else {
+        ;(ordersRes.data ?? []).forEach((o) => {
+          const s = stats[o.user_id] ?? { count: 0, open: 0, spent: 0, last: null }
+          s.count += 1
+          if (o.status === 'delivered') s.spent += Number(o.total)
+          if (!['delivered', 'cancelled'].includes(o.status)) s.open += 1
+          if (!s.last || o.created_at > s.last) s.last = o.created_at
+          stats[o.user_id] = s
+        })
+      }
 
       setClients((profilesRes.data ?? []).map((c) => ({
         ...c,
@@ -57,6 +73,11 @@ export default function ClientsAdmin() {
 
   return (
     <div className="space-y-6">
+      {loadError && (
+        <div role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">
+          Não foi possível carregar os clientes: {loadError}
+        </div>
+      )}
       <div>
         <h1 className="text-2xl font-bold text-gray-800">Clientes</h1>
         <p className="text-sm text-gray-500">{clients?.length ?? '...'} cadastrados na loja</p>

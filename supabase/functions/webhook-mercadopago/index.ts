@@ -2,7 +2,11 @@
 // Webhook do Mercado Pago para Orders API (topic=order)
 // URL para cadastrar no painel MP: https://SEU-PROJETO.supabase.co/functions/v1/webhook-mercadopago
 // Requer secret: MP_ACCESS_TOKEN
-// Opcional: MP_WEBHOOK_SECRET para validar assinatura (x-signature)
+// Opcional (recomendado): MP_WEBHOOK_SECRET para validar a assinatura x-signature
+//
+// IMPORTANTE: esta função precisa ser publicada com verify_jwt = false
+// (ver supabase/config.toml) porque o Mercado Pago não envia Authorization.
+// A autenticidade vem da assinatura x-signature.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 
@@ -17,6 +21,36 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
+}
+
+// Compara em tempo constante (evita vazar o hash por diferença de timing)
+function safeEqual(a: string, b: string) {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
+// Assinatura do MP: header "x-signature: ts=<ts>,v1=<hmac>"
+// manifesto = "id:<data.id>;request-id:<x-request-id>;ts:<ts>;"
+async function verifySignature(req: Request, dataId: string, secret: string) {
+  const raw = req.headers.get('x-signature') ?? ''
+  const requestId = req.headers.get('x-request-id') ?? ''
+  const parts: Record<string, string> = {}
+  for (const piece of raw.split(',')) {
+    const [k, v] = piece.split('=')
+    if (k && v) parts[k.trim()] = v.trim()
+  }
+  if (!parts.ts || !parts.v1) return false
+
+  const manifest = `id:${dataId};request-id:${requestId};ts:${parts.ts};`
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  )
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(manifest))
+  const hex = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('')
+  return safeEqual(hex, parts.v1)
 }
 
 Deno.serve(async (req) => {
@@ -45,6 +79,20 @@ Deno.serve(async (req) => {
     return m ? m[1] : ''
   })()
   const orderIdToFetch = mpOrderId || idFromResource
+
+  // ---- Assinatura: obrigatória quando MP_WEBHOOK_SECRET está configurado ----
+  const WEBHOOK_SECRET = Deno.env.get('MP_WEBHOOK_SECRET')
+  if (WEBHOOK_SECRET) {
+    const dataId = String(body.data?.id ?? body.id ?? idFromResource ?? '')
+    const ok = await verifySignature(req, dataId, WEBHOOK_SECRET)
+    if (!ok) {
+      console.warn('[webhook] assinatura inválida — payload descartado')
+      return json({ error: 'Assinatura inválida' }, 401)
+    }
+  } else {
+    console.warn('[webhook] MP_WEBHOOK_SECRET não configurado: respondendo sem validar a assinatura. ' +
+      'Configure o secret em Edge Functions > Secrets.')
+  }
 
   if (!orderIdToFetch) {
     console.warn('[webhook] payload sem id', JSON.stringify(body).slice(0, 1000))

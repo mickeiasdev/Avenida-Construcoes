@@ -16,38 +16,60 @@ export default function Dashboard() {
   const [topProducts, setTopProducts] = useState([])
   const [salesByDay, setSalesByDay] = useState([])
   const [topSold, setTopSold] = useState([])
+  const [loadError, setLoadError] = useState(null)
 
   useEffect(() => {
     async function load() {
       setLoading(true)
 
-      const [ordersRes, clientsRes, productsRes, topRes, itemsRes] = await Promise.all([
-        supabase.from('orders').select('id, total, status, created_at, customer_name'),
+      const [ordersRes, clientsRes, productsRes, topRes, itemsRes, statsRes] = await Promise.all([
+        // order() é indispensável aqui: sem ele, "Pedidos recentes" exibia linhas
+        // em ordem indefinida (na prática, os pedidos mais antigos)
+        supabase.from('orders').select('id, total, status, created_at, customer_name')
+          .order('created_at', { ascending: false }).limit(200),
         supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'client'),
         supabase.from('products').select('id', { count: 'exact', head: true }).eq('active', true),
         supabase.from('products').select('name, views').order('views', { ascending: false }).limit(8),
-        supabase.from('order_items').select('product_name, quantity, unit_price'),
+        supabase.from('order_items').select('product_name, quantity, unit_price').limit(1000),
+        // agregação no banco (migration-14). Sem ela o cálculo local vale, mas fica
+        // sujeito ao teto de 1000 linhas e aos agregados desabilitados do PostgREST.
+        supabase.rpc('store_dashboard_stats'),
       ])
 
-      // Ranking de mais vendidos: agregação por nome do produto
-      const soldMap = {}
-      ;(itemsRes.data ?? []).forEach((it) => {
-        const s = soldMap[it.product_name] ?? { qty: 0, revenue: 0 }
-        s.qty += it.quantity
-        s.revenue += Number(it.unit_price) * it.quantity
-        soldMap[it.product_name] = s
-      })
-      setTopSold(
-        Object.entries(soldMap)
-          .map(([name, s]) => ({ name, ...s }))
-          .sort((a, b) => b.qty - a.qty)
-          .slice(0, 5)
-      )
+      // falha de rede não pode virar R$ 0,00 silencioso
+      const failed = [ordersRes, clientsRes, productsRes, topRes, itemsRes].find((r) => r.error)
+      setLoadError(failed ? (failed.error?.message ?? 'Falha ao carregar os dados do painel.') : null)
+
+      const stats = (!statsRes?.error && statsRes?.data) ? statsRes.data : null
+
+      // Ranking de mais vendidos: o banco manda quando a migration-14 está aplicada
+      if (stats?.top_sold?.length) {
+        setTopSold(stats.top_sold.map((s) => ({ name: s.name, qty: Number(s.qty), revenue: Number(s.revenue) })))
+      } else {
+        const soldMap = {}
+        ;(itemsRes.data ?? []).forEach((it) => {
+          const s = soldMap[it.product_name] ?? { qty: 0, revenue: 0 }
+          s.qty += it.quantity
+          s.revenue += Number(it.unit_price) * it.quantity
+          soldMap[it.product_name] = s
+        })
+        setTopSold(
+          Object.entries(soldMap)
+            .map(([name, s]) => ({ name, ...s }))
+            .sort((a, b) => b.qty - a.qty)
+            .slice(0, 5)
+        )
+      }
 
       const orders = ordersRes.data ?? []
       const delivered = orders.filter((o) => o.status === 'delivered')
-      const inProgress = orders.filter((o) => !['delivered', 'cancelled'].includes(o.status)).length
-      const totalSales = delivered.reduce((sum, o) => sum + Number(o.total), 0)
+      const totalSales = stats?.sales_total != null
+        ? Number(stats.sales_total)
+        : delivered.reduce((sum, o) => sum + Number(o.total), 0)
+      const deliveredCount = stats?.delivered_count != null ? Number(stats.delivered_count) : delivered.length
+      const inProgress = stats?.in_progress_count != null
+        ? Number(stats.in_progress_count)
+        : orders.filter((o) => !['delivered', 'cancelled'].includes(o.status)).length
 
       // Série dos últimos 7 dias — apenas vendas finalizadas
       const days = []
@@ -56,22 +78,29 @@ export default function Dashboard() {
         d.setDate(d.getDate() - i)
         days.push({ day: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), vendas: 0 })
       }
-      delivered.forEach((o) => {
-        const label = new Date(o.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-        const slot = days.find((x) => x.day === label)
-        if (slot) slot.vendas += Number(o.total)
-      })
+      if (stats?.by_day?.length) {
+        stats.by_day.forEach((b) => {
+          const slot = days.find((x) => x.day === b.day)
+          if (slot) slot.vendas += Number(b.total)
+        })
+      } else {
+        delivered.forEach((o) => {
+          const label = new Date(o.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+          const slot = days.find((x) => x.day === label)
+          if (slot) slot.vendas += Number(o.total)
+        })
+      }
 
       setMetrics({
         totalSales,
-        deliveredCount: delivered.length,
+        deliveredCount,
         inProgress,
         clientsCount: clientsRes.count ?? 0,
         activeProducts: productsRes.count ?? 0,
       })
       setRecent(orders.slice(0, 8))
       setTopProducts((topRes.data ?? []).map((p) => ({
-        name: p.name.length > 18 ? p.name.slice(0, 16) + '...' : p.name,
+        name: (p.name || '').length > 18 ? (p.name || '').slice(0, 16) + '...' : (p.name || ''),
         acessos: p.views,
       })))
       setSalesByDay(days)
@@ -99,6 +128,12 @@ export default function Dashboard() {
         <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
         <p className="text-sm text-gray-500">Visão geral da {settings.store_name} · vendas contabilizam só pedidos entregues</p>
       </div>
+
+      {loadError && (
+        <div role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">
+          Não foi possível carregar todos os números: {loadError}
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {CARDS.map(({ label, value, icon: Icon, hint }) => (

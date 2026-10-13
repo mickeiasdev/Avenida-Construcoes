@@ -129,8 +129,9 @@ export default function Profile() {
       <form onSubmit={handleSave} className="card grid gap-4 sm:grid-cols-2">
         {FIELDS.map(([key, label, type, cls]) => (
           <div key={key} className={cls}>
-            <label className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
+            <label htmlFor={'f_' + key} className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
             <input
+              id={'f_' + key}
               className={'input ' + (key === 'state' ? 'uppercase ' : '')}
               type={type}
               inputMode={key === 'phone' ? 'tel' : key === 'zip' ? 'numeric' : undefined}

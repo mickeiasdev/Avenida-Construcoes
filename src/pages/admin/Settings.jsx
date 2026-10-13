@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { CheckCircle2, AlertCircle, Clock, ImagePlus, Loader2, Save } from 'lucide-react'
 import { useStore } from '../../context/StoreContext'
 import { uploadImage } from '../../lib/supabaseClient'
@@ -13,7 +13,12 @@ export default function Settings() {
   const [uploading, setUploading] = useState('')
   const [msg, setMsg] = useState(null)
 
+  // O StoreContext escuta Realtime de store_settings: sem esta trava, uma
+  // alteração vinda de outro dispositivo apagava o que estava sendo digitado.
+  const dirtyRef = useRef(false)
+
   useEffect(() => {
+    if (dirtyRef.current) return
     setForm({
       store_name: settings.store_name ?? '',
       about: settings.about ?? '',
@@ -37,7 +42,10 @@ export default function Settings() {
 
   if (!form) return null
 
-  function set(k, v) { setForm((f) => ({ ...f, [k]: v })) }
+  function set(k, v) {
+    dirtyRef.current = true
+    setForm((f) => ({ ...f, [k]: v }))
+  }
 
   async function handleUpload(e, key) {
     const file = e.target.files?.[0]
@@ -66,6 +74,7 @@ export default function Settings() {
     // Grava no banco no formato esperado pelo app: '55' + DDD + número, só dígitos.
     const payload = { ...form, whatsapp: waNumber(form.whatsapp), business_hours: formatBusinessHoursText(form) }
     const { error } = await updateSettings(payload)
+    if (!error) dirtyRef.current = false
     setMsg(error
       ? { type: 'err', text: 'Erro: ' + error.message }
       : { type: 'ok', text: 'Configurações salvas! A vitrine reflete as mudanças em tempo real (Realtime).' })
@@ -83,12 +92,12 @@ export default function Settings() {
       <section className="card space-y-4">
         <h2 className="font-bold text-gray-800">Identidade da loja</h2>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Nome da loja</label>
-          <input className="input" required value={form.store_name} onChange={(e) => set('store_name', e.target.value)} />
+          <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_nome_da_loja">Nome da loja</label>
+          <input id="f_nome_da_loja" className="input" required value={form.store_name} onChange={(e) => set('store_name', e.target.value)} />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Slogan / descrição</label>
-          <input className="input" value={form.about} onChange={(e) => set('about', e.target.value)} />
+          <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_slogan_descricao">Slogan / descrição</label>
+          <input id="f_slogan_descricao" className="input" value={form.about} onChange={(e) => set('about', e.target.value)} />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <UploadBox
@@ -126,12 +135,12 @@ export default function Settings() {
       <section className="card space-y-4">
         <h2 className="font-bold text-gray-800">Contato, endereço e horários</h2>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">WhatsApp de destino dos pedidos (DDD + número)</label>
-          <input className="input" required placeholder="(11) 99999-9999" value={form.whatsapp} onChange={(e) => set('whatsapp', maskPhone(e.target.value))} />
+          <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_whatsapp_de_destino_dos_">WhatsApp de destino dos pedidos (DDD + número)</label>
+          <input id="f_whatsapp_de_destino_dos_" className="input" required placeholder="(11) 99999-9999" value={form.whatsapp} onChange={(e) => set('whatsapp', maskPhone(e.target.value))} />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Endereço</label>
-          <input className="input" value={form.address} onChange={(e) => set('address', e.target.value)} />
+          <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_endereco">Endereço</label>
+          <input id="f_endereco" className="input" value={form.address} onChange={(e) => set('address', e.target.value)} />
         </div>
 
         {/* HORÁRIOS ESTRUTURADOS — a vitrine mostra "Aberto agora" de verdade */}
@@ -177,10 +186,9 @@ export default function Settings() {
             O banner da loja mostra "Aberto agora" / "Fechado — abre às Xh" automaticamente com base nesses horários.
           </p>
         </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Horário de funcionamento</label>
-          <input className="input" value={form.business_hours} onChange={(e) => set('business_hours', e.target.value)} />
-        </div>
+        <p className="text-xs text-gray-500">
+          O texto exibido no rodapé da vitrine é gerado automaticamente a partir dos horários acima.
+        </p>
       </section>
 
       {msg && (
@@ -217,9 +225,12 @@ function ScheduleRow({ label, open, close, onOpen, onClose }) {
 
 function ColorPicker({ label, value, onChange }) {
   const safe = HEX.test(value) ? value : '#000000'
+  // useId: o componente aparece duas vezes (primária e secundária) e ids
+  // repetidos atrapalhariam justamente quem lê a tela
+  const id = useId()
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
+      <label htmlFor={id} className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
       <div className="flex items-center gap-2">
         <input
           type="color"
@@ -228,6 +239,7 @@ function ColorPicker({ label, value, onChange }) {
           onChange={(e) => onChange(e.target.value)}
         />
         <input
+          id={id}
           className="input font-mono uppercase"
           value={value}
           onChange={(e) => onChange(e.target.value)}

@@ -20,6 +20,7 @@ export default function Favorites() {
       const { data } = await supabase
         .from('products')
         .select('*, categories!products_category_id_fkey(name)')
+        .eq('active', true)          // produto desativado não aparece nem nos favoritos
         .in('id', ids)
       setProducts(data ?? [])
     }

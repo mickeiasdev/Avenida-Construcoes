@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, Pencil, Plus, TicketPercent, ToggleLeft, ToggleRight, Trash2, X } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { formatBRL, formatDate } from '../../lib/utils'
+import { useModalA11y } from '../../lib/useModalA11y'
 
 const EMPTY = { id: null, code: '', kind: 'percent', value: '', min_total: 0, active: true }
 
@@ -11,6 +12,7 @@ export default function Coupons() {
   const [rows, setRows] = useState(null)
   const [modal, setModal] = useState(null)
   const [busy, setBusy] = useState(false)
+  useModalA11y(!!modal, () => setModal(null))
   const [msg, setMsg] = useState(null)
 
   const load = useCallback(async () => {
@@ -43,14 +45,28 @@ export default function Coupons() {
     setBusy(false)
   }
 
+  // guarda contra dois cliques rápidos invertendo a ordem dos updates
+  const inFlight = useRef(false)
+
   async function toggleActive(c) {
-    await supabase.from('coupons').update({ active: !c.active }).eq('id', c.id)
-    load()
+    if (inFlight.current) return
+    inFlight.current = true
+    setMsg(null)
+    const { error } = await supabase.from('coupons').update({ active: !c.active }).eq('id', c.id)
+    if (error) setMsg({ type: 'err', text: 'Não foi possível alterar o cupom: ' + error.message })
+    else await load()
+    inFlight.current = false
   }
+
   async function handleDelete(id) {
     if (!window.confirm('Excluir este cupom?')) return
-    await supabase.from('coupons').delete().eq('id', id)
-    load()
+    if (inFlight.current) return
+    inFlight.current = true
+    setMsg(null)
+    const { error } = await supabase.from('coupons').delete().eq('id', id)
+    if (error) setMsg({ type: 'err', text: 'Não foi possível excluir: ' + error.message })
+    else await load()
+    inFlight.current = false
   }
 
   return (
@@ -142,6 +158,9 @@ export default function Coupons() {
             onSubmit={handleSubmit}
             onClick={(e) => e.stopPropagation()}
             className="toast-in flex w-full max-w-md flex-col space-y-4 rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label={modal?.id ? 'Editar cupom' : 'Novo cupom'}
           >
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-800">{modal.id ? 'Editar cupom' : 'Novo cupom'}</h2>
@@ -184,8 +203,8 @@ export default function Coupons() {
                   onChange={(e) => setModal({ ...modal, value: e.target.value })} />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Compra mínima (R$)</label>
-                <input className="input" type="number" min="0" step="0.01" value={modal.min_total}
+                <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_compra_minima_r">Compra mínima (R$)</label>
+                <input id="f_compra_minima_r" className="input" type="number" min="0" step="0.01" value={modal.min_total}
                   onChange={(e) => setModal({ ...modal, min_total: e.target.value })} placeholder="0" />
               </div>
             </div>

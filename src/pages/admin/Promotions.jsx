@@ -3,6 +3,7 @@ import { Ban, CalendarClock, Loader2, Plus, Search, TicketPercent, X } from 'luc
 import { supabase } from '../../lib/supabaseClient'
 import { useStore } from '../../context/StoreContext'
 import { formatBRL, formatDateTime } from '../../lib/utils'
+import { useModalA11y } from '../../lib/useModalA11y'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -34,6 +35,7 @@ export default function Promotions() {
   const [products, setProducts] = useState(null) // catálogo para o select
   const [promos, setPromos] = useState(null)     // produtos com promoção
   const [form, setForm] = useState(null)         // null = formulário fechado
+  useModalA11y(!!form, () => setForm(null))
   const [busy, setBusy] = useState(false)
   const [busyId, setBusyId] = useState(null)
   const [query, setQuery] = useState('')
@@ -132,8 +134,9 @@ export default function Promotions() {
     setBusy(false)
   }
 
-  // Encerrar = limpar promo_price/promo_until; o vínculo com Ofertas pode ficar,
-  // pois o item só aparece lá com promoção ativa.
+  // Encerrar = limpar promo_price/promo_until E o vínculo com Ofertas
+  // (a vitrine mostra Ofertas a partir de product_categories — ver Home.jsx,
+  // então deixar o vínculo sujo faria o item continuar anunciado lá).
   async function endPromo(product) {
     setBusyId(product.id)
     setMsg(null)
@@ -141,7 +144,18 @@ export default function Promotions() {
       .from('products')
       .update({ promo_price: null, promo_until: null })
       .eq('id', product.id)
-    if (error) setMsg({ type: 'err', text: 'Erro ao encerrar a promoção: ' + error.message })
+    if (error) {
+      setMsg({ type: 'err', text: 'Erro ao encerrar a promoção: ' + error.message })
+    } else if (offersCat) {
+      const { error: unlinkError } = await supabase
+        .from('product_categories')
+        .delete()
+        .eq('product_id', product.id)
+        .eq('category_id', offersCat.id)
+      if (unlinkError) {
+        setMsg({ type: 'err', text: 'Promoção encerrada, mas o item continua em Ofertas: ' + unlinkError.message })
+      }
+    }
     await load()
     setBusyId(null)
   }
@@ -247,6 +261,9 @@ export default function Promotions() {
             onSubmit={handleSubmit}
             onClick={(e) => e.stopPropagation()}
             className="max-h-[92vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-2xl bg-white p-5 pb-6 shadow-xl safe-bottom sm:p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Nova promoção"
           >
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-800">Nova promoção</h2>

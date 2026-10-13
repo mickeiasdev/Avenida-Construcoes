@@ -81,6 +81,11 @@ No `src/index.css`, importe o Tailwind e registre as cores dinâmicas:
 | [migration-7.sql](supabase/migration-7.sql) | Cupons de desconto + desconto % por produto |
 | [migration-8.sql](supabase/migration-8.sql) | **Segurança**: impede usuário de se promover a admin, checkout com preço/cupom/estoque calculados **no servidor** (`place_order`), produto inativo deixa de ser público, cupons no schema |
 | [migration-9.sql](supabase/migration-9.sql) | **Venda na loja (PDV)**: `order_items.fulfillment` (retirada x entrega), `orders.origin` (site/loja), entrega `misto`, `place_order` v2 e permissão para o admin **excluir pedidos** |
+| [migration-10.sql](supabase/migration-10.sql) | CPF do cliente, observação do pedido e política que permite ao **cliente confirmar a entrega** do próprio pedido |
+| [migration-11.sql](supabase/migration-11.sql) | **Promoções** (`promo_price`/`promo_until`) + **um produto em várias categorias** (`product_categories`) + categoria `ofertas` |
+| [migration-12.sql](supabase/migration-12.sql) | `place_order` passa a respeitar o **preço promocional** (o valor gravado é o mesmo que o site mostra) |
+| [migration-13.sql](supabase/migration-13.sql) | **Pix via Mercado Pago**: `orders.mp_order_id`, `mp_payment_id`, `payment_status` e `payment_method = 'mercado_pago'` |
+| [migration-14.sql](supabase/migration-14.sql) | **Opcional** — agregações do painel no banco (`store_dashboard_stats` / `store_client_stats`). Sem ela o Dashboard soma no navegador, sujeito ao teto de **1000 linhas por consulta** do PostgREST |
 
    > ⚠️ **A migration-8 é obrigatória para o checkout seguro.** Sem ela o app continua
    > funcionando, mas cai no caminho antigo (preço calculado no navegador) e registra
@@ -192,6 +197,9 @@ npm run lint       # oxlint
 | `/admin/pedidos`  | admin           | Lista de pedidos com etapas de entrega, itens separados entre **retirada** e **entrega**, marcação item a item, exclusão de pedidos e limpeza em lote |
 | `/admin/nova-venda` | admin        | **PDV**: registra a venda do cliente que está no balcão |
 | `/admin/clientes` | admin           | Lista de clientes: contato, cidade, nº de pedidos e total gasto |
+| `/admin/cupons`   | admin           | Cupons de desconto (% ou R$ fixo, compra mínima, ativar/desativar) |
+| `/admin/promocoes`| admin           | Promoções com prazo: coloca produtos na categoria **Ofertas** e define preço/data de fim |
+| `/favoritos`      | público         | Favoritos ❤️ salvos no navegador (LocalStorage) |
 | `/admin/configuracoes` | admin     | Nome, logo, banner, cores hex, endereço, horários, WhatsApp   |
 
 ### Checkout via WhatsApp
@@ -201,6 +209,35 @@ baixa de estoque), limpa o carrinho (LocalStorage) e abre
 Visitante também finaliza (pedido `is_guest`) e recebe a confirmação na própria tela —
 só quem está logado tem a página `/pedidos`. Sem WhatsApp configurado, o pedido é gravado
 e o app avisa (não abre um `wa.me` vazio).
+
+### Pix automático (Mercado Pago) — opcional
+Com a **migration-13** aplicada e as Edge Functions publicadas, o cliente escolhe **Pix** no
+checkout e recebe na hora o **QR Code + Copia e Cola**, sem sair do site. O pedido é criado
+antes (pela RPC `place_order`), então o valor cobrado é sempre o do servidor.
+
+```bash
+# 1) secrets (Project Settings → API / Mercado Pago → Credenciais)
+supabase secrets set MP_ACCESS_TOKEN=APP_USR-...
+supabase secrets set MP_WEBHOOK_SECRET=...   # opcional, mas recomendado
+
+# 2) publicar as funções (o supabase/config.toml já define verify_jwt)
+supabase functions deploy create-mp-order
+supabase functions deploy webhook-mercadopago
+```
+
+- `create-mp-order` (`verify_jwt = true`): confere que o pedido é de quem está chamando
+  (dono ou visitante já criado) e cria a Order no Mercado Pago com **valor vindo do banco**;
+- `webhook-mercadopago` (`verify_jwt = false`, obrigatório): o Mercado Pago chama sem token do
+  Supabase. A autenticidade é validada por **HMAC-SHA256** (cabeçalho `x-signature` + `x-request-id`)
+  contra o `MP_WEBHOOK_SECRET`; sem o secret a função aceita e apenas registra um aviso.
+  Cadastre a URL `https://SEU-PROJETO.supabase.co/functions/v1/webhook-mercadopago`
+  no painel do Mercado Pago (evento *orders*);
+- o código do QR e o status aparecem em `/carrinho` e em `/pedidos` (**Ver QR Pix**), com
+  revalidação a cada 4s pelo botão **Verificar agora**. Pedido pago é confirmado pelo webhook
+  mesmo que o cliente feche a página.
+
+> **Sem** as funções publicadas o app continua vendendo: o pedido é gravado, o cliente recebe a
+> confirmação e o aviso de que o Pix não pôde ser gerado naquele momento.
 
 ### Venda na loja (PDV) — `/admin/nova-venda`
 Registra a compra do cliente que está no balcão:
@@ -244,11 +281,14 @@ src/
 ├── lib/supabaseClient.js        # cliente Supabase + helpers de upload (bucket 'store')
 ├── lib/checkout.js              # dados de entrega: campos, máscaras e validação (puro)
 ├── lib/utils.js                 # formatBRL, effectivePrice, pipeline de status, horários
+├── lib/storeOrder.js            # rótulos de pagamento/entrega e WhatsApp do pedido
+├── lib/useModalA11y.js           # ESC + foco inicial/devolução em modais e drawers
 ├── context/AuthContext.jsx       # sessão, perfil, role, magic link e senha (gratuitos)
 ├── context/StoreContext.jsx      # store_settings (tema via CSS vars), categorias, realtime
 ├── context/CartContext.jsx       # carrinho persistente + checkout (orders + WhatsApp)
 ├── components/ProtectedRoute.jsx # RequireAuth / RequireAdmin
 ├── components/SearchBar.jsx      # input com debounce (400ms)
+├── components/MpPixDisplay.jsx    # QR Pix + Copia e Cola + revalidação do pagamento
 ├── components/ProductCard.jsx    # card da vitrine
 ├── layouts/StoreLayout.jsx       # header, nav de categorias, footer, WhatsApp flutuante
 ├── layouts/AdminLayout.jsx       # sidebar do painel
@@ -256,7 +296,10 @@ src/
     ├── Home.jsx                  # vitrine + filtros + paginação
     ├── ProductPage.jsx           # detalhe + views
     ├── Login.jsx / Profile.jsx / Orders.jsx / Cart.jsx
-    └── admin/Dashboard.jsx · Settings.jsx · Categories.jsx · Products.jsx
+    ├── admin/  Dashboard · Pedidos · Nova venda · Produtos · Categorias · Clientes · Cupons · Promoções · Configurações
+supabase/functions/
+├── create-mp-order/index.ts        # cria a Order no Mercado Pago (valor lido do banco)
+└── webhook-mercadopago/index.ts    # confirma o pagamento (HMAC-SHA256)
 supabase/schema.sql               # tabelas + RLS + storage + realtime + seed
 vercel.json                       # SPA fallback para o deploy
 ```
@@ -293,6 +336,10 @@ vercel.json                       # SPA fallback para o deploy
 - [x] Rodar `supabase/schema.sql` no SQL Editor
 - [x] Rodar `supabase/migration-8.sql` (checkout seguro + trava do `role`)
 - [x] Rodar `supabase/migration-9.sql` (venda na loja, retirada x entrega, exclusão de pedidos)
+- [x] Rodar `supabase/migration-10.sql` (CPF, observação e confirmação de entrega pelo cliente)
+- [x] Rodar `supabase/migration-11.sql` + `migration-12.sql` (promoções e múltiplas categorias)
+- [x] Rodar `supabase/migration-13.sql` (Pix Mercado Pago) — só se for usar Pix
+- [x] Rodar `supabase/migration-14.sql` (opcional: agregações do painel no banco)
 - [x] Criar `admin@teste.com` e `cliente@teste.com` no Auth (auto-confirm)
 - [x] Rodar os UPDATEs para promover o admin
 - [x] Preencher `.env` com URL e anon key
@@ -302,11 +349,17 @@ vercel.json                       # SPA fallback para o deploy
 
 ## ♿ Acessibilidade
 
-Recomenda-se executar auditoria de acessibilidade usando Lighthouse ou axe para garantir que o aplicativo seja utilizável por todos. Alguns pontos a verificar:
-- Contraste de cores (especialmente o tema primário #f97316 sobre fundo branco).
-- Rótulos acessíveis (aria-label) em botões de ícone (carrinho, sino, favorito).
-- Gerenciamento de foco ao abrir/fechar modais e menus.
-- Estrutura de heading hierárquica (h1, h2, etc.) para leitores de tela.
-- Navegação por teclado (Tab ordem lógica).
+Já implementado no template:
 
-Você pode rodar Lighthouse diretamente no Chrome DevTools ou instalar o axe-cli via npm e executar em builds de produção.
+- **Modais e drawers**: `role="dialog"` + `aria-modal`, **ESC fecha**, foco inicial no painel e
+  foco devolvido ao elemento que abriu (`src/lib/useModalA11y.js`);
+- **Formulários**: campos associados aos rótulos (`htmlFor`/`id`), inclusive nos campos gerados
+  por lista (`f_<campo>`) e nos seletores de cor (`useId`);
+- **Botões só de ícone** com `aria-label` (carrinho, favorito, fechar, compartilhar, WhatsApp);
+- **Alerta de erro** do painel/Pix com `role="alert"`;
+- **Contraste**: o gradiente do botão primário é derivado de `--brand-primary` (não há mais cor
+  fixa no CSS) — escolha cores com bom contraste em `/admin/configuracoes` (a primária precisa
+  funcionar sobre fundo branco).
+
+Vale rodar **Lighthouse/axe** no seu nicho e nas suas cores finais (Chrome DevTools → Lighthouse,
+aba Accessibility) e revisar a hierarquia de títulos das páginas que você criar.

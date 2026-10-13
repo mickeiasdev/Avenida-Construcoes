@@ -1,12 +1,15 @@
 import { useNavigate } from "react-router-dom";
 import { CheckCircle2, ShoppingCart, X } from "lucide-react";
 import { useCart } from "../context/CartContext";
+import { formatBRL } from "../lib/utils";
+import { useModalA11y } from "../lib/useModalA11y";
 
 // Abre automaticamente quando um item é adicionado ao carrinho,
 // perguntando se o cliente quer finalizar ou continuar comprando
 export function AddToCartModal() {
   const { lastAdded, dismissLastAdded, total, count } = useCart();
   const navigate = useNavigate();
+  useModalA11y(!!lastAdded, dismissLastAdded);
 
   if (!lastAdded) return null;
 
@@ -18,6 +21,9 @@ export function AddToCartModal() {
       <div
         className="toast-in w-full max-w-sm space-y-4 rounded-t-2xl bg-white p-5 pb-7 shadow-2xl ring-1 ring-gray-100 safe-bottom sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Adicionado ao carrinho"
       >
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100 text-green-600">
@@ -43,7 +49,7 @@ export function AddToCartModal() {
         <div className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600">
           Subtotal:{" "}
           <span className="font-semibold text-gray-800">
-            {formatTotal(total)}
+            {formatBRL(total)}
           </span>
         </div>
 
@@ -69,11 +75,4 @@ export function AddToCartModal() {
       </div>
     </div>
   );
-}
-
-function formatTotal(v) {
-  return Number(v ?? 0).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
 }

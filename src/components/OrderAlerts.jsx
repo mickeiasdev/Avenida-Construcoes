@@ -22,10 +22,11 @@ export function OrderAlerts() {
         // o admin acabou de fechar a venda, não faz sentido avisar ele mesmo.
         // Pedidos do site (origin = 'site') continuam notificando normalmente.
         if (o.origin === 'loja' && o.delivery_method === 'retirada') return
+        // só os 3 últimos: a tela mostra 3 e a lista não pode crescer sem teto
         setAlerts((prev) => [
           ...prev,
           { key: o.id + '-' + Date.now(), id: o.id, name: o.customer_name, total: o.total },
-        ])
+        ].slice(-3))
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }

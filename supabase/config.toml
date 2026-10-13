@@ -1,0 +1,14 @@
+# Configuração das Edge Functions (Supabase CLI)
+# Sem este arquivo o gateway exigia JWT em TODAS as functions — e o Mercado Pago
+# nunca envia cabeçalho Authorization, então o webhook respondia 401 e o Pix
+# nunca era confirmado. Ver README > "Mercado Pago".
+project_id = "white-label-store"
+
+[functions.create-mp-order]
+# chamada pelo navegador (usa a anon key / sessão do cliente): mantém a exigência de JWT
+verify_jwt = true
+
+[functions.webhook-mercadopago]
+# chamado pelo Mercado Pago, que NÃO envia Authorization.
+# A autenticidade é garantida pela assinatura x-signature (MP_WEBHOOK_SECRET).
+verify_jwt = false

@@ -4,6 +4,7 @@ import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { ORDER_PIPELINE } from '../lib/utils'
+import { useModalA11y } from '../lib/useModalA11y'
 
 // Pendente = ainda não finalizado (delivered) nem cancelado. Os valores
 // reais vêm do pipeline de status do projeto — nada de chutar strings.
@@ -31,6 +32,7 @@ export default function AdminLayout() {
   const { signOut, profile } = useAuth()
   const { settings } = useStore()
   const [drawer, setDrawer] = useState(false)
+  useModalA11y(drawer, () => setDrawer(false))
   const [pendingCount, setPendingCount] = useState(0)
   const location = useLocation()
 
@@ -146,7 +148,12 @@ export default function AdminLayout() {
       {drawer && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setDrawer(false)} />
-          <div className="toast-in absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col bg-secondary text-white shadow-2xl">
+          <div
+            className="toast-in absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col bg-secondary text-white shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu do painel"
+          >
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
               <span className="truncate text-sm font-bold">Painel Admin</span>
               <button type="button" className="rounded-lg p-1 hover:bg-white/10" onClick={() => setDrawer(false)} aria-label="Fechar menu">

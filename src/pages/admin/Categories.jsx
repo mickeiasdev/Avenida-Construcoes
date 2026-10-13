@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Pencil, Plus, Tags, Trash2, X } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useStore } from '../../context/StoreContext'
@@ -13,13 +13,27 @@ export default function Categories() {
   const [msg, setMsg] = useState(null)
   const [counts, setCounts] = useState({})
 
-  useEffect(() => {
+  const loadCounts = useCallback(() => {
     supabase.from('products').select('category_id').then(({ data }) => {
       const map = {}
-      ;(data ?? []).forEach((p) => { map[p.category_id] = (map[p.category_id] ?? 0) + 1 })
+      ;(data ?? []).forEach((p) => {
+        const key = p.category_id ?? 'sem-categoria'
+        map[key] = (map[key] ?? 0) + 1
+      })
       setCounts(map)
     })
-  }, [categories.length])
+  }, [])
+
+  useEffect(() => {
+    loadCounts()
+    // A contagem muda quando um produto troca de categoria em /admin/produtos
+    // (antes ela só recarregava quando o número de categorias mudava).
+    const channel = supabase
+      .channel('admin-category-counts')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, loadCounts)
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [loadCounts])
 
   async function handleCreate(e) {
     e.preventDefault()

@@ -6,8 +6,10 @@ import { useCart } from '../context/CartContext'
 import { formatBRL } from '../lib/utils'
 import { CheckoutForm } from '../components/CheckoutForm'
 import { profileToForm, missingFields, fieldLabel, formatAddress } from '../lib/checkout'
+import { readFunctionError } from '../lib/functionError'
 import { GuestCheckoutModal } from '../components/GuestCheckoutModal'
 import { MpPixDisplay } from '../components/MpPixDisplay'
+import { useModalA11y } from '../lib/useModalA11y'
 
 const STEPS = [
   { n: 1, label: 'Sacola' },
@@ -22,7 +24,7 @@ const STEPS = [
 // CTA fixo no rodapé (acima da bottom nav no mobile), total sempre visível.
 export default function Cart() {
   const { user, profile } = useAuth()
-  const { items, count, total, updateQuantity, removeItem, checkout, coupon, applyCoupon, removeCoupon, discountValue, getOrderPaymentStatus } = useCart()
+  const { items, count, total, updateQuantity, removeItem, checkout, coupon, applyCoupon, removeCoupon, discountValue, getOrderPaymentStatus, checkMpOrderAgain, clearCart, refreshPrices } = useCart()
   const navigate = useNavigate()
 
   const [step, setStep] = useState(1)
@@ -37,8 +39,21 @@ export default function Cart() {
   const [couponMsg, setCouponMsg] = useState(null)
   const [doneOrder, setDoneOrder] = useState(null) // pedido concluído como visitante
   const [mpPendingOrder, setMpPendingOrder] = useState(null) // { id, mpPix, total } do Pix MP
+  const [mpRetry, setMpRetry] = useState(null)               // pedido já gravado SÓ faltando o Pix
 
   useEffect(() => { setForm(profileToForm(profile)) }, [profile])
+
+  // Preço/estoque do localStorage podem estar velhos (o admin muda no painel):
+  // revalida no banco uma vez, na entrada do carrinho.
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('wl_cart_v1') ?? '[]')
+      const ids = [...new Set((saved ?? []).map((i) => i.product_id).filter(Boolean))]
+      if (ids.length) refreshPrices(ids)
+    } catch { /* carrinho corrompido: o CartContext já cai no array vazio */ }
+  }, [refreshPrices])
+
+  useModalA11y(!!missing, () => setMissing(null))
 
   function set(key, value) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -80,6 +95,24 @@ export default function Cart() {
     setMsg(null)
     try {
       const order = await checkout(form, null, { deliveryMethod, paymentMethod })
+
+      // PIX: mostra o QR aqui mesmo. Antes o retorno era descartado, a tela de
+      // Pix abaixo nunca era alcançada e o cliente ficava sem o código.
+      if (order.mpPix) {
+        setMpPendingOrder(order)
+        window.scrollTo({ top: 0 })
+        return
+      }
+
+      // Escolheu Pix mas o MP não devolveu o QR: fica na revisão com o erro e
+      // o botão de RETENTATIVA — sem aparentar sucesso e, principalmente, sem
+      // criar OUTRO pedido quando o cliente clicar de novo.
+      if (order.mpError) {
+        setMpRetry(order)
+        setMsg({ type: 'err', text: 'Não conseguimos gerar o Pix agora. Use "Tentar gerar novamente" abaixo (é o mesmo pedido, nada duplicou) ou fale com a loja pelo WhatsApp.' + (order.mpErrorDetail ? ' [Motivo: ' + order.mpErrorDetail + ']' : '') })
+        return
+      }
+
       if (user) {
         navigate('/pedidos', { state: { justOrdered: true } })
       } else {
@@ -89,6 +122,38 @@ export default function Cart() {
       }
     } catch (e) {
       setMsg({ type: 'err', text: e.message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Retenta o Pix no MESMO pedido já gravado (create-mp-order é idempotente:
+  // reutiliza o mp_order_id se existir — então não duplica nada, nem no banco nem no MP)
+  async function retryPix(order) {
+    if (!order || busy) return
+    setBusy(true)
+    setMsg(null)
+    try {
+      const data = await checkMpOrderAgain(order.id)
+      if (data?.qr_code) {
+        setMpPendingOrder({
+          ...order,
+          mpPix: {
+            qr_code: data.qr_code,
+            qr_code_base64: data.qr_code_base64 ?? null,
+            ticket_url: data.ticket_url ?? null,
+            status: data.status ?? 'pending',
+          },
+        })
+        setMpRetry(null)
+        window.scrollTo({ top: 0 })
+      } else {
+        setMsg({ type: 'err', text: 'Ainda não conseguimos gerar o Pix (status: ' + (data?.status ?? '?') + '). Fale com a loja pelo WhatsApp ou tente mais tarde.' })
+      }
+    } catch (e) {
+      // o corpo do erro da function traz o motivo real devolvido pelo MP
+      const detalhe = await readFunctionError(e)
+      setMsg({ type: 'err', text: 'Erro ao gerar o Pix. ' + (detalhe ? 'Motivo: ' + detalhe : 'Tente mais tarde.') })
     } finally {
       setBusy(false)
     }
@@ -113,7 +178,12 @@ export default function Cart() {
           orderId={mpPendingOrder.id}
           total={mpPendingOrder.total}
           getOrderPaymentStatus={getOrderPaymentStatus}
-          onApproved={() => navigate('/pedidos', { state: { justOrdered: true } })}
+          onRefresh={checkMpOrderAgain}
+          onApproved={() => {
+            clearCart()
+            if (user) navigate('/pedidos', { state: { justOrdered: true } })
+            else { setDoneOrder(mpPendingOrder); setMpPendingOrder(null) }
+          }}
         />
         <div className="card space-y-2 text-sm text-gray-600">
           <p className="font-medium text-gray-800">Pedido nº {String(mpPendingOrder.id).slice(0,8)}</p>
@@ -121,7 +191,11 @@ export default function Cart() {
           <p className="text-xs text-gray-500">Após o pagamento o status muda automaticamente para confirmado.</p>
         </div>
         <div className="flex gap-2">
-          <Link to="/pedidos" className="btn-primary flex-1 text-center">Ver meus pedidos</Link>
+          {user ? (
+            <Link to="/pedidos" className="btn-primary flex-1 text-center">Ver meus pedidos</Link>
+          ) : (
+            <Link to="/login" state={{ from: '/carrinho' }} className="btn-primary flex-1 text-center">Criar conta para acompanhar</Link>
+          )}
           <Link to="/" className="flex-1 rounded-lg bg-white py-2.5 text-center text-sm font-bold text-primary ring-1 ring-primary/40">Continuar comprando</Link>
         </div>
       </div>
@@ -137,7 +211,13 @@ export default function Cart() {
         <h1 className="text-xl font-extrabold tracking-tight text-gray-800">Pedido enviado!</h1>
         <p className="text-sm text-gray-500">
           Pedido nº <b className="text-gray-800">{doneOrder.id.slice(0, 8)}</b> recebido.
-          Abrimos o WhatsApp com o resumo — é só enviar para combinarmos a entrega.
+          {doneOrder.whatsappSent
+            ? ' Abrimos o WhatsApp com o resumo — é só enviar para combinarmos a entrega.'
+            : doneOrder.mpPix
+              ? ' Pagamento confirmado. Vamos preparar seu pedido.'
+              : doneOrder.paymentMethod === 'mercado_pago'
+                ? ' O Pix não pôde ser gerado agora — a loja vai falar com você para combinar o pagamento.'
+                : ' A loja vai combinar com você o pagamento e a entrega.'}
         </p>
         <p className="text-xs text-gray-400">
           Criando uma conta, seus dados ficam salvos e você acompanha os próximos pedidos.
@@ -226,7 +306,7 @@ export default function Cart() {
       {/* CUPOM (visível na sacola) */}
       {step === 1 && (
         <div className="card space-y-2 !p-3.5">
-          <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Cupom de desconto</label>
+          <label htmlFor="f_cupom" className="text-xs font-bold uppercase tracking-wider text-gray-400">Cupom de desconto</label>
           {coupon ? (
             <div className="flex items-center justify-between rounded-xl bg-green-50 px-3 py-2.5 ring-1 ring-green-200">
               <p className="text-sm font-bold text-green-700">
@@ -239,6 +319,7 @@ export default function Cart() {
           ) : (
             <div className="flex gap-2">
               <input
+                id="f_cupom"
                 className="input flex-1 uppercase"
                 placeholder="Ex.: VEM10"
                 value={couponInput}
@@ -319,7 +400,7 @@ export default function Cart() {
               ))}
             </div>
             <p className="mt-1.5 text-[11px] text-gray-400">
-              {paymentMethod === 'mercado_pago' ? 'Pix instantâneo: QR Code + Copia e Cola (Mercado Pago).' : paymentMethod === 'cartao' ? 'Cartão: processado pelo Mercado Pago.' : 'Dinheiro: informe se precisa de troco.'}
+              {paymentMethod === 'mercado_pago' ? 'Pix instantâneo: QR Code + Copia e Cola (Mercado Pago).' : paymentMethod === 'cartao' ? 'Cartão: pague na entrega ou na retirada (maquininha da loja).' : 'Dinheiro: informe se precisa de troco.'}
             </p>
           </div>
 
@@ -404,7 +485,7 @@ export default function Cart() {
               <p>{form.phone}</p>
               {deliveryMethod === 'entrega' && <p className="leading-relaxed">{formatAddress(form)}</p>}
               <p className="pt-1 font-semibold text-gray-800">
-                Pagamento: {paymentMethod === 'mercado_pago' ? 'Pix (Mercado Pago)' : paymentMethod === 'cartao' ? 'Cartão (Mercado Pago)' : 'Dinheiro'}
+                Pagamento: {paymentMethod === 'mercado_pago' ? 'Pix (Mercado Pago)' : paymentMethod === 'cartao' ? 'Cartão na entrega/retirada' : 'Dinheiro'}
               </p>
             </div>
             <button
@@ -419,7 +500,20 @@ export default function Cart() {
       )}
 
       {msg && step === 3 && (
-        <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">{msg.text}</div>
+        <div role="alert" className="space-y-2 rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">
+          <p>{msg.text}</p>
+          {mpRetry && (
+            <button
+              type="button"
+              onClick={() => retryPix(mpRetry)}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-red-700 ring-1 ring-red-300 transition hover:bg-red-100 disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <QrCode className="h-3.5 w-3.5" />}
+              Tentar gerar o Pix novamente (o mesmo pedido nº {String(mpRetry.id).slice(0, 8)})
+            </button>
+          )}
+        </div>
       )}
 
       {/* ============ CTA FIXO (acima da bottom nav no mobile) ============ */}
@@ -446,7 +540,13 @@ export default function Cart() {
       {/* ============ POPUP: DADOS INCOMPLETOS ============ */}
       {missing && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-4 sm:items-center" onClick={() => setMissing(null)}>
-          <div className="toast-in w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="toast-in w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            role="alertdialog"
+            aria-modal="true"
+            aria-label="Dados de entrega incompletos"
+          >
             <div className="flex items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
                 <User className="h-5 w-5" />

@@ -1,16 +1,20 @@
 import { useNavigate } from 'react-router-dom'
 import { LogIn, ShoppingBag, UserPlus, X } from 'lucide-react'
+import { useModalA11y } from '../lib/useModalA11y'
 
 // Pergunta para quem vai finalizar SEM login: entrar/criar conta
 // (vantagem: dados salvos para as próximas compras) ou seguir como visitante.
 // Se seguir como visitante, o pedido grava com user_id = null e is_guest = true.
 export function GuestCheckoutModal({ open, onClose, onContinueGuest, from }) {
   const navigate = useNavigate()
+  useModalA11y(open, onClose)
   if (!open) return null
 
-  function goLogin() {
+  // mode:'signup' abre /login já no formulário de criação de conta
+  // (sem isso o CTA "Criar conta grátis" caía no formulário de login)
+  function goLogin(mode) {
     onClose()
-    navigate('/login', { state: { from: from || '/carrinho' } })
+    navigate('/login', { state: { from: from || '/carrinho', ...(mode ? { mode } : {}) } })
   }
 
   return (
@@ -49,13 +53,13 @@ export function GuestCheckoutModal({ open, onClose, onContinueGuest, from }) {
         </div>
 
         <div className="mb-5 space-y-3">
-          <button type="button" className="btn-primary w-full" onClick={goLogin}>
+          <button type="button" className="btn-primary w-full" onClick={() => goLogin()}>
             <LogIn className="h-4 w-4" /> Entrar na minha conta
           </button>
           <button
             type="button"
             className="w-full rounded-full bg-white py-2.5 text-sm font-bold text-primary ring-1 ring-primary/40 transition hover:bg-primary/5"
-            onClick={goLogin}
+            onClick={() => goLogin('signup')}
           >
             <UserPlus className="mr-1.5 inline h-4 w-4" /> Criar conta grátis
           </button>
