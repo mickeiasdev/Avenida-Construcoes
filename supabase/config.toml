@@ -11,3 +11,8 @@ verify_jwt = true
 # chamado pelo Mercado Pago, que NÃO envia Authorization.
 # A autenticidade é garantida pela assinatura x-signature (MP_WEBHOOK_SECRET).
 verify_jwt = false
+
+[functions.whatsapp-notify]
+# chamada por Database Webhooks e por outras functions, que NÃO carregam JWT.
+# A autenticidade é garantida pelo header x-notify-secret (NOTIFY_SECRET).
+verify_jwt = false

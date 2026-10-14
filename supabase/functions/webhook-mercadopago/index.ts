@@ -33,35 +33,21 @@ function safeEqual(a: string, b: string) {
   return diff === 0
 }
 
-// Avisa a LOJA no WhatsApp quando um Pix é confirmado (pedido pago).
-// Canal gratuito: CallMeBot — a loja faz um opt-in UMA vez e cola a apikey
-// em /admin/configuracoes. Sem a chave, simplesmente não envia (só loga).
+// Avisa a LOJA (e o cliente) no WhatsApp quando um Pix é confirmado.
+// Delega para a function whatsapp-notify (Evolution API; se não estiver
+// configurada, ela cai no CallMeBot se houver apikey em /admin/configuracoes).
 async function notifyStoreOnPaid(supabase: any, orderId: string) {
+  const SECRET = Deno.env.get('NOTIFY_SECRET')
+  if (!SECRET) return // notificações desligadas
   try {
-    const { data: s } = await supabase
-      .from('store_settings').select('store_name, whatsapp, notify_whatsapp_key').eq('id', 1).maybeSingle()
-    if (!s?.notify_whatsapp_key || !s?.whatsapp) return
-
     const { data: o } = await supabase
-      .from('orders').select('id, customer_name, customer_phone, total, delivery_method').eq('id', orderId).maybeSingle()
+      .from('orders').select('*').eq('id', orderId).maybeSingle()
     if (!o) return
-
-    const money = (n: number) => 'R$ ' + Number(n).toFixed(2).replace('.', ',')
-    const entrega = o.delivery_method === 'retirada' ? 'Retirada no balcão' : o.delivery_method === 'misto' ? 'Retirada + entrega' : 'Entrega'
-    const msg =
-      '🧾 *Pedido PAGO no site!*\n' +
-      'Pedido #' + String(o.id).slice(0, 8) + ' · ' + money(o.total) + '\n' +
-      'Cliente: ' + (o.customer_name ?? '-') + (o.customer_phone ? ' · ' + o.customer_phone : '') + '\n' +
-      entrega + '\n' +
-      'Dê andamento em /admin/pedidos.'
-
-    const digits = String(s.whatsapp).replace(/\D/g, '')
-    const intl = digits.length <= 11 ? '55' + digits : digits // Brasil
-    await fetch(
-      'https://api.callmebot.com/whatsapp.php?phone=' + encodeURIComponent('+' + intl) +
-      '&text=' + encodeURIComponent(msg) +
-      '&apikey=' + encodeURIComponent(s.notify_whatsapp_key),
-    )
+    await fetch(Deno.env.get('SUPABASE_URL')! + '/functions/v1/whatsapp-notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-notify-secret': SECRET },
+      body: JSON.stringify({ topic: 'order_paid', record: o }),
+    })
   } catch (e) {
     console.warn('[webhook] aviso WhatsApp da loja falhou:', String(e))
   }
