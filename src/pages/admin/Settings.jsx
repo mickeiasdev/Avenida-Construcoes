@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { CheckCircle2, AlertCircle, Clock, ImagePlus, Loader2, Save } from 'lucide-react'
 import { useStore } from '../../context/StoreContext'
-import { uploadImage } from '../../lib/supabaseClient'
+import { uploadImage, deleteImagesByUrls } from '../../lib/supabaseClient'
 import { formatBusinessHoursText, maskPhone, waLocal, waNumber } from '../../lib/utils'
 
 const HEX = /^#[0-9a-fA-F]{6}$/
@@ -74,7 +74,15 @@ export default function Settings() {
     // Grava no banco no formato esperado pelo app: '55' + DDD + número, só dígitos.
     const payload = { ...form, whatsapp: waNumber(form.whatsapp), business_hours: formatBusinessHoursText(form) }
     const { error } = await updateSettings(payload)
-    if (!error) dirtyRef.current = false
+    if (!error) {
+      dirtyRef.current = false
+      // Logo/banner trocados ou removidos: o arquivo antigo sai do Storage
+      // (senão ficaria órfão ocupando o armazenamento do projeto)
+      const removidas = ['logo_url', 'banner_url']
+        .filter((k) => settings[k] && settings[k] !== payload[k])
+        .map((k) => settings[k])
+      if (removidas.length) await deleteImagesByUrls(removidas)
+    }
     setMsg(error
       ? { type: 'err', text: 'Erro: ' + error.message }
       : { type: 'ok', text: 'Configurações salvas! A vitrine reflete as mudanças em tempo real (Realtime).' })

@@ -33,3 +33,26 @@ export function getPublicUrl(path) {
   const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path)
   return data.publicUrl
 }
+
+// Extrai o caminho interno do objeto (ex.: products/1234-abcd.png) a partir da
+// URL pública. Retorna null quando a URL não é do nosso bucket (ex.: imagens
+// externas do seed — não devem ser apagadas).
+export function storagePathFromUrl(url) {
+  const marker = '/storage/v1/object/public/' + STORAGE_BUCKET + '/'
+  const i = String(url ?? '').indexOf(marker)
+  return i >= 0 ? String(url).slice(i + marker.length) : null
+}
+
+// Apaga o arquivo do Storage quando a URL é do nosso bucket.
+// Best-effort de propósito: arquivo inexistente/URL externa NÃO trava a tela.
+export async function deleteImageByUrl(url) {
+  const path = storagePathFromUrl(url)
+  if (!path) return // imagem externa (ex.: Unsplash do seed)
+  const { error } = await supabase.storage.from(STORAGE_BUCKET).remove([path])
+  if (error) console.warn('[storage] não consegui apagar', path, error.message)
+}
+
+export async function deleteImagesByUrls(urls) {
+  for (const u of urls ?? []) await deleteImageByUrl(u)
+}
+

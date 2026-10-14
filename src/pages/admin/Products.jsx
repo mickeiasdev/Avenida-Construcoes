@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ImagePlus, Loader2, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
-import { supabase, uploadImage } from '../../lib/supabaseClient'
+import { supabase, uploadImage, deleteImagesByUrls } from '../../lib/supabaseClient'
 import { useStore } from '../../context/StoreContext'
 import { formatBRL } from '../../lib/utils'
 import { useModalA11y } from '../../lib/useModalA11y'
@@ -82,6 +82,14 @@ export default function Products() {
       : await supabase.from('products').insert(payload)
     if (res.error) setMsg({ type: 'err', text: 'Erro ao salvar: ' + res.error.message })
     else {
+      // Na edição: imagens trocadas/removidas saem do Storage também —
+      // se não apagasse, o arquivo ficaria órfão ocupando o plano gratuito
+      const original = modal.id ? (products ?? []).find((x) => x.id === modal.id) : null
+      if (original) {
+        const antes = [original.image_url, ...(original.images ?? [])]
+        const agora = new Set([payload.image_url, ...payload.images])
+        await deleteImagesByUrls(antes.filter((u) => u && !agora.has(u)))
+      }
       setModal(null)
       await load()
     }
@@ -90,9 +98,15 @@ export default function Products() {
 
   async function handleDelete(id) {
     if (!window.confirm('Excluir este produto?')) return
+    // coleta as URLs ANTES de excluir (a lista some junto)
+    const p = (products ?? []).find((x) => x.id === id)
     const { error } = await supabase.from('products').delete().eq('id', id)
     if (error) setMsg({ type: 'err', text: 'Erro ao excluir: ' + error.message })
-    else await load()
+    else {
+      // produto excluído -> imagens dele saem do Storage também
+      await deleteImagesByUrls([p?.image_url, ...(p?.images ?? [])])
+      await load()
+    }
   }
 
   function openEdit(p) {

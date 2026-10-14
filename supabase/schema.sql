@@ -227,6 +227,10 @@ create policy "admin upload store assets" on storage.objects
 drop policy if exists "admin update store assets" on storage.objects;
 create policy "admin update store assets" on storage.objects
   for update using (bucket_id = 'store' and public.is_admin());
+-- exclusão de arquivo quando produto é excluído ou logo/banner trocados
+drop policy if exists "admin delete store assets" on storage.objects;
+create policy "admin delete store assets" on storage.objects
+  for delete using (bucket_id = 'store' and public.is_admin());
 
 -- SEED (produção): só a identidade da loja — produtos e categorias
 -- são cadastrados pelo painel admin (/admin/produtos e /admin/categorias)
