@@ -110,12 +110,9 @@ Deno.serve(async (req) => {
   const entrega = record.delivery_method === 'retirada' ? 'Retirada no balcão' : record.delivery_method === 'misto' ? 'Retirada + entrega' : 'Entrega'
   const pagamento = record.payment_method === 'mercado_pago' ? 'Pix online' : record.payment_method === 'cartao' ? 'Cartão na entrega/retirada' : record.payment_method === 'dinheiro' ? 'Dinheiro' : 'Pix'
 
-  let failed = 0
   async function deliver(number: string | null, text: string) {
     if (!number || !evoReady) return false
-    const ok = await sendEvo(EV_URL, EV_KEY, EV_INSTANCE, number, text)
-    if (!ok) failed++
-    return ok
+    return await sendEvo(EV_URL, EV_KEY, EV_INSTANCE, number, text)
   }
 
   const sent: string[] = []
