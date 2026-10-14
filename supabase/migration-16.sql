@@ -9,6 +9,22 @@
 -- pelo próprio cliente (a migration-8 travou o UPDATE por coluna).
 alter table public.profiles add column if not exists cpf text;
 update public.profiles set cpf = null where cpf is not null and btrim(cpf) = '';
+
+-- Limpa CPFs duplicados ANTES de criar o índice: sem isso a migration falha
+-- com "key (cpf)=... is duplicated" (ex.: conta de teste + conta real com o
+-- mesmo CPF). Fica o cadastro MAIS ANTIGO; os demais perdem o CPF do perfil e
+-- o usuário simplesmente redigita no próximo pedido (o checkout salva de novo).
+with ranked as (
+  select id, cpf,
+         row_number() over (partition by cpf order by created_at) as rn
+  from public.profiles
+  where cpf is not null
+)
+update public.profiles p
+set cpf = null
+from ranked r
+where r.id = p.id and r.rn > 1;
+
 create unique index if not exists profiles_cpf_unique on public.profiles (cpf) where cpf is not null;
 grant update (cpf) on table public.profiles to authenticated;
 comment on column public.profiles.cpf is 'CPF do cliente (único). Preenchido no checkout ou no perfil.';
