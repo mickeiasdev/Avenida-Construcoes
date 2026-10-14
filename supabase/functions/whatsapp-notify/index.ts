@@ -21,6 +21,8 @@
 //   EVOLUTION_API_URL    — ex.: https://evo.seuvps.com.br
 //   EVOLUTION_API_KEY    — chave global da Evolution
 //   EVOLUTION_INSTANCE   — nome da instância pareada por QR (ex.: loja)
+//   NOTIFY_TO            — opcional: número que recebe os avisos de pedido
+//                          (padrão: o WhatsApp das configurações da loja)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 
@@ -104,7 +106,10 @@ Deno.serve(async (req) => {
   const [{ data: settings }] = await Promise.all([
     supabase.from('store_settings').select('store_name, whatsapp, notify_whatsapp_key').eq('id', 1).maybeSingle(),
   ])
-  const storePhone = brPhone(settings?.whatsapp)
+  // Para quem os avisos de pedido vão? NOTIFY_TO (secret opcional) primeiro —
+  // ideal: seu número PESSOAL, porque o número pareado na Evolution é o da loja.
+  // Se vazio, cai no WhatsApp público da loja (configurações).
+  const storePhone = brPhone(Deno.env.get('NOTIFY_TO')) ?? brPhone(settings?.whatsapp)
 
   const storeName = settings?.store_name ?? 'Loja'
   const orderShort = String(record.id).slice(0, 8)
