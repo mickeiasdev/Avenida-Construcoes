@@ -84,7 +84,7 @@ No `src/index.css`, importe o Tailwind e registre as cores dinâmicas:
 | [migration-10.sql](supabase/migration-10.sql) | CPF do cliente, observação do pedido e política que permite ao **cliente confirmar a entrega** do próprio pedido |
 | [migration-11.sql](supabase/migration-11.sql) | **Promoções** (`promo_price`/`promo_until`) + **um produto em várias categorias** (`product_categories`) + categoria `ofertas` |
 | [migration-12.sql](supabase/migration-12.sql) | `place_order` passa a respeitar o **preço promocional** (o valor gravado é o mesmo que o site mostra) |
-| [migration-13.sql](supabase/migration-13.sql) | **Pix via Mercado Pago**: `orders.mp_order_id`, `mp_payment_id`, `payment_status` e `payment_method = 'mercado_pago'` |
+| [migration-13.sql](supabase/migration-13.sql) | **Pix online no pedido**: `payment_status`, `payment_method = 'mercado_pago'` (enum histórico = "Pix online gerado") e colunas de referência da cobrança |
 | [migration-14.sql](supabase/migration-14.sql) | **Opcional** — agregações do painel no banco (`store_dashboard_stats` / `store_client_stats`). Sem ela o Dashboard soma no navegador, sujeito ao teto de **1000 linhas por consulta** do PostgREST |
 | [migration-15.sql](supabase/migration-15.sql) | Pix por **gateway genérico** (AbacatePay): `orders.payment_provider`, `payment_ref`, `payment_qr_code`, `payment_qr_base64` + índice para o webhook achar o pedido |
 
@@ -216,8 +216,8 @@ Com a **migration-13**, a **migration-15** aplicadas e as Edge Functions publica
 escolhe **Pix** no checkout e recebe na hora o **QR Code + Copia e Cola**, sem sair do site.
 O pedido é criado antes (pela RPC `place_order`), então o valor cobrado é sempre o do servidor.
 
-O gateway ativo fica definido em [`src/lib/payments.js`](src/lib/payments.js) — hoje
-**AbacatePay**; para voltar ao Mercado Pago basta trocar uma constante (ver seção seguinte).
+O gateway ativo fica definido em [`src/lib/payments.js`](src/lib/payments.js) (`PIX_FUNCTION`) —
+a tela de Pix e o checkout não mudam: eles só leem `qr_code` / `qr_code_base64` e o status.
 
 ```bash
 # 1) secrets (Dashboard → Integração → API) e o secret que VOCÊ definiu no webhook
@@ -245,31 +245,6 @@ supabase functions deploy webhook-abacatepay
   **para o mesmo pedido**;
 - o código do QR e o status aparecem em `/carrinho` e em `/pedidos` (**Ver QR Pix**), com
   revalidação a cada 4s e botão **Verificar agora**. Pedido pago é confirmado pelo webhook
-  mesmo que o cliente feche a página.
-
-### Pix automático (Mercado Pago) — alternativa
-Com a **migration-13** aplicada, troque `PIX_FUNCTION` para `'create-mp-order'` em
-[`src/lib/payments.js`](src/lib/payments.js) e configure abaixo:
-
-```bash
-# 1) secrets (Project Settings → API / Mercado Pago → Credenciais)
-supabase secrets set MP_ACCESS_TOKEN=APP_USR-...
-supabase secrets set MP_WEBHOOK_SECRET=...   # opcional, mas recomendado
-
-# 2) publicar as funções (o supabase/config.toml já define verify_jwt)
-supabase functions deploy create-mp-order
-supabase functions deploy webhook-mercadopago
-```
-
-- `create-mp-order` (`verify_jwt = true`): confere que o pedido é de quem está chamando
-  (dono ou visitante já criado) e cria a Order no Mercado Pago com **valor vindo do banco**;
-- `webhook-mercadopago` (`verify_jwt = false`, obrigatório): o Mercado Pago chama sem token do
-  Supabase. A autenticidade é validada por **HMAC-SHA256** (cabeçalho `x-signature` + `x-request-id`)
-  contra o `MP_WEBHOOK_SECRET`; sem o secret a função aceita e apenas registra um aviso.
-  Cadastre a URL `https://SEU-PROJETO.supabase.co/functions/v1/webhook-mercadopago`
-  no painel do Mercado Pago (evento *orders*);
-- o código do QR e o status aparecem em `/carrinho` e em `/pedidos` (**Ver QR Pix**), com
-  revalidação a cada 4s pelo botão **Verificar agora**. Pedido pago é confirmado pelo webhook
   mesmo que o cliente feche a página.
 
 > **Sem** as funções publicadas o app continua vendendo: o pedido é gravado, o cliente recebe a
@@ -334,10 +309,8 @@ src/
     ├── Login.jsx / Profile.jsx / Orders.jsx / Cart.jsx
     ├── admin/  Dashboard · Pedidos · Nova venda · Produtos · Categorias · Clientes · Cupons · Promoções · Configurações
 supabase/functions/
-├── create-mp-order/index.ts        # Pix via Mercado Pago (Orders API)
-├── webhook-mercadopago/index.ts    # confirma o pagamento do MP (HMAC-SHA256)
 ├── create-abacate-order/index.ts   # Pix via AbacatePay (checkout transparente)
-└── webhook-abacatepay/index.ts     # confirma o pagamento AbacatePay (secret na URL + HMAC)
+└── webhook-abacatepay/index.ts     # confirma o pagamento (secret na URL + HMAC)
 supabase/schema.sql               # tabelas + RLS + storage + realtime + seed
 vercel.json                       # SPA fallback para o deploy
 ```
@@ -376,7 +349,7 @@ vercel.json                       # SPA fallback para o deploy
 - [x] Rodar `supabase/migration-9.sql` (venda na loja, retirada x entrega, exclusão de pedidos)
 - [x] Rodar `supabase/migration-10.sql` (CPF, observação e confirmação de entrega pelo cliente)
 - [x] Rodar `supabase/migration-11.sql` + `migration-12.sql` (promoções e múltiplas categorias)
-- [x] Rodar `supabase/migration-13.sql` (Pix Mercado Pago) — só se for usar Pix
+- [x] Rodar `supabase/migration-13.sql` (Pix online no pedido) — só se for usar Pix online
 - [x] Rodar `supabase/migration-14.sql` (opcional: agregações do painel no banco)
 - [x] Rodar `supabase/migration-15.sql` (colunas do gateway de Pix — só se for usar Pix online)
 - [x] Criar `admin@teste.com` e `cliente@teste.com` no Auth (auto-confirm)

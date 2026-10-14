@@ -42,9 +42,9 @@ vi.mock('../lib/supabaseClient', () => {
     uploadImage: vi.fn(async () => 'https://exemplo/imagem.png'),
     supabase: {
       functions: {
-        // create-mp-order: devolve o QR do Pix como a Edge Function real
+        // Edge Function do gateway de Pix: devolve o QR como a função real
         invoke: vi.fn(async () => ({
-          data: { qr_code: '000201PIXTESTE', qr_code_base64: null, mp_order_id: 'mp-1', status: 'pending' },
+          data: { qr_code: '000201PIXTESTE', qr_code_base64: null, payment_ref: 'pix_char_1', status: 'pending' },
           error: null,
         })),
       },
@@ -185,7 +185,7 @@ describe('CartContext', () => {
     open.mockRestore()
   })
 
-  it('usa Pix (Mercado Pago) quando nenhuma forma de pagamento é informada', async () => {
+  it('usa Pix online quando nenhuma forma de pagamento é informada', async () => {
     const open = vi.spyOn(window, 'open').mockReturnValue({} as Window)
     const { result } = renderCart()
 

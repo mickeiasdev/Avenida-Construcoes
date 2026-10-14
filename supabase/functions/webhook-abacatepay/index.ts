@@ -34,7 +34,7 @@ function json(body: unknown, status = 200) {
   })
 }
 
-// Comparação em tempo constante (mesma abordagem do webhook do Mercado Pago)
+// Comparação em tempo constante
 async function safeEqual(a: string, b: string) {
   if (a.length !== b.length) return false
   const ka = await crypto.subtle.importKey('raw', new TextEncoder().encode(a), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])

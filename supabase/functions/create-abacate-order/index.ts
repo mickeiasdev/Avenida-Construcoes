@@ -1,14 +1,15 @@
 // supabase/functions/create-abacate-order/index.ts
 // Edge Function: cria uma cobrança PIX na AbacatePay (Checkout Transparente)
 // com QR Code + Copia e Cola. Chamada DEPOIS que o place_order já criou
-// o pedido no Supabase (mesmo contrato da create-mp-order).
+// o pedido no Supabase. O frontend resolve o nome desta função via
+// src/lib/payments.js (PIX_FUNCTION).
 // Docs: https://docs.abacatepay.com (POST /v2/transparents/create)
 //
 // Requer secrets:
 //   ABACATE_API_KEY        — chave com permissões TRANSPARENT:CREATE e TRANSPARENT:READ
 //   MP_FALLBACK... não se aplica aqui; guest sem e-mail vai SEM customer (API permite).
 //
-// Segurança: mesmas regras da create-mp-order —
+// Segurança (roda com service_role, então valida o CHAMADOR antes):
 //   • pedido com dono  -> só o dono (ou admin) gera/lê o Pix;
 //   • pedido de visitante -> o orderId (UUID v4) é a credencial; cancelado
 //     é recusado; pago é RESPONDIDO (never double-charge).
@@ -77,7 +78,7 @@ Deno.serve(async (req) => {
   }
   if (orderErr || !order) return json({ error: 'Pedido não encontrado', details: orderErr?.message }, 404)
 
-  // ---------- autorização (idêntica à create-mp-order) ----------
+  // ---------- autorização ----------
   if (order.user_id) {
     if (!callerId) return json({ error: 'Faça login para pagar este pedido.' }, 401)
     if (callerId !== order.user_id) {

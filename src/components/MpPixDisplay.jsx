@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Copy, Loader2, QrCode, RefreshCw } from 'lucide-react'
 import { formatBRL } from '../lib/utils'
 
-// Tela do Pix (Mercado Pago). Duas fontes de status, em ordem de prioridade:
-//   1) onRefresh  -> Edge Function create-mp-order (service role). É o único
+// Tela do Pix online (gateway agnóstico — hoje: AbacatePay, ver src/lib/payments.js).
+// Duas fontes de status, em ordem de prioridade:
+//   1) onRefresh  -> Edge Function do gateway (service role). É o único
 //      caminho que funciona para VISITANTE, porque a tabela orders não é
 //      legível por quem não está logado (RLS "own orders read").
 //   2) getOrderPaymentStatus -> leitura direta da tabela (cliente logado).

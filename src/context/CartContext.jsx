@@ -9,7 +9,7 @@ import { useAuth } from './AuthContext'
 const CartContext = createContext(null)
 const STORAGE_KEY = 'wl_cart_v1'
 
-const paymentLabels = { dinheiro: 'Dinheiro', cartao: 'Cartão na entrega/retirada', mercado_pago: 'Pix (Mercado Pago — QR + Copia e Cola)' }
+const paymentLabels = { dinheiro: 'Dinheiro', cartao: 'Cartão na entrega/retirada', mercado_pago: 'Pix online (QR + Copia e Cola)' }
 
 // Colunas REAIS de profiles. Usar Object.keys(form) mandaria cpf/on_behalf_of/
 // site_note no patch e o PostgREST recusaria o update INTEIRO.
@@ -343,7 +343,7 @@ export function CartProvider({ children }) {
       } catch (mpErr) {
         // Não quebra o pedido: o pedido já foi criado; apenas avisa.
         // O admin pode reenviar o Pix ou o cliente pode tentar novamente.
-        console.error('[checkout] Falha ao criar Pix no Mercado Pago:', mpErr?.message ?? mpErr)
+        console.error('[checkout] Falha ao criar a cobrança Pix:', mpErr?.message ?? mpErr)
         mpErrorDetail = await readFunctionError(mpErr)
       }
     }
@@ -391,9 +391,10 @@ export function CartProvider({ children }) {
     lines.push('')
     lines.push('_Pedido enviado pelo site_')
 
-    // WhatsApp: para Mercado Pago (Pix QR) NÃO abre agora — só depois do pagamento aprovado (webhook).
-    // Se o usuário escolheu Pix MP, o fluxo mostra o QR; o WhatsApp será enviado pela loja após confirmação,
-    // ou o cliente pode compartilhar o comprovante manualmente.
+    // WhatsApp: para Pix online (QR) NÃO abre agora — só depois do pagamento
+    // aprovado (webhook). Se o usuário escolheu Pix online, o fluxo mostra o QR;
+    // o WhatsApp será enviado pela loja após confirmação, ou o cliente pode
+    // compartilhar o comprovante manualmente.
     const waNumber = String(store?.whatsapp ?? '').replace(/\D/g, '')
     let whatsappSent = false
     if (paymentMethod !== 'mercado_pago') {
@@ -407,11 +408,11 @@ export function CartProvider({ children }) {
           'o pedido foi registrado, mas o resumo não foi aberto.')
       }
     } else {
-      // Pix Mercado Pago: não abre WhatsApp antes do Pix ser pago. Deixa o QR em tela.
+      // Pix online: não abre WhatsApp antes do Pix ser pago. Deixa o QR em tela.
       whatsappSent = false
     }
 
-    // Carrinho: para Pix MP mantém até o pagamento confirmar (evita perder itens se o QR expirar)
+    // Carrinho: com Pix online mantém até o pagamento confirmar (evita perder itens se o QR expirar)
     if (!directItems && paymentMethod !== 'mercado_pago') clearCart()
     if (paymentMethod === 'mercado_pago' && mpPix) {
       return { id: orderId, subtotal, discount, total: totalValue, whatsappSent, mpPix, paymentMethod }

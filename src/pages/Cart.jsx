@@ -127,8 +127,8 @@ export default function Cart() {
     }
   }
 
-  // Retenta o Pix no MESMO pedido já gravado (create-mp-order é idempotente:
-  // reutiliza o mp_order_id se existir — então não duplica nada, nem no banco nem no MP)
+  // Retenta o Pix no MESMO pedido já gravado (o gateway é idempotente por
+  // pedido: reutiliza a cobrança se existir — não duplica nada, nem no banco nem no gateway)
   async function retryPix(order) {
     if (!order || busy) return
     setBusy(true)
@@ -400,7 +400,7 @@ export default function Cart() {
               ))}
             </div>
             <p className="mt-1.5 text-[11px] text-gray-400">
-              {paymentMethod === 'mercado_pago' ? 'Pix instantâneo: QR Code + Copia e Cola (Mercado Pago).' : paymentMethod === 'cartao' ? 'Cartão: pague na entrega ou na retirada (maquininha da loja).' : 'Dinheiro: informe se precisa de troco.'}
+              {paymentMethod === 'mercado_pago' ? 'Pix instantâneo: QR Code + Copia e Cola na hora.' : paymentMethod === 'cartao' ? 'Cartão: pague na entrega ou na retirada (maquininha da loja).' : 'Dinheiro: informe se precisa de troco.'}
             </p>
           </div>
 

@@ -1,7 +1,9 @@
 -- ============================================================
--- MIGRATION 13 — Mercado Pago (Orders API) — Pix QR + Copia e Cola
+-- MIGRATION 13 — Pix online no pedido — QR + Copia e Cola
 -- Rode no Supabase -> SQL Editor, UMA VEZ, DEPOIS da migration-12.
 -- IDEMPOTENTE: pode rodar mais de uma vez sem efeito colateral.
+-- (O nome 'mercado_pago' no enum virou histórico: hoje significa apenas
+--  "Pix online gerado" — o gateway de verdade é definido em src/lib/payments.js)
 --
 -- O que muda:
 --   1) orders ganha mp_order_id (id da Order no MP), mp_payment_id

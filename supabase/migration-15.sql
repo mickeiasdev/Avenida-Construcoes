@@ -4,7 +4,7 @@
 -- IDEMPOTENTE: pode rodar mais de uma vez sem efeito colateral.
 --
 -- O que muda:
---   1) orders ganha payment_provider ('mercado_pago' | 'abacatepay'),
+--   1) orders ganha payment_provider (hoje 'abacatepay'),
 --      payment_ref (id da cobrança no gateway, ex.: pix_char_...),
 --      payment_qr_code (Pix Copia e Cola) e payment_qr_base64 (imagem PNG)
 --      — a AbacatePay não tem endpoint para re-ler o QR depois, então ele
@@ -22,7 +22,7 @@ create index if not exists idx_orders_payment_ref
   on public.orders (payment_ref)
   where payment_ref is not null;
 
-comment on column public.orders.payment_provider is 'gateway do Pix online: mercado_pago | abacatepay';
+comment on column public.orders.payment_provider is 'gateway do Pix online (hoje: abacatepay)';
 comment on column public.orders.payment_ref is 'id da cobrança no gateway (ex.: pix_char_...)';
 comment on column public.orders.payment_qr_code is 'Pix Copia e Cola da cobrança ativa';
 comment on column public.orders.payment_qr_base64 is 'imagem PNG do QR (base64, sem prefixo data:)';
