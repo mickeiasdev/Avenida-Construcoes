@@ -260,7 +260,7 @@ export default function Promotions() {
           <form
             onSubmit={handleSubmit}
             onClick={(e) => e.stopPropagation()}
-            className="max-h-[92vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-2xl bg-white p-5 pb-6 shadow-xl safe-bottom sm:p-6"
+            className="mx-2 toast-in flex w-full max-w-md flex-col space-y-4 rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-2xl"
             role="dialog"
             aria-modal="true"
             aria-label="Nova promoção"
@@ -364,7 +364,7 @@ export default function Promotions() {
               </div>
             )}
 
-            <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
+            <div className="flex justify-end gap-2 border-t border-gray-100 pt-4 mb-4">
               <button type="button" className="btn-soft" onClick={() => setForm(null)}>Cancelar</button>
               <button type="submit" className="btn-primary" disabled={busy || !preview}>
                 {busy && <Loader2 className="h-4 w-4 animate-spin" />}

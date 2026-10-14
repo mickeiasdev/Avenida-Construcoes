@@ -1,4 +1,5 @@
 import { Fragment, useState } from 'react'
+import { HardHat } from 'lucide-react'
 import { maskCep, maskPhone, onlyDigits } from '../lib/utils'
 import { FIELDS, fieldError, maskCpf } from '../lib/checkout'
 
@@ -133,10 +134,11 @@ export function CheckoutForm({ form, set, missing, fields = FIELDS }) {
               ) : (
                 <button
                   type="button"
-                  className="col-span-2 flex min-h-11 items-center text-left text-sm font-medium text-primary hover:underline"
+                  className="col-span-2 flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary/10 px-4 py-2.5 text-sm font-bold text-primary ring-1 ring-primary/40 transition hover:bg-primary/15 hover:ring-primary"
                   onClick={() => setShowReceiver(true)}
                 >
-                  Este pedido é em nome de outra pessoa ou obra
+                  <HardHat className="h-4 w-4" />
+                  É para uma obra ou empresa? Toque aqui
                 </button>
               )
             )}

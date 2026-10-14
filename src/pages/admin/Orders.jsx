@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Banknote, Ban, Check, ChevronRight, ClipboardList, CreditCard, Download, Eraser, Loader2, MapPin, Phone, PlusCircle, QrCode, RotateCcw, Search, Store, Trash2, Truck, User } from 'lucide-react'
+import { Banknote, Ban, Check, ChevronRight, ClipboardList, CreditCard, Download, Eraser, Loader2, MapPin, MessageCircle, Phone, PlusCircle, QrCode, RotateCcw, Search, Store, Trash2, Truck, User } from 'lucide-react'
 import { downloadCsv } from '../../lib/csv'
 import { supabase } from '../../lib/supabaseClient'
 import { DELIVERY_LABELS, fulfillmentTotals, PAYMENT_LABELS } from '../../lib/storeOrder'
-import { formatBRL, formatDateTime, ORDER_CLS, ORDER_LABELS, ORDER_NEXT_ACTION, ORDER_PIPELINE, ORDER_SHORT } from '../../lib/utils'
+import { formatBRL, formatDateTime, onlyDigits, ORDER_CLS, ORDER_LABELS, ORDER_NEXT_ACTION, ORDER_PIPELINE, ORDER_SHORT } from '../../lib/utils'
+import { useStore } from '../../context/StoreContext'
 
 
 const TABS = [
@@ -20,6 +21,7 @@ const TABS = [
 // Lista de pedidos com as ETAPAS DE ENTREGA que o admin avança;
 // o cliente acompanha tudo em /pedidos (Realtime em ambos os lados)
 export default function OrdersAdmin() {
+  const { settings } = useStore()
   const [orders, setOrders] = useState(null)
   const [tab, setTab] = useState('all')
   const [busyId, setBusyId] = useState(null)
@@ -76,6 +78,26 @@ export default function OrdersAdmin() {
   }
 
   // exclui UM pedido (os itens caem junto pelo "on delete cascade")
+  // Aviso rápido ao cliente pelo WhatsApp: abre o wa.me com o texto pronto
+  // (envio 100% automático para clientes exige API oficial paga do WhatsApp;
+  // aqui é um toque do atendente e sai da conta da loja)
+  function avisarCliente(o) {
+    const digits = onlyDigits(o.customer_phone ?? '')
+    if (!digits) return
+    const intl = digits.length <= 11 ? '55' + digits : digits // Brasil
+    const etapa = ORDER_LABELS[o.status] ?? o.status
+    const texto =
+      'Olá, ' + (o.customer_name ?? 'cliente') + '! Aqui é da ' + (settings.store_name ?? 'loja') + '.\n\n' +
+      'Atualização do seu pedido nº ' + String(o.id).slice(0, 8) + ': *' + etapa + '*' +
+      (o.status === 'pending' ? ' — confirmamos o recebimento e já vamos dar andamento.' : '') +
+      (o.status === 'confirmed' ? ' — seu pedido foi confirmado e já está em preparo.' : '') +
+      (o.status === 'preparing' ? ' — estamos separando seus itens neste momento.' : '') +
+      (o.status === 'shipping' ? ' — saiu para entrega! 🚚' : '') +
+      (o.status === 'delivered' ? ' — entrega concluída. ✅ Obrigado pela preferência!' : '') +
+      '\n\nQualquer dúvida é só responder por aqui.'
+    window.open('https://wa.me/' + intl + '?text=' + encodeURIComponent(texto), '_blank', 'noopener')
+  }
+
   async function removeOrder(o) {
     if (!window.confirm('Excluir o pedido nº ' + o.id.slice(0, 8) + '? Os itens vão junto e não tem como desfazer.')) return
     setBusyId(o.id)
@@ -321,6 +343,16 @@ export default function OrdersAdmin() {
                           <Ban className="h-4 w-4" /> Cancelar pedido
                         </button>
                       </>
+                    )}
+                    {o.customer_phone && !cancelled && (
+                      <button
+                        type="button"
+                        title="Abre o WhatsApp com a atualização já escrita — é só enviar"
+                        className="inline-flex items-center gap-2 rounded-lg bg-green-50 px-4 py-2 text-sm font-bold text-green-700 ring-1 ring-green-300 transition hover:bg-green-100"
+                        onClick={() => avisarCliente(o)}
+                      >
+                        <MessageCircle className="h-4 w-4" /> Avisar cliente
+                      </button>
                     )}
                   </div>
                   <button

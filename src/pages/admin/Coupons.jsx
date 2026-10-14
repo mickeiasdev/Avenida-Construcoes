@@ -157,7 +157,7 @@ export default function Coupons() {
           <form
             onSubmit={handleSubmit}
             onClick={(e) => e.stopPropagation()}
-            className="toast-in flex w-full max-w-md flex-col space-y-4 rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-2xl"
+            className="mx-2 toast-in flex w-full max-w-md flex-col space-y-4 rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-2xl"
             role="dialog"
             aria-modal="true"
             aria-label={modal?.id ? 'Editar cupom' : 'Novo cupom'}

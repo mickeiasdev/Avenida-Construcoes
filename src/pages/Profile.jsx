@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react'
 import { Loader2, Save, CheckCircle2, AlertCircle, MailWarning, Send } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { maskCep, maskPhone } from '../lib/utils'
+import { maskCpf } from '../lib/checkout'
 import { isCepValid, isFullName, isPhoneBR, isUF } from '../lib/validation'
 import { useAuth } from '../context/AuthContext'
 
 const FIELDS = [
   ['full_name', 'Nome completo', 'text', 'sm:col-span-2'],
   ['phone', 'Telefone / WhatsApp', 'tel', ''],
+  ['cpf', 'CPF', 'text', ''],
   ['zip', 'CEP', 'text', ''],
   ['street', 'Rua / Avenida', 'text', 'sm:col-span-2'],
   ['number', 'Número', 'text', ''],
@@ -74,7 +76,12 @@ export default function Profile() {
     }
 
     const { error } = await supabase.from('profiles').update(form).eq('id', user.id)
-    if (error) setMsg({ type: 'err', text: 'Erro ao salvar: ' + error.message })
+    if (error) setMsg({
+      type: 'err',
+      text: error.code === '23505' || /profiles_cpf_unique|duplicate key/i.test(error.message)
+        ? 'Este CPF já está cadastrado em outra conta. Confira o número ou fale com a loja.'
+        : 'Erro ao salvar: ' + error.message,
+    })
     else {
       setMsg({ type: 'ok', text: 'Dados salvos com sucesso!' })
       await refreshProfile(user.id)
@@ -134,17 +141,19 @@ export default function Profile() {
               id={'f_' + key}
               className={'input ' + (key === 'state' ? 'uppercase ' : '')}
               type={type}
-              inputMode={key === 'phone' ? 'tel' : key === 'zip' ? 'numeric' : undefined}
-              maxLength={key === 'state' ? 2 : key === 'phone' ? 15 : undefined}
+              inputMode={key === 'phone' ? 'tel' : ['zip', 'cpf'].includes(key) ? 'numeric' : undefined}
+              maxLength={key === 'state' ? 2 : key === 'phone' ? 15 : key === 'cpf' ? 14 : undefined}
               value={form[key]}
               onChange={(e) =>
                 set(key, key === 'phone'
                   ? maskPhone(e.target.value)
                   : key === 'zip'
                     ? maskCep(e.target.value)
-                    : key === 'state'
-                      ? e.target.value.toUpperCase()
-                      : e.target.value)
+                    : key === 'cpf'
+                      ? maskCpf(e.target.value)
+                      : key === 'state'
+                        ? e.target.value.toUpperCase()
+                        : e.target.value)
               }
             />
           </div>

@@ -200,11 +200,12 @@ export function CartProvider({ children }) {
       if (Object.keys(profileUpdate).length > 0) {
         await supabase.from('profiles').update(profileUpdate).eq('id', user.id)
       }
-      // CPF é gravado à parte e de forma best-effort: a coluna pode não
-      // existir ainda (migration-10). Qualquer erro aqui é IGNORADO.
+      // CPF é gravado à parte e de forma best-effort: nunca pode derrubar o
+      // checkout (coluna única da migration-16 pode rejeitar CPF em duplicidade).
       if (String(form?.cpf ?? '').trim() !== '') {
         try {
-          await supabase.from('profiles').update({ cpf: form.cpf }).eq('id', user.id)
+          const { error: cpfErr } = await supabase.from('profiles').update({ cpf: form.cpf }).eq('id', user.id)
+          if (cpfErr) console.warn('[checkout] CPF não atualizado no perfil:', cpfErr.message) // 23505 = CPF já usado em outra conta
         } catch { /* coluna ausente / RLS — o pedido segue normalmente */ }
       }
       if (refreshProfile) refreshProfile(user.id)

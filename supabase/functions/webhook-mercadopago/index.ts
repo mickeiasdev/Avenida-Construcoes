@@ -33,6 +33,40 @@ function safeEqual(a: string, b: string) {
   return diff === 0
 }
 
+// Avisa a LOJA no WhatsApp quando um Pix é confirmado (pedido pago).
+// Canal gratuito: CallMeBot — a loja faz um opt-in UMA vez e cola a apikey
+// em /admin/configuracoes. Sem a chave, simplesmente não envia (só loga).
+async function notifyStoreOnPaid(supabase: any, orderId: string) {
+  try {
+    const { data: s } = await supabase
+      .from('store_settings').select('store_name, whatsapp, notify_whatsapp_key').eq('id', 1).maybeSingle()
+    if (!s?.notify_whatsapp_key || !s?.whatsapp) return
+
+    const { data: o } = await supabase
+      .from('orders').select('id, customer_name, customer_phone, total, delivery_method').eq('id', orderId).maybeSingle()
+    if (!o) return
+
+    const money = (n: number) => 'R$ ' + Number(n).toFixed(2).replace('.', ',')
+    const entrega = o.delivery_method === 'retirada' ? 'Retirada no balcão' : o.delivery_method === 'misto' ? 'Retirada + entrega' : 'Entrega'
+    const msg =
+      '🧾 *Pedido PAGO no site!*\n' +
+      'Pedido #' + String(o.id).slice(0, 8) + ' · ' + money(o.total) + '\n' +
+      'Cliente: ' + (o.customer_name ?? '-') + (o.customer_phone ? ' · ' + o.customer_phone : '') + '\n' +
+      entrega + '\n' +
+      'Dê andamento em /admin/pedidos.'
+
+    const digits = String(s.whatsapp).replace(/\D/g, '')
+    const intl = digits.length <= 11 ? '55' + digits : digits // Brasil
+    await fetch(
+      'https://api.callmebot.com/whatsapp.php?phone=' + encodeURIComponent('+' + intl) +
+      '&text=' + encodeURIComponent(msg) +
+      '&apikey=' + encodeURIComponent(s.notify_whatsapp_key),
+    )
+  } catch (e) {
+    console.warn('[webhook] aviso WhatsApp da loja falhou:', String(e))
+  }
+}
+
 // Assinatura do MP: header "x-signature: ts=<ts>,v1=<hmac>"
 // manifesto = "id:<data.id>;request-id:<x-request-id>;ts:<ts>;"
 async function verifySignature(req: Request, dataId: string, secret: string) {
@@ -190,10 +224,18 @@ Deno.serve(async (req) => {
     if (order_status) upd.status = order_status
     if (payId) upd.mp_payment_id = payId
     if (ordId) upd.mp_order_id = ordId
+
+    // estado anterior — o aviso no WhatsApp dispara UMA vez, na primeira
+    // confirmação (o MP pode mandar o mesmo evento mais de uma vez)
+    const { data: before } = await supabase.from('orders').select('payment_status').eq('id', targetId).maybeSingle()
+
     const { error } = await supabase.from('orders').update(upd).eq('id', targetId)
     if (error) {
       console.error('[webhook] update error', error.message)
       return json({ ok: false, error: error.message }, 500)
+    }
+    if (upd.payment_status === 'approved' && String(before?.payment_status ?? '').toLowerCase() !== 'approved') {
+      await notifyStoreOnPaid(supabase, targetId)
     }
     return json({ ok: true, order_id: targetId, mp_status: mpStatus, payment_status, order_status })
   }
