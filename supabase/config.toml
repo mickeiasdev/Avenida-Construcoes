@@ -1,14 +1,13 @@
 # Configuração das Edge Functions (Supabase CLI)
-# O webhook NÃO pode exigir JWT: a AbacatePay não envia cabeçalho Authorization,
+# O webhook NÃO pode exigir JWT: o Mercado Pago não envia cabeçalho Authorization,
 # então com verify_jwt ligado o gateway responderia 401 e o Pix nunca confirmaria.
 project_id = "white-label-store"
 
-[functions.create-abacate-order]
+[functions.create-mp-order]
 # chamada pelo navegador (usa a anon key / sessão do cliente): mantém a exigência de JWT
 verify_jwt = true
 
-[functions.webhook-abacatepay]
-# chamado pela AbacatePay, que NÃO envia Authorization.
-# A autenticidade é garantida pelo ?webhookSecret= na URL (ABACATE_WEBHOOK_SECRET)
-# + assinatura X-Webhook-Signature quando presente.
+[functions.webhook-mercadopago]
+# chamado pelo Mercado Pago, que NÃO envia Authorization.
+# A autenticidade é garantida pela assinatura x-signature (MP_WEBHOOK_SECRET).
 verify_jwt = false
