@@ -1,5 +1,7 @@
 // supabase/functions/webhook-mercadopago/index.ts
-// Webhook do Mercado Pago para Orders API (topic=order)
+// Webhook do Mercado Pago: aceita eventos de Payments (topic=payment) e
+// de Orders (topic=order). Sempre confirma o estado REAL na API do MP antes
+// de tocar no banco (payload forjado não altera pedido).
 // URL para cadastrar no painel MP: https://SEU-PROJETO.supabase.co/functions/v1/webhook-mercadopago
 // Requer secret: MP_ACCESS_TOKEN
 // Opcional (recomendado): MP_WEBHOOK_SECRET para validar a assinatura x-signature
@@ -70,15 +72,17 @@ Deno.serve(async (req) => {
   let body: any = {}
   try { body = await req.json() } catch { body = {} }
 
-  // MP Orders API pode enviar { id, type: 'order', data: { id } } ou variação
-  const mpOrderId = String(body.id ?? body.data?.id ?? body.resource ?? '').trim()
-  // Alguns eventos antigos mandam resource like https://api.mercadopago.com/v1/orders/xxx
+  // Formas possíveis:
+  //   Payments: { type: 'payment', data: { id: '123456' } }  (ou antigo topic=payment)
+  //   Orders:   { type: 'order' , data: { id: 'ORD...' } }
+  const topic = String(body.type ?? body.topic ?? '').toLowerCase()
+  const rawId = String(body.data?.id ?? body.id ?? body.resource ?? '').trim()
   const idFromResource = (() => {
     const r = String(body.resource ?? '')
-    const m = r.match(/\/orders\/([a-zA-Z0-9_-]+)/)
-    return m ? m[1] : ''
+    const m = r.match(/\/(orders|payments)\/([a-zA-Z0-9_-]+)/)
+    return m ? m[2] : ''
   })()
-  const orderIdToFetch = mpOrderId || idFromResource
+  const resourceId = rawId || idFromResource
 
   // ---- Assinatura: obrigatória quando MP_WEBHOOK_SECRET está configurado ----
   const WEBHOOK_SECRET = Deno.env.get('MP_WEBHOOK_SECRET')
@@ -94,30 +98,58 @@ Deno.serve(async (req) => {
       'Configure o secret em Edge Functions > Secrets.')
   }
 
-  if (!orderIdToFetch) {
+  if (!resourceId) {
     console.warn('[webhook] payload sem id', JSON.stringify(body).slice(0, 1000))
     return json({ ok: true, ignored: true })
   }
 
-  // Busca a order no MP para ler status autoritativo
-  let mpOrder: any = null
-  try {
-    const r = await fetch(`https://api.mercadopago.com/v1/orders/${orderIdToFetch}`, {
-      headers: { Authorization: `Bearer ${MP_TOKEN}` },
-    })
-    mpOrder = await r.json().catch(() => null)
-    if (!r.ok) {
-      console.error('[webhook] erro ao buscar MP order', r.status, JSON.stringify(mpOrder).slice(0, 1500))
-      return json({ ok: true, warn: 'mp fetch failed', status: r.status })
-    }
-  } catch (e) {
-    console.error('[webhook] fetch exception', String(e))
-    return json({ ok: true, warn: 'fetch exception' })
-  }
+  const isPayment = topic.includes('payment') || String(body.resource ?? '').includes('/payments/')
 
-  const externalRef: string | null = mpOrder?.external_reference ?? null
-  const payment = mpOrder?.transactions?.payments?.[0] ?? null
-  const mpStatus: string = String(payment?.status ?? mpOrder?.status ?? '').toLowerCase()
+  let externalRef: string | null = null
+  let mpStatus = ''
+  let payId: string | null = null
+  let ordId: string | null = null
+
+  if (isPayment) {
+    // ---- evento de PAYMENT (node atual: cobrança nasce via /v1/payments) ----
+    try {
+      const r = await fetch('https://api.mercadopago.com/v1/payments/' + resourceId, {
+        headers: { Authorization: 'Bearer ' + MP_TOKEN },
+      })
+      const p = await r.json().catch(() => null)
+      if (!r.ok) {
+        console.error('[webhook] erro ao buscar payment', r.status, JSON.stringify(p).slice(0, 1500))
+        return json({ ok: true, warn: 'mp fetch failed', status: r.status })
+      }
+      externalRef = p?.external_reference ?? null
+      mpStatus = String(p?.status ?? '').toLowerCase()
+      payId = String(p?.id ?? '')
+    } catch (e) {
+      console.error('[webhook] fetch exception', String(e))
+      return json({ ok: true, warn: 'fetch exception' })
+    }
+  } else {
+    // ---- evento de ORDER (legado) ----
+    let mpOrder: any = null
+    try {
+      const r = await fetch('https://api.mercadopago.com/v1/orders/' + resourceId, {
+        headers: { Authorization: 'Bearer ' + MP_TOKEN },
+      })
+      mpOrder = await r.json().catch(() => null)
+      if (!r.ok) {
+        console.error('[webhook] erro ao buscar MP order', r.status, JSON.stringify(mpOrder).slice(0, 1500))
+        return json({ ok: true, warn: 'mp fetch failed', status: r.status })
+      }
+    } catch (e) {
+      console.error('[webhook] fetch exception', String(e))
+      return json({ ok: true, warn: 'fetch exception' })
+    }
+    externalRef = mpOrder?.external_reference ?? null
+    const payment = mpOrder?.transactions?.payments?.[0] ?? null
+    mpStatus = String(payment?.status ?? mpOrder?.status ?? '').toLowerCase()
+    payId = payment?.id ? String(payment.id) : null
+    ordId = mpOrder?.id ? String(mpOrder.id) : null
+  }
 
   // Mapeia status MP -> payment_status + orders.status
   let payment_status: string | null = null
@@ -125,30 +157,30 @@ Deno.serve(async (req) => {
   if (['approved', 'authorized'].includes(mpStatus)) {
     payment_status = 'approved'
     order_status = 'confirmed'
-  } else if (['rejected', 'cancelled', 'canceled'].includes(mpStatus)) {
-    payment_status = mpStatus === 'cancelled' || mpStatus === 'canceled' ? 'cancelled' : 'rejected'
+  } else if (['rejected', 'cancelled', 'canceled', 'refunded', 'charged_back'].includes(mpStatus)) {
+    payment_status = ['cancelled', 'canceled'].includes(mpStatus)
+      ? 'cancelled'
+      : ['refunded', 'charged_back'].includes(mpStatus) ? 'refunded' : 'rejected'
     order_status = 'cancelled'
-  } else if (['expired'].includes(mpStatus)) {
+  } else if (mpStatus === 'expired') {
     payment_status = 'expired'
     order_status = 'cancelled'
-  } else if (['pending', 'processing', 'in_process'].includes(mpStatus)) {
+  } else if (['pending', 'processing', 'in_process', 'in_mediation'].includes(mpStatus)) {
     payment_status = 'pending'
   }
 
-  if (!externalRef) {
-    // tenta achar pelo mp_order_id caso external_reference não venha
-    const { data: found } = await supabase.from('orders').select('id').eq('mp_order_id', String(mpOrder.id)).maybeSingle()
-    if (found?.id) {
-      if (payment_status || order_status) {
-        const upd: Record<string,string> = {}
-        if (payment_status) upd.payment_status = payment_status
-        if (order_status) upd.status = order_status
-        if (payment?.id) upd.mp_payment_id = String(payment.id)
-        await supabase.from('orders').update(upd).eq('id', found.id)
-      }
-      return json({ ok: true, order_id: found.id, mp_status: mpStatus, payment_status, order_status })
-    }
-    console.warn('[webhook] sem external_reference e sem match por mp_order_id', mpOrder.id)
+  // acha o pedido: external_reference (nosso orderId), senão pelos ids salvos
+  let targetId: string | null = externalRef
+  if (!targetId && payId) {
+    const { data: found } = await supabase.from('orders').select('id').eq('mp_payment_id', payId).maybeSingle()
+    targetId = found?.id ?? null
+  }
+  if (!targetId && ordId) {
+    const { data: found } = await supabase.from('orders').select('id').eq('mp_order_id', ordId).maybeSingle()
+    targetId = found?.id ?? null
+  }
+  if (!targetId) {
+    console.warn('[webhook] pedido não achado para o recurso', resourceId)
     return json({ ok: true, ignored: true })
   }
 
@@ -156,14 +188,15 @@ Deno.serve(async (req) => {
     const upd: Record<string,string> = {}
     if (payment_status) upd.payment_status = payment_status
     if (order_status) upd.status = order_status
-    if (payment?.id) upd.mp_payment_id = String(payment.id)
-    // garante que o mp_order_id fica gravado
-    upd.mp_order_id = String(mpOrder.id)
-
-    const { error } = await supabase.from('orders').update(upd).eq('id', externalRef)
-    if (error) console.error('[webhook] update error', error.message)
-    return json({ ok: true, order_id: externalRef, mp_status: mpStatus, payment_status, order_status })
+    if (payId) upd.mp_payment_id = payId
+    if (ordId) upd.mp_order_id = ordId
+    const { error } = await supabase.from('orders').update(upd).eq('id', targetId)
+    if (error) {
+      console.error('[webhook] update error', error.message)
+      return json({ ok: false, error: error.message }, 500)
+    }
+    return json({ ok: true, order_id: targetId, mp_status: mpStatus, payment_status, order_status })
   }
 
-  return json({ ok: true, mp_status: mpStatus, ignored: true })
+  return json({ ok: true, order_id: targetId, mp_status: mpStatus, ignored: true })
 })
