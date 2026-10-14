@@ -183,8 +183,11 @@ Deno.serve(async (req) => {
   // a cobrança é gerada alguns segundos depois — sem este retry o site dizia
   // "não conseguimos gerar o Pix" mesmo com a cobrança pronta (o cliente até
   // recebia o e-mail da cobrança!). Relembra a Order algumas vezes.
+  // NOTA: em modo TESTE (credencial TEST-...) o MP NUNCA emite o QR — o Pix
+  // fica em "waiting_transfer" para sempre. Em produção o QR aparece em alguns
+  // segundos; cobrimos até ~9s aqui (janela típica de geração do Pix no MP).
   if (!tx?.qr_code && mpOrderId) {
-    for (let tentativa = 0; tentativa < 4; tentativa++) {
+    for (let tentativa = 0; tentativa < 6; tentativa++) {
       await new Promise((r) => setTimeout(r, 1500))
       try {
         const r = await fetch(`https://api.mercadopago.com/v1/orders/${mpOrderId}`, {
