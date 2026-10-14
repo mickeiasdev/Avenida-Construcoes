@@ -4,6 +4,7 @@ import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Too
 import { ClipboardList, Package, TrendingUp, Truck, Users, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useStore } from '../../context/StoreContext'
+import { sweepOrphanImages } from '../../lib/storageCleanup'
 import { formatBRL, formatDateTime, ORDER_CLS, ORDER_LABELS } from '../../lib/utils'
 
 // Dashboard: as VENDAS contabilizam somente pedidos FINALIZADOS
@@ -17,6 +18,20 @@ export default function Dashboard() {
   const [salesByDay, setSalesByDay] = useState([])
   const [topSold, setTopSold] = useState([])
   const [loadError, setLoadError] = useState(null)
+
+  // --------------------------------------------------------------
+  // FAXINA AUTOMÁTICA de imagens órfãs (ex.: foto enviada e o modal foi
+  // fechado sem salvar). Roda em segundo plano quando o painel abre, no
+  // máximo 2x ao dia por navegador — o delete exige admin (migration-18),
+  // por isso mora aqui no Dashboard e não na vitrine.
+  useEffect(() => {
+    const last = Number(localStorage.getItem('wl_img_sweep_at') ?? 0)
+    if (Date.now() - last < 12 * 3600 * 1000) return
+    localStorage.setItem('wl_img_sweep_at', String(Date.now()))
+    sweepOrphanImages()
+      .then((n) => { if (n > 0) console.info('[storage] faxina removeu ' + n + ' imagem(ns) órfã(s)') })
+      .catch((e) => console.warn('[storage] faxina pulou:', e?.message ?? e))
+  }, [])
 
   useEffect(() => {
     async function load() {
