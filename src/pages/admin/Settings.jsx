@@ -37,7 +37,6 @@ export default function Settings() {
       secondary_color: settings.secondary_color ?? '#1e293b',
       logo_url: settings.logo_url ?? '',
       banner_url: settings.banner_url ?? '',
-      notify_whatsapp_key: settings.notify_whatsapp_key ?? '',
     })
   }, [settings])
 
@@ -138,25 +137,6 @@ export default function Settings() {
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_whatsapp_de_destino_dos_">WhatsApp de destino dos pedidos (DDD + número)</label>
           <input id="f_whatsapp_de_destino_dos_" className="input" required placeholder="(11) 99999-9999" value={form.whatsapp} onChange={(e) => set('whatsapp', maskPhone(e.target.value))} />
-        </div>
-
-        {/* AVISO AUTOMÁTICO de pedido pago no WhatsApp da loja (CallMeBot, gratuito) */}
-        <div className="rounded-lg bg-green-50 p-3 ring-1 ring-green-200">
-          <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_notify_whatsapp_key">
-            Aviso automático de pedido pago (CallMeBot)
-          </label>
-          <input
-            id="f_notify_whatsapp_key"
-            className="input"
-            placeholder="Cole aqui a apikey do CallMeBot (opcional)"
-            value={form.notify_whatsapp_key}
-            onChange={(e) => set('notify_whatsapp_key', e.target.value.trim())}
-          />
-          <p className="mt-1.5 text-xs text-gray-600">
-            Para receber um WhatsApp <b>a cada pedido Pix pago</b>, faça uma vez: no WhatsApp, envie
-            <b> "I allow callmebot to send me messages"</b> para <b>+34 644 51 95 23</b> (a partir do número da loja)
-            e cole aqui a apikey que ele responde. Grátis, sem mensalidade.
-          </p>
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_endereco">Endereço</label>

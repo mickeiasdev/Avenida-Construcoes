@@ -29,9 +29,9 @@ create unique index if not exists profiles_cpf_unique on public.profiles (cpf) w
 grant update (cpf) on table public.profiles to authenticated;
 comment on column public.profiles.cpf is 'CPF do cliente (único). Preenchido no checkout ou no perfil.';
 
--- Chave do CallMeBot (opcional): com ela + WhatsApp configurado, o webhook
--- avisa a loja no WhatsApp quando um pagamento Pix é confirmado.
-alter table public.store_settings add column if not exists notify_whatsapp_key text;
-comment on column public.store_settings.notify_whatsapp_key is 'API key do CallMeBot para aviso automático de pedido pago no WhatsApp da loja (opcional).';
+-- Notificações de WhatsApp são pela Evolution API (secrets das Edge
+-- Functions — ver supabase/functions/whatsapp-notify). Se por acaso você já
+-- tinha rodado uma versão desta migration que criava store_settings.notify_whatsapp_key
+-- (teste do CallMeBot), a migration-17 remove a coluna.
 
 notify pgrst, 'reload schema';

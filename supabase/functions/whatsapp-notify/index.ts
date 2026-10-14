@@ -1,11 +1,10 @@
 // supabase/functions/whatsapp-notify/index.ts
 // Central de mensagens de WhatsApp da loja (automáticas).
 //
-// Canal principal: Evolution API (self-hosted — pareia o número como um
+// Canal único: Evolution API (self-hosted — pareia o número como um
 // WhatsApp Web: atendimento manual no celular e mensagens automáticas do
-// sistema convivem no mesmo número).
-// Plano B (grátis): CallMeBot — só para a LOJA (a loja faz o opt-in uma vez;
-// para cliente não funciona sem ele autorizar).
+// sistema convivem no mesmo número). Sem Evolution configurada, a função
+// recebe os eventos e responde ok sem enviar nada.
 //
 // Quem chama:
 //   • webhook-mercadopago  -> topic "order_paid"   (pedido pago no site)
@@ -68,13 +67,6 @@ async function sendEvo(url: string, key: string, instance: string, number: strin
   return r.ok
 }
 
-async function sendCmb(number: string, text: string, apikey: string) {
-  const u = 'https://api.callmebot.com/whatsapp.php?phone=' + encodeURIComponent('+' + number) +
-    '&text=' + encodeURIComponent(text) + '&apikey=' + encodeURIComponent(apikey)
-  const r = await fetch(u)
-  return r.ok
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method === 'GET') return json({ ok: true, hint: 'POST com { type, record } (DB webhook) ou { topic, record } (payment webhook)' })
@@ -104,7 +96,7 @@ Deno.serve(async (req) => {
   if (!record?.id) return json({ ok: true, ignored: 'sem record' })
 
   const [{ data: settings }] = await Promise.all([
-    supabase.from('store_settings').select('store_name, whatsapp, notify_whatsapp_key').eq('id', 1).maybeSingle(),
+    supabase.from('store_settings').select('store_name, whatsapp').eq('id', 1).maybeSingle(),
   ])
   // Para quem os avisos de pedido vão? NOTIFY_TO (secret opcional) primeiro —
   // ideal: seu número PESSOAL, porque o número pareado na Evolution é o da loja.
@@ -118,12 +110,12 @@ Deno.serve(async (req) => {
   const entrega = record.delivery_method === 'retirada' ? 'Retirada no balcão' : record.delivery_method === 'misto' ? 'Retirada + entrega' : 'Entrega'
   const pagamento = record.payment_method === 'mercado_pago' ? 'Pix online' : record.payment_method === 'cartao' ? 'Cartão na entrega/retirada' : record.payment_method === 'dinheiro' ? 'Dinheiro' : 'Pix'
 
-  // Evolution primeiro; se não estiver configurada e for a LOJA, CallMeBot (grátis)
-  async function deliver(number: string | null, text: string, isStore: boolean) {
-    if (!number) return false
-    if (evoReady && (await sendEvo(EV_URL, EV_KEY, EV_INSTANCE, number, text))) return true
-    if (isStore && settings?.notify_whatsapp_key) return await sendCmb(number, text, settings.notify_whatsapp_key)
-    return false
+  let failed = 0
+  async function deliver(number: string | null, text: string) {
+    if (!number || !evoReady) return false
+    const ok = await sendEvo(EV_URL, EV_KEY, EV_INSTANCE, number, text)
+    if (!ok) failed++
+    return ok
   }
 
   const sent: string[] = []
@@ -134,10 +126,10 @@ Deno.serve(async (req) => {
       '🧾 *Pedido PAGO no site!*\n' +
       'Pedido #' + orderShort + ' · ' + money(record.total) + '\n' +
       'Cliente: ' + cliente + (record.customer_phone ? ' · ' + record.customer_phone : '') + '\n' +
-      entrega + '\nDê andamento em /admin/pedidos.', true)) sent.push('loja')
+      entrega + '\nDê andamento em /admin/pedidos.')) sent.push('loja')
     if (await deliver(clientePhone,
       '✅ Pagamento confirmado!\nSeu pedido nº ' + orderShort + ' na ' + storeName +
-      ' foi pago e já está em preparo.\nQualquer dúvida, responda por aqui.', false)) sent.push('cliente')
+      ' foi pago e já está em preparo.\nQualquer dúvida, responda por aqui.')) sent.push('cliente')
   }
 
   // ---------- pedido NOVO (DB webhook INSERT): avisa a LOJA ----------
@@ -149,7 +141,7 @@ Deno.serve(async (req) => {
       '🛒 *Novo pedido no site*\n' +
       'Pedido #' + orderShort + ' · ' + money(record.total) + ' ' + aviso + '\n' +
       'Cliente: ' + cliente + (record.customer_phone ? ' · ' + record.customer_phone : '') + '\n' +
-      entrega, true)) sent.push('loja')
+      entrega)) sent.push('loja')
   }
 
   // ---------- mudança de STATUS (DB webhook UPDATE): avisa o CLIENTE ----------

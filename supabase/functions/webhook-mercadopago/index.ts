@@ -35,7 +35,7 @@ function safeEqual(a: string, b: string) {
 
 // Avisa a LOJA (e o cliente) no WhatsApp quando um Pix é confirmado.
 // Delega para a function whatsapp-notify (Evolution API; se não estiver
-// configurada, ela cai no CallMeBot se houver apikey em /admin/configuracoes).
+// configurada, ela só confirma sem enviar mensagem).
 async function notifyStoreOnPaid(supabase: any, orderId: string) {
   const SECRET = Deno.env.get('NOTIFY_SECRET')
   if (!SECRET) return // notificações desligadas
