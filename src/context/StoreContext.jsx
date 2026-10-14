@@ -10,7 +10,7 @@ const DEFAULT_SETTINGS = {
   id: 1,
   store_name: 'Avenida Construção',
   logo_url: null,
-  banner_url: 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=1600&q=80',
+  banner_url: '', // vazio até o banco responder — um default externo "piscava" na vitrine; sem banner a Home mostra só o degradê da marca
   primary_color: '#475569',
   secondary_color: '#1e293b',
   // vazio de propósito: o app esconde os atalhos de WhatsApp até o admin

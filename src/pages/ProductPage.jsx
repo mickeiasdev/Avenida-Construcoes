@@ -13,8 +13,6 @@ import { MpPixDisplay } from '../components/MpPixDisplay'
 import { useModalA11y } from '../lib/useModalA11y'
 import { readFunctionError } from '../lib/functionError'
 
-const FALLBACK_IMG = 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=800&q=80'
-
 export default function ProductPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -187,11 +185,11 @@ export default function ProductPage() {
     loadOffers()
   }, [product])
 
-  // Galeria = imagem principal + fotos extras (dedupe)
+  // Galeria = imagem principal + fotos extras (dedupe). Sem foto -> galeria
+  // vazia mesmo (a tela mostra um bloco neutro): foto aleatória nunca mais.
   const images = useMemo(() => {
     const list = [product?.image_url, ...(product?.images ?? [])].filter(Boolean)
-    const unique = [...new Set(list)]
-    return unique.length > 0 ? unique : [FALLBACK_IMG]
+    return [...new Set(list)]
   }, [product])
 
   if (loading) {
@@ -413,7 +411,13 @@ export default function ProductPage() {
 
             {/* resumo do item */}
             <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
-              <img src={images[0]} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
+              {images[0] ? (
+                <img src={images[0]} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
+              ) : (
+                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-300">
+                  <Package className="h-6 w-6" />
+                </span>
+              )}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-gray-800">{product.name}</p>
                 <p className="text-xs text-gray-500">{qty}× {formatBRL(effectivePrice(product))}</p>
@@ -613,7 +617,15 @@ function Gallery({ images, alt }) {
     setActive(Math.round(el.scrollLeft / el.clientWidth))
   }
 
-  if (images.length <= 1) {
+  if (images.length === 0) {
+    // produto sem foto: área neutra — nunca uma imagem aleatória de banco externo
+    return (
+      <div className="flex aspect-[4/3] w-full items-center justify-center rounded-xl bg-gray-100 text-gray-300">
+        <Package className="h-16 w-16" />
+      </div>
+    )
+  }
+  if (images.length === 1) {
     return <img src={images[0]} alt={alt} className="aspect-[4/3] w-full rounded-xl object-cover" />
   }
 
@@ -676,12 +688,18 @@ function OfferCard({ product }) {
   return (
     <Link to={'/produto/' + product.id} className="card group block h-full overflow-hidden p-0 transition hover:ring-primary/30">
       <div className="relative aspect-square overflow-hidden bg-gray-100">
-        <img
-          src={product.image_url || FALLBACK_IMG}
-          alt={product.name}
-          loading="lazy"
-          className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-        />
+        {product.image_url ? (
+          <img
+            src={product.image_url}
+            alt={product.name}
+            loading="lazy"
+            className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+          />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center bg-gray-100 text-gray-300">
+            <Package className="h-12 w-12" />
+          </span>
+        )}
         {product.categories?.name && (
           <span className="absolute left-1.5 top-1.5 rounded-full bg-black/55 px-1.5 py-0.5 text-[9px] font-medium text-white backdrop-blur">
             {product.categories.name}

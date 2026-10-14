@@ -1,10 +1,8 @@
-import { ShoppingCart } from 'lucide-react'
+import { Package, ShoppingCart } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
 import { FavoriteButton } from './FavoriteButton'
 import { formatBRL, effectivePrice, hasActivePromo, promoPercent } from '../lib/utils'
-
-const FALLBACK_IMG = 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=800&q=80'
 
 export function ProductCard({ product, compact = false }) {
   const { addItem } = useCart()
@@ -20,12 +18,19 @@ export function ProductCard({ product, compact = false }) {
     <div className="card group flex h-full flex-col overflow-hidden p-2">
       <div className="relative aspect-square overflow-hidden rounded-xl bg-gray-100">
         <Link to={'/produto/' + product.id} className="block h-full w-full">
-          <img
-            src={product.image_url || FALLBACK_IMG}
-            alt={product.name}
-            loading="lazy"
-            className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-          />
+          {product.image_url ? (
+            <img
+              src={product.image_url}
+              alt={product.name}
+              loading="lazy"
+              className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+            />
+          ) : (
+            // sem foto: área neutra com o ícone da marca de pacote — nunca uma imagem aleatória
+            <span className="flex h-full w-full items-center justify-center bg-gray-100 text-gray-300">
+              <Package className="h-12 w-12" />
+            </span>
+          )}
         </Link>
         {product.categories?.name && (
           <span className="absolute left-2.5 top-2.5 z-10 max-w-[calc(100%-3.5rem)] truncate rounded-lg bg-secondary/80 px-2.5 py-1 text-[10px] font-bold tracking-wide text-gray-100 shadow-sm backdrop-blur">

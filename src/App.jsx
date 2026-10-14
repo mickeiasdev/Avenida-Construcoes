@@ -25,15 +25,38 @@ function ScrollToTop() {
 
 // Páginas admin carregadas sob demanda (code-splitting):
 // separa os gráficos (Recharts) do bundle principal da vitrine
-const Dashboard = lazy(() => import('./pages/admin/Dashboard'))
-const ProductsAdmin = lazy(() => import('./pages/admin/Products'))
-const CategoriesAdmin = lazy(() => import('./pages/admin/Categories'))
-const SettingsAdmin = lazy(() => import('./pages/admin/Settings'))
-const OrdersAdmin = lazy(() => import('./pages/admin/Orders'))
-const ClientsAdmin = lazy(() => import('./pages/admin/Clients'))
-const CouponsAdmin = lazy(() => import('./pages/admin/Coupons'))
-const PromotionsAdmin = lazy(() => import('./pages/admin/Promotions'))
-const NewOrderAdmin = lazy(() => import('./pages/admin/NewOrder'))
+
+// Deploy trocou o hash dos arquivos? Quem estava com a loja aberta teria
+// "Failed to fetch dynamically imported module" até dar F5. Com este wrapper
+// o app se recarrega SOZINHO uma vez (e se persistir, o erro sobe normal).
+const CHUNK_RELOAD_KEY = 'wl_chunk_reload'
+function lazyRetry(importFn) {
+  return lazy(async () => {
+    try {
+      const mod = await importFn()
+      sessionStorage.removeItem(CHUNK_RELOAD_KEY)
+      return mod
+    } catch (err) {
+      if (!sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
+        sessionStorage.setItem(CHUNK_RELOAD_KEY, '1')
+        window.location.reload()
+        return new Promise(() => {}) // aguarda o reload acontecer
+      }
+      sessionStorage.removeItem(CHUNK_RELOAD_KEY)
+      throw err
+    }
+  })
+}
+
+const Dashboard = lazyRetry(() => import('./pages/admin/Dashboard'))
+const ProductsAdmin = lazyRetry(() => import('./pages/admin/Products'))
+const CategoriesAdmin = lazyRetry(() => import('./pages/admin/Categories'))
+const SettingsAdmin = lazyRetry(() => import('./pages/admin/Settings'))
+const OrdersAdmin = lazyRetry(() => import('./pages/admin/Orders'))
+const ClientsAdmin = lazyRetry(() => import('./pages/admin/Clients'))
+const CouponsAdmin = lazyRetry(() => import('./pages/admin/Coupons'))
+const PromotionsAdmin = lazyRetry(() => import('./pages/admin/Promotions'))
+const NewOrderAdmin = lazyRetry(() => import('./pages/admin/NewOrder'))
 
 export default function App() {
   return (

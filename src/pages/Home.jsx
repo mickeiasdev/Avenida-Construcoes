@@ -92,7 +92,9 @@ export default function Home() {
     <div className="space-y-6">
       {/* HERO — banner gigante com degradê da marca e conteúdo em destaque */}
       <section className="relative overflow-hidden rounded-3xl">
-        <img src={settings.banner_url} alt="" className="h-56 w-full object-cover sm:h-72 md:h-96" />
+        {settings.banner_url && (
+          <img src={settings.banner_url} alt="" className="h-56 w-full object-cover sm:h-72 md:h-96" />
+        )}
         <div
           className="absolute inset-0"
           style={{ backgroundImage: 'linear-gradient(100deg, color-mix(in srgb, var(--brand-secondary) 92%, transparent) 15%, color-mix(in srgb, var(--brand-primary) 35%, transparent) 70%, transparent)' }}
