@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Percent, Users, Menu, X, PlusCircle, MessageCircle } from 'lucide-react';import { useAuth } from '../context/AuthContext'
+import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Percent, Users, Menu, X, PlusCircle, MessageCircle, Home } from 'lucide-react';import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { ORDER_PIPELINE } from '../lib/utils'
@@ -17,6 +17,9 @@ function PendingBadge({ count }) {
 }
 
 const ITEMS = [
+  // "Início" abre a VITRINE da loja (mesma página que o cliente vê) —
+  // caminho explícito, sem depender de achar o atalho do rodapé.
+  { to: '/', label: 'Início', icon: Home, external: true },
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, group: 'Operação' },
   { to: '/admin/pedidos', label: 'Pedidos', icon: ClipboardList },
   { to: '/admin/nova-venda', label: 'Nova venda', icon: PlusCircle },
@@ -99,13 +102,21 @@ export default function AdminLayout() {
         <div className="flex items-center gap-2 px-5 py-5">{brand}</div>
 
         <nav className="scrollbar-dark flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
-            {ITEMS.map(({ to, label, icon: Icon, end, group, waBadge }) => (
+            {ITEMS.map(({ to, label, icon: Icon, end, group, waBadge, external }) => (
               <div key={to}>
                 {group && (
                   <p className="mt-4 px-3 pb-1 text-[11px] font-semibold uppercase tracking-widest text-white/60">
                     {group}
                   </p>
                 )}
+                {external ? (
+                  <Link
+                    to={to}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-white/70 transition hover:bg-white/10 hover:text-white"
+                  >
+                    <Icon className="h-4 w-4" /> {label}
+                  </Link>
+                ) : (
                 <NavLink
                   to={to}
                   end={end}
@@ -121,6 +132,7 @@ export default function AdminLayout() {
                   {to === '/admin/pedidos' && <PendingBadge count={pendingCount} />}
                   {waBadge && <PendingBadge count={waUnread} />}
                 </NavLink>
+                )}
               </div>
             ))}
         </nav>
@@ -181,13 +193,21 @@ export default function AdminLayout() {
             </div>
 
             <nav className="scrollbar-dark flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-3 text-sm">
-          {ITEMS.map(({ to, label, icon: Icon, end, group }) => (
+          {ITEMS.map(({ to, label, icon: Icon, end, group, waBadge, external }) => (
             <div key={to}>
               {group && (
                 <p className="mt-4 px-2 pb-1 text-[11px] font-semibold uppercase tracking-widest text-white/60">
                   {group}
                 </p>
               )}
+              {external ? (
+                <Link
+                  to={to}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-white/75 transition hover:bg-white/10 hover:text-white"
+                >
+                  <Icon className="h-4 w-4" /> {label}
+                </Link>
+              ) : (
               <NavLink
                 to={to}
                 end={end}
@@ -203,6 +223,7 @@ export default function AdminLayout() {
                 {to === '/admin/pedidos' && <PendingBadge count={pendingCount} />}
                 {waBadge && <PendingBadge count={waUnread} />}
               </NavLink>
+              )}
             </div>
           ))}
             </nav>
