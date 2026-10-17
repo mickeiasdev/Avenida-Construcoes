@@ -6,12 +6,14 @@ import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { formatBRL, effectivePrice } from '../lib/utils'
 import { CheckoutForm } from '../components/CheckoutForm'
-import { profileToForm, missingFields, fieldLabel } from '../lib/checkout'
+import { profileToForm, missingFields, requiredFieldsFor, fieldLabel, maskCpf } from '../lib/checkout'
 import { FavoriteButton } from '../components/FavoriteButton'
 import { GuestCheckoutModal } from '../components/GuestCheckoutModal'
 import { MpPixDisplay } from '../components/MpPixDisplay'
 import { useModalA11y } from '../lib/useModalA11y'
 import { readFunctionError } from '../lib/functionError'
+import { useCpfAccount } from '../lib/useCpfAccount'
+import { CpfAccountModal } from '../components/CpfAccountModal'
 
 export default function ProductPage() {
   const { id } = useParams()
@@ -46,6 +48,9 @@ export default function ProductPage() {
   useModalA11y(!!buyMissing, () => setBuyMissing(null))
   const [buyDelivery, setBuyDelivery] = useState('entrega')
   const [buyPayment, setBuyPayment] = useState('mercado_pago')
+  // Visitante com CPF já cadastrado: "entrar na sua conta?" — continuar como
+  // visitante segue normal e não pergunta de novo neste checkout.
+  const cpfAccount = useCpfAccount({ loggedIn: !!user })
 
   // carrega os dados direto do usuário; se não houver, o form fica vazio
   useEffect(() => { setBuyForm(profileToForm(profile)) }, [profile])
@@ -80,17 +85,21 @@ export default function ProductPage() {
   }
 
   async function confirmBuyNow() {
-    // tentou finalizar sem preencher → NÃO permite; pergunta se quer atualizar
-    // (retirada no balcão não precisa de endereço)
-    const miss = buyDelivery === 'retirada'
-      ? missingFields({ ...buyForm, street: 'ok', number: 'ok', district: 'ok', city: 'ok', state: 'ok', zip: 'ok' })
-      : missingFields(buyForm)
+    // Dados COMPLETOS do modo escolhido (retirada: nome/telefone/CPF;
+    // entrega: também endereço) — não existe mais "preencher depois".
+    const miss = missingFields(buyForm, requiredFieldsFor(buyDelivery))
     if (miss.length > 0) {
       setBuyMissing(miss)
       return
     }
-    // Deslogado? pergunta: entrar/criar conta ou seguir como visitante
-    if (!user) { setAskGuest(true); return }
+    // Deslogado? CPF já cadastrado sugere entrar a conta; senão pergunta
+    // entrar/criar conta ou seguir como visitante
+    if (!user) {
+      const name = await cpfAccount.check(buyForm.cpf)
+      if (name) { cpfAccount.open(); return }
+      setAskGuest(true)
+      return
+    }
     finishBuyNow()
   }
 
@@ -470,7 +479,8 @@ export default function ProductPage() {
 
             {/* dados carregados direto do usuário (se não houver, abre vazio) */}
             {buyForm && (buyDelivery === 'entrega'
-              ? <CheckoutForm form={buyForm} set={setBuyField} missing={buyMissing} />
+              ? <CheckoutForm form={buyForm} set={setBuyField} missing={buyMissing}
+                  onCpfComplete={async (v) => { const nm = await cpfAccount.check(v); if (nm) cpfAccount.open() }} />
               : (
                 <div className="space-y-3">
                   <div>
@@ -482,6 +492,12 @@ export default function ProductPage() {
                     <label htmlFor="f_phone" className="mb-1 block text-xs font-medium text-gray-600">Telefone / WhatsApp *</label>
                     <input id="f_phone" className="input" inputMode="tel" maxLength={15} value={buyForm.phone}
                       onChange={(e) => setBuyField('phone', e.target.value)} autoComplete="off" />
+                  </div>
+                  <div>
+                    <label htmlFor="f_cpf" className="mb-1 block text-xs font-medium text-gray-600">CPF *</label>
+                    <input id="f_cpf" className="input" inputMode="numeric" maxLength={14} placeholder="000.000.000-00" value={buyForm.cpf}
+                      onChange={(e) => setBuyField('cpf', maskCpf(e.target.value))} autoComplete="off"
+                      onBlur={async () => { const nm = await cpfAccount.check(buyForm.cpf); if (nm) cpfAccount.open() }} />
                   </div>
                 </div>
               ))}
@@ -505,6 +521,15 @@ export default function ProductPage() {
               onClose={() => setAskGuest(false)}
               onContinueGuest={finishBuyNow}
               from={'/produto/' + id}
+            />
+
+            {/* CPF digitado já tem conta: entrar ou seguir como visitante */}
+            <CpfAccountModal
+              open={cpfAccount.askOpen}
+              name={cpfAccount.account?.name}
+              onClose={cpfAccount.close}
+              onLogin={() => { cpfAccount.close(); navigate('/login', { state: { from: '/produto/' + id } }) }}
+              onContinue={() => { cpfAccount.decline(); finishBuyNow() }}
             />
 
             {/* tentou finalizar sem preencher: bloqueado — pergunta se quer atualizar */}
@@ -532,20 +557,14 @@ export default function ProductPage() {
                     ))}
                   </ul>
 
-                  <div className="flex flex-col gap-2 sm:flex-row mb-5">
+                  {/* Dados completos são obrigatórios: não existe "preencher depois" */}
+                  <div className="flex flex-col gap-2 mb-5">
                     <button
                       type="button"
-                      className="btn-primary flex-1"
+                      className="btn-primary w-full"
                       onClick={() => { const miss = buyMissing; setBuyMissing(null); focusFirstMissing(miss) }}
                     >
                       Atualizar dados agora
-                    </button>
-                    <button
-                      type="button"
-                      className="flex-1 rounded-lg bg-white px-4 py-2.5 font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-50"
-                      onClick={() => setBuyMissing(null)}
-                    >
-                      Depois
                     </button>
                   </div>
                 </div>

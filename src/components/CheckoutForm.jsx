@@ -14,7 +14,7 @@ const INPUT_MODE = { phone: 'tel', cpf: 'numeric', zip: 'numeric', number: 'nume
 // `fields` deixa o PDV do admin reaproveitar só o bloco de endereço
 // (nome/telefone ficam em campos próprios do painel de venda). O bloco de
 // "em nome de outra pessoa" só existe quando o campo full_name está na tela.
-export function CheckoutForm({ form, set, missing, fields = FIELDS }) {
+export function CheckoutForm({ form, set, missing, fields = FIELDS, onCpfComplete }) {
   const [touched, setTouched] = useState({})
   const [cepLoading, setCepLoading] = useState(false)
   const [cepError, setCepError] = useState(false)
@@ -90,6 +90,8 @@ export function CheckoutForm({ form, set, missing, fields = FIELDS }) {
                 onBlur={() => {
                   setTouched((t) => ({ ...t, [key]: true }))
                   if (key === 'zip') lookupCep()
+                  // CPF completo: o checkout avisa se já existe conta com ele
+                  if (key === 'cpf' && onCpfComplete) onCpfComplete(form[key])
                 }}
                 autoComplete="off"
               />

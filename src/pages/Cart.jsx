@@ -5,11 +5,13 @@ import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { formatBRL } from '../lib/utils'
 import { CheckoutForm } from '../components/CheckoutForm'
-import { profileToForm, missingFields, fieldLabel, formatAddress } from '../lib/checkout'
+import { profileToForm, missingFields, requiredFieldsFor, fieldLabel, formatAddress, maskCpf } from '../lib/checkout'
 import { readFunctionError } from '../lib/functionError'
 import { GuestCheckoutModal } from '../components/GuestCheckoutModal'
 import { MpPixDisplay } from '../components/MpPixDisplay'
 import { useModalA11y } from '../lib/useModalA11y'
+import { useCpfAccount } from '../lib/useCpfAccount'
+import { CpfAccountModal } from '../components/CpfAccountModal'
 
 const STEPS = [
   { n: 1, label: 'Sacola' },
@@ -40,6 +42,9 @@ export default function Cart() {
   const [doneOrder, setDoneOrder] = useState(null) // pedido concluído como visitante
   const [mpPendingOrder, setMpPendingOrder] = useState(null) // { id, mpPix, total } do Pix MP
   const [mpRetry, setMpRetry] = useState(null)               // pedido já gravado SÓ faltando o Pix
+  // Visitante digitou CPF que já tem conta? Sugere entrar — "continuar assim
+  // mesmo" segue como visitante e não pergunta de novo neste checkout.
+  const cpfAccount = useCpfAccount({ loggedIn: !!user })
 
   useEffect(() => { setForm(profileToForm(profile)) }, [profile])
 
@@ -61,9 +66,10 @@ export default function Cart() {
   }
 
   function go(nextStep) {
-    // só avança para a revisão com os dados completos
+    // só avança para a revisão com os dados do MODO escolhido completos
+    // (retirada: nome/telefone/CPF; entrega: também endereço)
     if (nextStep === 3) {
-      const miss = missingFields(form)
+      const miss = missingFields(form, requiredFieldsFor(deliveryMethod))
       if (miss.length > 0) {
         setMissing(miss)
         return
@@ -74,18 +80,22 @@ export default function Cart() {
   }
 
   async function handleCheckout() {
-    // Retirada no balcão não precisa de endereço — só nome e telefone
-    const miss = deliveryMethod === 'retirada'
-      ? missingFields({ ...form, street: 'ok', number: 'ok', district: 'ok', city: 'ok', state: 'ok', zip: 'ok' })
-          .filter((k) => ['full_name', 'phone'].includes(k))
-      : missingFields(form)
+    // Dados COMPLETOS do modo escolhido (retirada: nome/telefone/CPF;
+    // entrega: também endereço) — sem isso o pedido não sai.
+    const miss = missingFields(form, requiredFieldsFor(deliveryMethod))
     if (miss.length > 0) {
       setStep(2)
       setMissing(miss)
       return
     }
-    // Deslogado? Pergunta se quer entrar/criar conta ou seguir como visitante
-    if (!user) { setAskGuest(true); return }
+    // Deslogado? Se o CPF digitado já tem conta, sugere ENTRAR — quem escolhe
+    // "continuar assim mesmo" segue direto como visitante.
+    if (!user) {
+      const name = await cpfAccount.check(form.cpf)
+      if (name) { cpfAccount.open(); return }
+      setAskGuest(true)
+      return
+    }
     finishCheckout()
   }
 
@@ -405,24 +415,30 @@ export default function Cart() {
           </div>
 
           {deliveryMethod === 'entrega'
-            ? (form && <CheckoutForm form={form} set={set} missing={missing} />)
+            ? (form && <CheckoutForm form={form} set={set} missing={missing}
+                onCpfComplete={async (v) => { const nm = await cpfAccount.check(v); if (nm) cpfAccount.open() }} />)
             : (
-              // retirada: só contato (nome + telefone)
+              // retirada: identificação completa (nome + telefone + CPF)
               form && (
                 <div className="grid grid-cols-2 gap-3">
                   {[
                     { key: 'full_name', label: 'Seu nome *', cls: 'col-span-2' },
                     { key: 'phone', label: 'Telefone / WhatsApp *', cls: 'col-span-2 sm:col-span-1' },
+                    { key: 'cpf', label: 'CPF *', cls: 'col-span-2 sm:col-span-1' },
                   ].map(({ key, label, cls }) => (
                     <div key={key} className={cls}>
                       <label htmlFor={'f_' + key} className="mb-1 block text-xs font-medium text-gray-600">{label}</label>
                       <input
                         id={'f_' + key}
                         className="input"
-                        inputMode={key === 'phone' ? 'tel' : undefined}
-                        maxLength={key === 'phone' ? 15 : undefined}
+                        inputMode={key === 'phone' ? 'tel' : key === 'cpf' ? 'numeric' : undefined}
+                        maxLength={key === 'phone' ? 15 : key === 'cpf' ? 14 : undefined}
+                        placeholder={key === 'cpf' ? '000.000.000-00' : undefined}
                         value={form[key]}
-                        onChange={(e) => set(key, e.target.value)}
+                        onChange={(e) => set(key, key === 'phone' ? e.target.value : key === 'cpf' ? maskCpf(e.target.value) : e.target.value)}
+                        onBlur={key === 'cpf'
+                          ? async () => { const nm = await cpfAccount.check(form.cpf); if (nm) cpfAccount.open() }
+                          : undefined}
                         autoComplete="off"
                       />
                     </div>
@@ -566,16 +582,10 @@ export default function Cart() {
               ))}
             </ul>
 
-            <div className="flex flex-col gap-2 sm:flex-row mb-5">
-              <button type="button" className="btn-primary flex-1" onClick={preencherAgora}>
+            {/* Dados completos são obrigatórios: não existe "preencher depois" */}
+            <div className="flex flex-col gap-2 mb-5">
+              <button type="button" className="btn-primary w-full" onClick={preencherAgora}>
                 Atualizar dados agora
-              </button>
-              <button
-                type="button"
-                className="flex-1 rounded-lg bg-white px-4 py-2.5 font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-50"
-                onClick={() => setMissing(null)}
-              >
-                Preencher depois
               </button>
             </div>
           </div>
@@ -587,6 +597,15 @@ export default function Cart() {
         onClose={() => setAskGuest(false)}
         onContinueGuest={finishCheckout}
         from="/carrinho"
+      />
+
+      {/* CPF digitado já tem conta: entrar ou seguir como visitante */}
+      <CpfAccountModal
+        open={cpfAccount.askOpen}
+        name={cpfAccount.account?.name}
+        onClose={cpfAccount.close}
+        onLogin={() => { cpfAccount.close(); navigate('/login', { state: { from: '/carrinho' } }) }}
+        onContinue={() => { cpfAccount.decline(); finishCheckout() }}
       />
     </div>
   )

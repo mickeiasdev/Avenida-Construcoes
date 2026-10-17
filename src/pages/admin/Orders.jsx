@@ -4,6 +4,7 @@ import { Banknote, Ban, Check, ChevronRight, ClipboardList, CreditCard, Download
 import { downloadCsv } from '../../lib/csv'
 import { supabase } from '../../lib/supabaseClient'
 import { DELIVERY_LABELS, fulfillmentTotals, PAYMENT_LABELS } from '../../lib/storeOrder'
+import { maskCpf } from '../../lib/checkout'
 import { formatBRL, formatDateTime, onlyDigits, ORDER_CLS, ORDER_LABELS, ORDER_NEXT_ACTION, ORDER_PIPELINE, ORDER_SHORT } from '../../lib/utils'
 import { useStore } from '../../context/StoreContext'
 
@@ -128,6 +129,7 @@ export default function OrdersAdmin() {
       pedido: o.id.slice(0, 8),
       cliente: o.customer_name ?? '',
       telefone: o.customer_phone ?? '',
+      cpf: o.customer_cpf ? maskCpf(o.customer_cpf) : '',
       endereco: o.delivery_address ?? '',
       origem: o.origin === 'loja' ? 'Loja' : 'Site',
       entrega: DELIVERY_LABELS[o.delivery_method] ?? o.delivery_method ?? '',
@@ -274,6 +276,11 @@ export default function OrdersAdmin() {
                     <p className="flex items-center gap-2 text-gray-600">
                       <Phone className="h-4 w-4 text-gray-500" /> {o.customer_phone || '—'}
                     </p>
+                    {o.customer_cpf && (
+                      <p className="flex items-center gap-2 text-gray-600">
+                        <User className="h-4 w-4 text-gray-500" /> CPF {maskCpf(o.customer_cpf)}
+                      </p>
+                    )}
                     <p className="flex items-start gap-2 text-gray-600">
                       <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" />
                       {o.delivery_method === 'retirada' ? (

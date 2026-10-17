@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { effectivePrice } from '../lib/utils'
+import { effectivePrice, onlyDigits } from '../lib/utils'
 import { isMigrationMissing } from '../lib/storeOrder'
 import { readFunctionError } from '../lib/functionError'
 import { createPixOrder } from '../lib/payments'
@@ -204,7 +204,7 @@ export function CartProvider({ children }) {
       // checkout (coluna única da migration-16 pode rejeitar CPF em duplicidade).
       if (String(form?.cpf ?? '').trim() !== '') {
         try {
-          const { error: cpfErr } = await supabase.from('profiles').update({ cpf: form.cpf }).eq('id', user.id)
+          const { error: cpfErr } = await supabase.from('profiles').update({ cpf: onlyDigits(form.cpf) }).eq('id', user.id)
           if (cpfErr) console.warn('[checkout] CPF não atualizado no perfil:', cpfErr.message) // 23505 = CPF já usado em outra conta
         } catch { /* coluna ausente / RLS — o pedido segue normalmente */ }
       }
@@ -235,6 +235,10 @@ export function CartProvider({ children }) {
     const customerName = form.full_name || user?.email || 'Visitante'
     let totals = null // { subtotal, discount, total }
 
+    // CPF e observação entram na própria RPC (migration-21): assim também o
+    // VISITANTE fica com CPF salvo no pedido — antes o CPF só ia escondido no
+    // texto da observação e a observação nem gravava para convidado (RLS).
+    const observacao = checkoutNote(form, options.changeFor)
     const rpc = await supabase.rpc('place_order', {
       p_order_id: orderId,
       p_items: checkoutItems.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
@@ -246,6 +250,8 @@ export function CartProvider({ children }) {
       p_payment_method: paymentMethod,
       p_user_id: user ? user.id : null,
       p_is_guest: !user,
+      p_customer_cpf: onlyDigits(form.cpf) || null,
+      p_customer_note: observacao || null,
     })
 
     if (!rpc.error) {
@@ -302,14 +308,14 @@ export function CartProvider({ children }) {
 
     const { subtotal, discount, total: totalValue } = totals
 
-    // Extras do checkout numa linha só (CPF, em nome de quem recebe/obra, troco)
-    const observacao = checkoutNote(form, options.changeFor)
-
-    // Best-effort: guarda a observação no pedido. Convidado/RLS/coluna
-    // inexistente retornam erro — IGNORADO, o pedido NUNCA depende disso.
-    try {
-      await supabase.from('orders').update({ customer_note: observacao }).eq('id', orderId)
-    } catch { /* sem permissão ou coluna ausente — segue o fluxo normal */ }
+    // Caminho LEGADO (sem a migration-21, a RPC acima nem aceita os campos
+    // novos): mantém a observação como update best-effort. Com a RPC nova,
+    // CPF e observação já entraram no INSERT — nada a fazer aqui.
+    if (rpc.error && isMigrationMissing(rpc.error)) {
+      try {
+        await supabase.from('orders').update({ customer_note: observacao }).eq('id', orderId)
+      } catch { /* sem permissão ou coluna ausente — segue o fluxo normal */ }
+    }
 
     const { data: store } = await supabase
       .from('store_settings').select('store_name, whatsapp').eq('id', 1).maybeSingle()

@@ -17,8 +17,9 @@ export const EMPTY_FORM = {
 
 export const REQUIRED = ['full_name', 'phone', 'cpf', 'zip', 'street', 'number', 'district', 'city', 'state']
 
-// Retirada no balcão dispensa endereço: só quem retira precisa se identificar
-export const RETIRADA_REQUIRED = ['full_name', 'phone']
+// Retirada no balcão dispensa endereço, não identidade: nome, telefone e
+// CPF (o CPF passou a ser exigido em TODOS os modos — entrega e retirada).
+export const RETIRADA_REQUIRED = ['full_name', 'phone', 'cpf']
 
 // Campos exigidos conforme o modo de recebimento escolhido
 export function requiredFieldsFor(deliveryMethod) {

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Loader2, Save, CheckCircle2, AlertCircle, MailWarning, Send } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
-import { maskCep, maskPhone } from '../lib/utils'
+import { maskCep, maskPhone, onlyDigits } from '../lib/utils'
 import { maskCpf } from '../lib/checkout'
-import { isCepValid, isFullName, isPhoneBR, isUF } from '../lib/validation'
+import { isCepValid, isCpf, isFullName, isPhoneBR, isUF } from '../lib/validation'
 import { useAuth } from '../context/AuthContext'
 
 const FIELDS = [
@@ -35,6 +35,9 @@ export default function Profile() {
       setForm({
         full_name: profile.full_name ?? '',
         phone: profile.phone ?? '',
+        // CPF volta a aparecer preenchido (antes o campo existia mas nunca
+        // carregava — parecia que o sistema "não salvava" o CPF)
+        cpf: profile.cpf ? maskCpf(profile.cpf) : '',
         street: profile.street ?? '',
         number: profile.number ?? '',
         complement: profile.complement ?? '',
@@ -70,12 +73,18 @@ export default function Profile() {
       setMsg({ type: 'err', text: 'CEP incompleto — deve ter 8 dígitos.' })
       setBusy(false); return
     }
+    if (form.cpf && !isCpf(form.cpf)) {
+      setMsg({ type: 'err', text: 'CPF inválido — confira os 11 dígitos.' })
+      setBusy(false); return
+    }
     if (form.state && !isUF(form.state)) {
       setMsg({ type: 'err', text: 'UF inválida — use 2 letras (ex.: SP).' })
       setBusy(false); return
     }
 
-    const { error } = await supabase.from('profiles').update(form).eq('id', user.id)
+    // CPF gravado em DÍGITOS (formato único — o checkout compara os dígitos)
+    const payload = { ...form, cpf: onlyDigits(form.cpf) || null }
+    const { error } = await supabase.from('profiles').update(payload).eq('id', user.id)
     if (error) setMsg({
       type: 'err',
       text: error.code === '23505' || /profiles_cpf_unique|duplicate key/i.test(error.message)
