@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { applyBrand, readCachedBrand, writeCachedBrand } from '../lib/brandTheme'
+import { applyBrand, applyFontScale, readCachedBrand, writeCachedBrand } from '../lib/brandTheme'
 import { slugify } from '../lib/utils'
 
 const StoreContext = createContext(null)
@@ -22,13 +22,17 @@ const DEFAULT_SETTINGS = {
   sat_open: '07:00', sat_close: '13:00',
   sun_closed: true, sun_open: null, sun_close: null,
   about: 'Tudo para sua obra, do alicerce ao acabamento.',
+  font_scale: 100,
 }
 
 // PASSO 4: aplica as cores dinâmicas vindas do banco nas variáveis CSS
-// e guarda em cache para a próxima visita já abrir na cor certa (sem flash)
+// e guarda em cache para a próxima visita já abrir na cor certa (sem flash).
+// A escala de fonte segue o mesmo caminho: vinda do banco, aplicada no <html>
+// e cacheada — o script inline do index.html já abre na escala certa.
 function applyTheme(s) {
   applyBrand(s.primary_color, s.secondary_color)
-  writeCachedBrand(s.primary_color, s.secondary_color)
+  applyFontScale(s.font_scale ?? 100)
+  writeCachedBrand(s.primary_color, s.secondary_color, s.font_scale ?? 100)
 }
 
 export function StoreProvider({ children }) {

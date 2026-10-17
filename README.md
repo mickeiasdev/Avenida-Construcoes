@@ -86,6 +86,11 @@ No `src/index.css`, importe o Tailwind e registre as cores dinâmicas:
 | [migration-12.sql](supabase/migration-12.sql) | `place_order` passa a respeitar o **preço promocional** (o valor gravado é o mesmo que o site mostra) |
 | [migration-13.sql](supabase/migration-13.sql) | **Pix online no pedido**: `payment_status`, `payment_method = 'mercado_pago'` (enum histórico = "Pix online gerado") e colunas de referência da cobrança |
 | [migration-14.sql](supabase/migration-14.sql) | **Opcional** — agregações do painel no banco (`store_dashboard_stats` / `store_client_stats`). Sem ela o Dashboard soma no navegador, sujeito ao teto de **1000 linhas por consulta** do PostgREST |
+| [migration-16.sql](supabase/migration-16.sql) | CPF único no perfil (ignora vazios) |
+| [migration-17.sql](supabase/migration-17.sql) | Limpeza: remove o teste do CallMeBot das notificações (WhatsApp é só via Evolution) |
+| [migration-18.sql](supabase/migration-18.sql) | Permite ao **admin apagar imagens** do Storage (troca de logo/banner, exclusão de produto) |
+| [migration-19.sql](supabase/migration-19.sql) | **WhatsApp no painel** — tabela `whatsapp_chats` (selo de não lidas + Realtime) |
+| [migration-20.sql](supabase/migration-20.sql) | **Tamanho da fonte do sistema** (`store_settings.font_scale`) — ajustável em /admin/configuracoes |
 
    > ⚠️ **A migration-8 é obrigatória para o checkout seguro.** Sem ela o app continua
    > funcionando, mas cai no caminho antigo (preço calculado no navegador) e registra
@@ -391,6 +396,8 @@ vercel.json                       # SPA fallback para o deploy
 - [x] Rodar `supabase/migration-11.sql` + `migration-12.sql` (promoções e múltiplas categorias)
 - [x] Rodar `supabase/migration-13.sql` (Pix online no pedido) — só se for usar Pix online
 - [x] Rodar `supabase/migration-14.sql` (opcional: agregações do painel no banco)
+- [x] Rodar `supabase/migration-19.sql` (WhatsApp no painel — só se for usar o atendimento)
+- [x] Rodar `supabase/migration-20.sql` (tamanho da fonte configurável nas Configurações)
 - [x] Criar `admin@teste.com` e `cliente@teste.com` no Auth (auto-confirm)
 - [x] Rodar os UPDATEs para promover o admin
 - [x] Preencher `.env` com URL e anon key

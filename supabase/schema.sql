@@ -34,6 +34,9 @@ create table if not exists public.store_settings (
   sun_open      time          default null,
   sun_close     time          default null,
   about text default 'Tudo para sua obra, do alicerce ao acabamento.',
+  -- escala de fonte do sistema (100 = normal) — ajustada no painel admin
+  font_scale int not null default 100 constraint store_settings_font_scale_range
+    check (font_scale between 80 and 130),
   updated_at timestamptz not null default now()
 );
 

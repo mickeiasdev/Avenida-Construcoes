@@ -1,10 +1,19 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { CheckCircle2, AlertCircle, Clock, ImagePlus, Loader2, Save } from 'lucide-react'
 import { useStore } from '../../context/StoreContext'
+import { applyFontScale, FONT_BASE_PX } from '../../lib/brandTheme'
 import { uploadImage, deleteImagesByUrls } from '../../lib/supabaseClient'
 import { formatBusinessHoursText, maskPhone, waLocal, waNumber } from '../../lib/utils'
 
 const HEX = /^#[0-9a-fA-F]{6}$/
+
+// Presets de tamanho da fonte (mesmos limites da migration-20/banco)
+const FONT_OPTIONS = [
+  { value: 85, label: 'Compacto', hint: 'cabe mais na tela' },
+  { value: 100, label: 'Normal', hint: 'recomendado' },
+  { value: 115, label: 'Grande', hint: 'melhor leitura' },
+  { value: 130, label: 'Máximo', hint: 'acessibilidade' },
+]
 
 export default function Settings() {
   const { settings, updateSettings } = useStore()
@@ -35,6 +44,7 @@ export default function Settings() {
       whatsapp: maskPhone(waLocal(settings.whatsapp)),
       primary_color: settings.primary_color ?? '#f97316',
       secondary_color: settings.secondary_color ?? '#1e293b',
+      font_scale: settings.font_scale ?? 100,
       logo_url: settings.logo_url ?? '',
       banner_url: settings.banner_url ?? '',
     })
@@ -45,6 +55,14 @@ export default function Settings() {
   function set(k, v) {
     dirtyRef.current = true
     setForm((f) => ({ ...f, [k]: v }))
+  }
+
+  // Tamanho da fonte: o preview é AO VIVO — a loja e o painel inteiros já
+  // escalam no toque. "Salvar configurações" publica para todos os visitantes.
+  function setFontScale(value) {
+    const pct = Math.min(130, Math.max(80, Math.round(value)))
+    set('font_scale', pct)
+    applyFontScale(pct)
   }
 
   async function handleUpload(e, key) {
@@ -136,6 +154,52 @@ export default function Settings() {
         </div>
         <p className="text-xs leading-relaxed text-gray-500">
           Defina as cores da sua vitrine. A cor primária é usada em botões, links e destaques; a secundária é usada em textos e ícones.
+        </p>
+      </section>
+
+      {/* TAMANHO DA FONTE DO SISTEMA */}
+      <section className="card space-y-4">
+        <h2 className="font-bold text-gray-800">Tamanho da fonte do sistema</h2>
+        <div role="radiogroup" aria-label="Tamanho da fonte do sistema" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {FONT_OPTIONS.map((o) => {
+            const active = form.font_scale === o.value
+            return (
+              <button
+                key={o.value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setFontScale(o.value)}
+                className={"flex flex-col items-center gap-1 rounded-xl px-3 py-3 ring-1 transition " +
+                  + (active
+                    ? "bg-primary/5 ring-primary/50"
+                    : "bg-white ring-gray-200 hover:bg-gray-50 hover:ring-primary/30")}
+              >
+                <span
+                  aria-hidden="true"
+                  className={"font-bold " + (active ? "text-primary" : "text-gray-700")}
+                  style={{ fontSize: (FONT_BASE_PX * o.value / 100).toFixed(2) + 'px', lineHeight: 1.1 }}
+                >
+                  Aa
+                </span>
+                <span className="text-xs font-medium text-gray-700">{o.value}%</span>
+                <span className="text-[11px] text-gray-500">{o.label} · {o.hint}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Preview ao vivo: este texto já muda de tamanho no toque */}
+        <div className="rounded-xl bg-gray-50 p-4 ring-1 ring-gray-100" aria-hidden="true">
+          <p className="text-base font-bold text-gray-800">Cimento CP-II 50kg</p>
+          <p className="text-sm text-gray-600">Assim ficam os textos da sua loja: produtos, carrinho, checkout e painel.</p>
+          <p className="mt-1 text-sm font-bold text-primary">R$ 28,90</p>
+        </div>
+
+        <p className="text-xs leading-relaxed text-gray-500">
+          O tamanho escolhido já está sendo aplicado para você (preview ao vivo). Toque em
+          <strong> Salvar configurações</strong> para publicar para todos os visitantes — a fonte
+          nova aparece na vitrine, no carrinho e no painel, no celular e no computador.
         </p>
       </section>
 

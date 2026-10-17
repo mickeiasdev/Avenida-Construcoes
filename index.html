@@ -20,6 +20,10 @@
           if (c.secondary) s.setProperty('--brand-secondary', c.secondary)
           var m = document.querySelector('meta[name="theme-color"]')
           if (m) m.setAttribute('content', c.primary)
+          var fs = Number(c.fontScale)
+          if (fs >= 80 && fs <= 130) {
+            document.documentElement.style.fontSize = (16 * fs / 100) + 'px'
+          }
         } catch (e) {
           /* localStorage indisponível: segue com o padrão do CSS */
         }

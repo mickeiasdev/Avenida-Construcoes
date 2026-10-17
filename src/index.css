@@ -275,7 +275,9 @@
    ------------------------------------------------------------ */
 @media (max-width: 767px) {
   input, select, textarea {
-    font-size: 16px;
+    /* max(): acompanha a escala do lojista quando ela sobe (1rem escalado
+       vence 16px) e nunca desce de 16px — o zoom automático segue morto. */
+    font-size: max(16px, 1rem);
   }
 }
 
