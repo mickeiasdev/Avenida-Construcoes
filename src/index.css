@@ -261,6 +261,24 @@
   }
 }
 
+/* ------------------------------------------------------------
+   ZOOM AUTOMÁTICO EM CAMPOS (iOS/Android)
+   O navegador móvel dá zoom sozinho ao focar qualquer campo com
+   fonte menor que 16px — e o layout não volta ao lugar depois.
+   16px em todo input/select/textarea no mobile elimina esse zoom
+   SEM desligar o pinch-zoom do usuário (maximum-scale=1 no viewport
+   é ignorado pelo iOS 10+ e rouba a acessibilidade de quem precisa
+   ampliar a tela).
+   FORA de @layer de propósito: CSS sem camada vence .input
+   (@layer components) e utilitários text-sm/text-xs (@layer utilities).
+   Desktop segue com 14px (densidade do painel admin não muda).
+   ------------------------------------------------------------ */
+@media (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px;
+  }
+}
+
 /* Respeita o "notch" safe-area (iPhone) em barras fixas */
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 
