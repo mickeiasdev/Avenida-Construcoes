@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Loader2, CheckCircle2, AlertCircle, Phone, Mail, KeyRound } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle, Mail, KeyRound } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
-import { isEmail, isFullName, isPasswordStrong, isPhoneBR } from '../lib/validation'
-import { maskPhone } from '../lib/utils'
+import { isEmail, isFullName, isPasswordStrong } from '../lib/validation'
 
 // Onde retomar depois de entrar/criar conta:
 //  1) location.state.from/redirect (checkout, carrinho ou ProtectedRoute);
@@ -38,26 +37,21 @@ function GoogleIcon() {
   )
 }
 
-// Autenticação — três métodos em coluna:
+// Autenticação — dois métodos em coluna:
 //  • Google (OAuth, grátis — configura uma vez no Supabase + Google Cloud)
-//  • Telefone: código de 6 dígitos por SMS (provedor configurado no Supabase;
-//    SMS custa por envio no provedor — o app não adiciona custo)
 //  • E-mail: senha (padrão) ou magic link (grátis)
 export default function Login() {
-  const { signInWithGoogle, sendPhoneOtp, verifyPhoneOtp, signInWithMagicLink, signInWithPassword, signUp } = useAuth()
+  const { signInWithGoogle, signInWithMagicLink, signInWithPassword, signUp } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const { to: redirectTo, inProgress } = useMemo(() => resolveRedirect(location), [location])
 
-  const [method, setMethod] = useState('google')   // 'google' | 'phone' | 'email'
+  const [method, setMethod] = useState('google')   // 'google' | 'email'
   const [emailMode, setEmailMode] = useState('password') // 'password' | 'magic'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [isSignup, setIsSignup] = useState(location.state?.mode === 'signup')
-  const [phone, setPhone] = useState('')
-  const [otpSentTo, setOtpSentTo] = useState(null) // telefone que recebeu o código
-  const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
 
@@ -71,41 +65,6 @@ export default function Login() {
     const { error } = await signInWithGoogle(redirectTo)
     if (error) { setMsg({ type: 'err', text: error.message }); setBusy(false) }
     // sem erro: o navegador está indo pro Google — deixa o spinner girando
-  }
-
-  // ---------- TELEFONE (SMS de 6 dígitos) ----------
-  async function handlePhone() {
-    if (!isPhoneBR(phone)) {
-      setMsg({ type: 'err', text: 'Digite o celular com DDD (ex.: (11) 99999-9999).' })
-      return
-    }
-    setBusy(true); setMsg(null)
-    const { error, phone: e164 } = await sendPhoneOtp(phone)
-    setBusy(false)
-    if (error) {
-      setMsg({
-        type: 'err',
-        text: /provider|not enabled|sms|phone/i.test(error.message)
-          ? 'Login por SMS ainda não está ativo nesta loja. Use e-mail ou Google.'
-          : error.message,
-      })
-      return
-    }
-    setOtpSentTo(e164); setCode('')
-    setMsg({ type: 'ok', text: 'Código enviado por SMS para ' + phone + '. Digite abaixo.' })
-  }
-
-  async function handleVerifyCode() {
-    const token = code.trim()
-    if (!/^\d{6}$/.test(token)) {
-      setMsg({ type: 'err', text: 'Digite o código de 6 números recebido por SMS.' })
-      return
-    }
-    setBusy(true); setMsg(null)
-    const { error } = await verifyPhoneOtp(otpSentTo, token)
-    setBusy(false)
-    if (error) { setMsg({ type: 'err', text: 'Código inválido ou expirado. Toque em reenviar.' }); return }
-    goAfterAuth()
   }
 
   // ---------- E-MAIL (senha / magic link) ----------
@@ -178,11 +137,6 @@ export default function Login() {
           className="flex min-h-12 w-full items-center justify-center gap-3 rounded-xl bg-white px-4 py-3 text-sm font-bold text-gray-700 shadow-sm ring-1 ring-gray-200 transition hover:shadow-md hover:ring-primary/40 disabled:opacity-50">
           <GoogleIcon /> Continuar com Google
         </button>
-        <button type="button" onClick={() => { setMethod('phone'); setMsg(null) }} disabled={busy}
-          className={'flex min-h-12 w-full items-center justify-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition disabled:opacity-50 ' +
-            (method === 'phone' ? 'bg-primary text-white shadow-md' : 'bg-white text-gray-700 shadow-sm ring-1 ring-gray-200 hover:ring-primary/40')}>
-          <Phone className="h-4 w-4" /> Entrar com telefone (código SMS)
-        </button>
         <button type="button" onClick={() => { setMethod('email'); setMsg(null) }} disabled={busy}
           className={'flex min-h-12 w-full items-center justify-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition disabled:opacity-50 ' +
             (method === 'email' ? 'bg-primary text-white shadow-md' : 'bg-white text-gray-700 shadow-sm ring-1 ring-gray-200 hover:ring-primary/40')}>
@@ -191,38 +145,6 @@ export default function Login() {
       </div>
 
       {/* INPUTS — só do método escolhido */}
-      {method === 'phone' && (
-        <div className="card space-y-3">
-          <div>
-            <label htmlFor="l-telefone" className="field-label">Celular com DDD</label>
-            <input id="l-telefone" className="input" inputMode="tel" maxLength={15}
-              value={phone} onChange={(e) => setPhone(maskPhone(e.target.value))}
-              placeholder="(11) 99999-9999" disabled={!!otpSentTo} />
-          </div>
-          {otpSentTo ? (
-            <div>
-              <label htmlFor="l-codigo" className="field-label">Código de 6 dígitos</label>
-              <div className="flex gap-2">
-                <input id="l-codigo" className="input flex-1 text-center text-lg tracking-[0.4em]" inputMode="numeric" maxLength={6}
-                  value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} placeholder="······" autoComplete="one-time-code" />
-                <button type="button" className="btn-primary px-4" disabled={busy} onClick={handleVerifyCode}>
-                  {busy && <Loader2 className="h-4 w-4 animate-spin" />} Entrar
-                </button>
-              </div>
-              <button type="button" className="mt-2 text-xs text-primary hover:underline"
-                onClick={() => { setOtpSentTo(null); setCode(''); setMsg(null) }}>
-                Trocar de número ou reenviar código
-              </button>
-            </div>
-          ) : (
-            <button type="button" className="btn-primary w-full" disabled={busy} onClick={handlePhone}>
-              {busy && <Loader2 className="h-4 w-4 animate-spin" />} Enviar código por SMS
-            </button>
-          )}
-          <p className="text-xs text-gray-500">Você recebe um SMS com o código. Sem senha, sem e-mail.</p>
-        </div>
-      )}
-
       {method === 'email' && (
         <form onSubmit={handleEmail} className="card space-y-3">
           {isSignup && (

@@ -71,23 +71,6 @@ export function AuthProvider({ children }) {
     return { error }
   }
 
-  // ---------- TELEFONE + código SMS (OTP) ----------
-  // O Supabase manda o SMS pelo provedor configurado no painel
-  // (Twilio/MessageBird/Vonage). SMS custa por envio — não é gratuito.
-  // Com Twilio em modo trial dá para testar de graça com números verificados.
-  async function sendPhoneOtp(phone) {
-    // E.164: o Brasil padrão vem sem DDI no formulário
-    const digits = String(phone).replace(/\D/g, '')
-    const e164 = digits.startsWith('55') && digits.length > 11 ? '+' + digits : '+55' + digits
-    const { error } = await supabase.auth.signInWithOtp({ phone: e164 })
-    return { error, phone: e164 }
-  }
-
-  async function verifyPhoneOtp(phone, token) {
-    const { error } = await supabase.auth.verifyOtp({ phone, token, type: 'sms' })
-    return { error }
-  }
-
   async function signOut() {
     await supabase.auth.signOut()
     setUser(null)
@@ -98,7 +81,7 @@ export function AuthProvider({ children }) {
 
   const value = {
     user, profile, loading, isAdmin,
-    signInWithMagicLink, signInWithPassword, signUp, signInWithGoogle, sendPhoneOtp, verifyPhoneOtp,
+    signInWithMagicLink, signInWithPassword, signUp, signInWithGoogle,
     signOut, refreshProfile: fetchProfile,
   }
 
