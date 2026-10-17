@@ -16,3 +16,13 @@ verify_jwt = false
 # chamada por Database Webhooks e por outras functions, que NÃO carregam JWT.
 # A autenticidade é garantida pelo header x-notify-secret (NOTIFY_SECRET).
 verify_jwt = false
+
+[functions.whatsapp-chat]
+# chamada pelo painel admin (navegador): JWT do atendente é obrigatório,
+# e a função ainda confere a role admin no banco antes de qualquer ação.
+verify_jwt = true
+
+[functions.whatsapp-webhook]
+# chamada pela Evolution API, que NÃO envia Authorization.
+# A autenticidade é garantida pelo segredo na URL (?secret=NOTIFY_SECRET).
+verify_jwt = false

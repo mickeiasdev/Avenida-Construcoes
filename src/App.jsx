@@ -57,6 +57,7 @@ const ClientsAdmin = lazyRetry(() => import('./pages/admin/Clients'))
 const CouponsAdmin = lazyRetry(() => import('./pages/admin/Coupons'))
 const PromotionsAdmin = lazyRetry(() => import('./pages/admin/Promotions'))
 const NewOrderAdmin = lazyRetry(() => import('./pages/admin/NewOrder'))
+const WhatsAppAdmin = lazyRetry(() => import('./pages/admin/WhatsApp'))
 
 export default function App() {
   return (
@@ -90,6 +91,7 @@ export default function App() {
                 <Route path="produtos" element={<ProductsAdmin />} />
                 <Route path="categorias" element={<CategoriesAdmin />} />
                 <Route path="clientes" element={<ClientsAdmin />} />
+                <Route path="whatsapp" element={<WhatsAppAdmin />} />
                 <Route path="cupons" element={<CouponsAdmin />} />
                 <Route path="promocoes" element={<PromotionsAdmin />} />
                 <Route path="configuracoes" element={<SettingsAdmin />} />

@@ -210,6 +210,51 @@ Visitante também finaliza (pedido `is_guest`) e recebe a confirmação na próp
 só quem está logado tem a página `/pedidos`. Sem WhatsApp configurado, o pedido é gravado
 e o app avisa (não abre um `wa.me` vazio).
 
+### WhatsApp no painel — atendimento pelo número da loja
+O menu do admin tem **WhatsApp**: a caixa de entrada do número da loja, dentro do painel —
+listar conversas, ler histórico, responder, marcar como lida, tudo sem sair do painel
+(funciona no celular também: lista → conversa com botão voltar). Os atalhos já estão
+conectados ao resto do sistema:
+
+- **Pedidos → “Avisar cliente”**: abre a conversa no painel com o texto da etapa já escrito;
+- **Clientes → ícone de conversa**: abre o chat daquele cliente direto;
+- **Respostas rápidas** (chips no campo de mensagem): os mesmos avisos que o sistema
+  envia sozinho (pedido confirmado, separando, saiu para entrega…);
+- **Pedidos deste cliente**: no cabeçalho da conversa, o histórico de pedidos do número,
+  com status e valor.
+
+Técnica: tudo passa pela Edge Function `whatsapp-chat` (JWT do admin + checagem de role no
+banco) — **a apikey da Evolution nunca vai ao navegador**. A conexão é da Evolution API, a
+mesma das notificações automáticas: parear por **QR/pairing code** (igual WhatsApp Web) uma
+única vez.
+
+```bash
+# 1) secrets (os mesmos das notificações automáticas — provavelmente já existem)
+supabase secrets set EVOLUTION_API_URL=https://evo.seuvps.com.br
+supabase secrets set EVOLUTION_API_KEY=...
+supabase secrets set EVOLUTION_INSTANCE=loja
+supabase secrets set NOTIFY_SECRET=...   # senha interna sua
+
+# 2) funções novas + migration do selo de não lidas
+supabase functions deploy whatsapp-chat
+supabase functions deploy whatsapp-webhook
+# rode supabase/migration-19.sql no SQL Editor (cria whatsapp_chats + Realtime)
+
+# 3) (opcional, recomendado) webhook no painel da sua Evolution:
+#    evento "Messages Upsert" →
+#    https://SEU-PROJETO.supabase.co/functions/v1/whatsapp-webhook?secret=SEU-NOTIFY-SECRET
+```
+
+- `whatsapp-chat` (`verify_jwt = true`): proxy do painel — status, QR, conversas,
+  histórico, envio e leitura. Sem a Evolution configurada, a página mostra um
+  passo a passo para ligar;
+- `whatsapp-webhook` (`verify_jwt = false`, segredo na URL): recebe as mensagens da
+  Evolution e mantém o selo de não lidas do menu vivo em tempo real (Realtime).
+  **Sem o webhook tudo funciona** — a página atualiza sozinha a cada poucos segundos;
+  o selo só perde o "instantâneo";
+- `whatsapp_chats` (migration-19): cache da caixa de entrada (última mensagem + não
+  lidas por conversa). Escrita só pelas funções (service role); leitura só admin.
+
 ### Pix automático (Mercado Pago) — opcional, recomendado
 Com a **migration-13** aplicada e as Edge Functions publicadas, o cliente escolhe **Pix** no
 checkout e recebe na hora o **QR Code + Copia e Cola**, sem sair do site (a tela é 100% sua,

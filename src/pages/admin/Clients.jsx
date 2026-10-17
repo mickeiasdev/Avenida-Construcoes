@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, Loader2, Search, Users } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Download, Loader2, MessageCircle, Search, Users } from 'lucide-react'
 import { downloadCsv } from '../../lib/csv'
 import { supabase } from '../../lib/supabaseClient'
-import { formatBRL, formatDate } from '../../lib/utils'
+import { formatBRL, formatDate, onlyDigits } from '../../lib/utils'
 
 // Lista de clientes: contato, cidade, nº de pedidos (e quantos em
 // aberto) e total gasto em pedidos ENTREGUES
 export default function ClientsAdmin() {
+  const navigate = useNavigate()
   const [clients, setClients] = useState(null)
   const [filter, setFilter] = useState('')
   const [loadError, setLoadError] = useState(null)
@@ -121,7 +123,20 @@ export default function ClientsAdmin() {
                   <td className="px-4 py-3">
                     <p className="font-medium text-gray-800">{c.full_name || '—'}</p>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{c.phone || '—'}</td>
+                  <td className="px-4 py-3 text-gray-600">
+                    <span className="align-middle">{c.phone || '—'}</span>
+                    {c.phone && (
+                      <button
+                        type="button"
+                        className="ml-2 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 align-middle text-green-600 ring-1 ring-green-200 transition hover:bg-green-100"
+                        onClick={() => navigate('/admin/whatsapp?to=' + onlyDigits(c.phone))}
+                        aria-label={'Conversar com ' + (c.full_name || 'cliente') + ' pelo WhatsApp'}
+                        title="Abrir conversa no WhatsApp do painel"
+                      >
+                        <MessageCircle className="h-4 w-4" />
+                      </button>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-gray-600">
                     {[c.city, c.state].filter(Boolean).join('/') || '—'}
                   </td>

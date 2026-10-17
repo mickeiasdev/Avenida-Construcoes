@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Banknote, Ban, Check, ChevronRight, ClipboardList, CreditCard, Download, Eraser, Loader2, MapPin, MessageCircle, Phone, PlusCircle, QrCode, RotateCcw, Search, Store, Trash2, Truck, User } from 'lucide-react'
 import { downloadCsv } from '../../lib/csv'
 import { supabase } from '../../lib/supabaseClient'
@@ -22,6 +22,7 @@ const TABS = [
 // o cliente acompanha tudo em /pedidos (Realtime em ambos os lados)
 export default function OrdersAdmin() {
   const { settings } = useStore()
+  const navigate = useNavigate()
   const [orders, setOrders] = useState(null)
   const [tab, setTab] = useState('all')
   const [busyId, setBusyId] = useState(null)
@@ -78,9 +79,9 @@ export default function OrdersAdmin() {
   }
 
   // exclui UM pedido (os itens caem junto pelo "on delete cascade")
-  // Aviso rápido ao cliente pelo WhatsApp: abre o wa.me com o texto pronto
-  // (envio 100% automático para clientes exige API oficial paga do WhatsApp;
-  // aqui é um toque do atendente e sai da conta da loja)
+  // Aviso rápido ao cliente: abre a conversa no WhatsApp do PAINEL com o
+  // texto pronto — é só conferir e enviar (sai pelo número da loja, igual
+  // às notificações automáticas da Evolution)
   function avisarCliente(o) {
     const digits = onlyDigits(o.customer_phone ?? '')
     if (!digits) return
@@ -95,7 +96,7 @@ export default function OrdersAdmin() {
       (o.status === 'shipping' ? ' — saiu para entrega! 🚚' : '') +
       (o.status === 'delivered' ? ' — entrega concluída. ✅ Obrigado pela preferência!' : '') +
       '\n\nQualquer dúvida é só responder por aqui.'
-    window.open('https://wa.me/' + intl + '?text=' + encodeURIComponent(texto), '_blank', 'noopener')
+    navigate('/admin/whatsapp?to=' + intl + '&text=' + encodeURIComponent(texto))
   }
 
   async function removeOrder(o) {
@@ -347,7 +348,7 @@ export default function OrdersAdmin() {
                     {o.customer_phone && !cancelled && (
                       <button
                         type="button"
-                        title="Abre o WhatsApp com a atualização já escrita — é só enviar"
+                        title="Abre a conversa no WhatsApp do painel com a atualização já escrita — é só enviar"
                         className="inline-flex items-center gap-2 rounded-lg bg-green-50 px-4 py-2 text-sm font-bold text-green-700 ring-1 ring-green-300 transition hover:bg-green-100"
                         onClick={() => avisarCliente(o)}
                       >
