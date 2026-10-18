@@ -28,16 +28,21 @@ export default function StoreLayout() {
   // dropdown, chamando pra completar o cadastro. Some sozinho ao preencher.
   const profileIncomplete = Boolean(user) && Boolean(profile) && (!profile.phone || !profile.zip)
 
-  // Dropdown da conta dinâmico como menu de verdade: fecha ao clicar FORA,
-  // no ESC e ao escolher qualquer item (link/botão interno) — o <details>
-  // nativo sozinho só fecha clicando de novo no próprio nome.
+  // Dropdown da conta dinâmico como menu de verdade: fecha ao clicar FORA
+  // (mousedown) e ao escolher um item (click — DEPOIS da navegação, senão
+  // o display:none mata o clique do link antes de processar).
   useEffect(() => {
     const onDown = (e) => {
       const el = accountRef.current
       if (!el || !el.open) return
-      if (!el.contains(e.target) || e.target.closest('a, button')) {
-        el.open = false
-      }
+      // clique FORA do dropdown: fecha imediatamente
+      if (!el.contains(e.target)) el.open = false
+    }
+    const onClick = (e) => {
+      const el = accountRef.current
+      if (!el || !el.open) return
+      // clique em link/botão DENTRO: fecha DEPOIS (o click já navegou)
+      if (e.target.closest('a, button')) el.open = false
     }
     const onKey = (e) => {
       if (e.key === 'Escape' && accountRef.current?.open) {
@@ -45,9 +50,11 @@ export default function StoreLayout() {
       }
     }
     document.addEventListener('mousedown', onDown)
+    document.addEventListener('click', onClick)
     document.addEventListener('keydown', onKey)
     return () => {
       document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('click', onClick)
       document.removeEventListener('keydown', onKey)
     }
   }, [])
