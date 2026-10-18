@@ -138,6 +138,9 @@ export default function StoreLayout() {
                       <span className="mt-1 block font-semibold text-amber-600">Complete seu cadastro 📝</span>
                     )}
                   </div>
+                  <Link to="/" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100">
+                    <HomeIcon className="h-4 w-4" /> Início
+                  </Link>
                   <Link to="/perfil" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100">
                     <span className="relative">
                       <User className="h-4 w-4" />
@@ -160,7 +163,12 @@ export default function StoreLayout() {
                   <button type="button" onClick={signOut} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-red-600 hover:bg-red-50"><LogOut className="h-4 w-4" /> Sair</button>
                 </>
               ) : (
-                <Link to="/login" className="flex items-center gap-2 rounded-lg px-3 py-2 font-medium hover:bg-gray-100"><User className="h-4 w-4" /> Entrar / Criar conta</Link>
+                <>
+                  <Link to="/" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100">
+                    <HomeIcon className="h-4 w-4" /> Início
+                  </Link>
+                  <Link to="/login" className="flex items-center gap-2 rounded-lg px-3 py-2 font-medium hover:bg-gray-100"><User className="h-4 w-4" /> Entrar / Criar conta</Link>
+                </>
               )}
             </div>
           </details>
