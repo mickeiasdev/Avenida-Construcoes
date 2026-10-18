@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Banknote, Ban, Check, ChevronRight, ClipboardList, CreditCard, Download, Eraser, Loader2, MapPin, MessageCircle, Phone, PlusCircle, QrCode, RotateCcw, Search, Store, Trash2, Truck, User } from 'lucide-react'
 import { downloadCsv } from '../../lib/csv'
+import { useConfirmDialog } from '../../components/ConfirmDialog'
 import { supabase } from '../../lib/supabaseClient'
 import { DELIVERY_LABELS, fulfillmentTotals, PAYMENT_LABELS } from '../../lib/storeOrder'
 import { maskCpf } from '../../lib/checkout'
@@ -24,6 +25,7 @@ const TABS = [
 export default function OrdersAdmin() {
   const { settings } = useStore()
   const navigate = useNavigate()
+  const confirm = useConfirmDialog()
   const [orders, setOrders] = useState(null)
   const [tab, setTab] = useState('all')
   const [busyId, setBusyId] = useState(null)
@@ -62,7 +64,13 @@ export default function OrdersAdmin() {
   }
 
   async function cancelOrder(o) {
-    if (!window.confirm('Cancelar o pedido nº ' + o.id.slice(0, 8) + '?')) return
+    const ok = await confirm.ask({
+      title: 'Cancelar o pedido nº ' + o.id.slice(0, 8) + '?',
+      message: 'O cliente já não vê mais andamento. A cancelação pode ser vista no histórico, mas o pedido não volta ao fluxo.',
+      confirmLabel: 'Cancelar pedido',
+      danger: true,
+    })
+    if (!ok) return
     setBusyId(o.id)
     const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', o.id)
     setBusyId(null)
@@ -101,7 +109,13 @@ export default function OrdersAdmin() {
   }
 
   async function removeOrder(o) {
-    if (!window.confirm('Excluir o pedido nº ' + o.id.slice(0, 8) + '? Os itens vão junto e não tem como desfazer.')) return
+    const ok = await confirm.ask({
+      title: 'Excluir o pedido nº ' + o.id.slice(0, 8) + '?',
+      message: 'Os itens vão junto e não tem como desfazer.',
+      confirmLabel: 'Excluir pedido',
+      danger: true,
+    })
+    if (!ok) return
     setBusyId(o.id)
     const { error } = await supabase.from('orders').delete().eq('id', o.id)
     setBusyId(null)
@@ -111,7 +125,13 @@ export default function OrdersAdmin() {
 
   // limpeza em lote: a lista não cresce para sempre
   async function purge({ label, status, olderThanDays }) {
-    if (!window.confirm('Excluir ' + label + '? Não tem como desfazer.')) return
+    const ok = await confirm.ask({
+      title: 'Excluir ' + label + '?',
+      message: 'Exclusão em lote e permanente — não tem como desfazer.',
+      confirmLabel: 'Excluir agora',
+      danger: true,
+    })
+    if (!ok) return
     setBusyId('purge')
     let query = supabase.from('orders').delete().eq('status', status)
     if (olderThanDays) {
@@ -381,6 +401,9 @@ export default function OrdersAdmin() {
           })}
         </div>
       )}
+
+      {/* confirmações em popup (cancelar/excluir/lote) */}
+      {confirm.dialog}
     </div>
   )
 }

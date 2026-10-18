@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ImagePlus, Loader2, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import { supabase, uploadImage, deleteImagesByUrls } from '../../lib/supabaseClient'
+import { useConfirmDialog } from '../../components/ConfirmDialog'
 import { useStore } from '../../context/StoreContext'
 import { formatBRL } from '../../lib/utils'
 import { useModalA11y } from '../../lib/useModalA11y'
@@ -14,6 +15,7 @@ const EMPTY = {
 // controle) e galeria de fotos extras (o cliente passa o dedo na vitrine)
 export default function Products() {
   const { categories } = useStore()
+  const confirm = useConfirmDialog()
   const [products, setProducts] = useState(null)
   const [filter, setFilter] = useState('')
   const [catFilter, setCatFilter] = useState('all')
@@ -64,7 +66,6 @@ export default function Products() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    setBusy(true)
     setMsg(null)
     const payload = {
       name: modal.name.trim(),
@@ -77,6 +78,29 @@ export default function Products() {
       images: modal.images ?? [],
       active: modal.active,
     }
+    const original = modal.id ? (products ?? []).find((x) => x.id === modal.id) : null
+
+    // Ações sensíveis pedem confirmação em popup: produto novo e
+    // desativação. Edições comuns seguem direto (sem fricção).
+    if (!modal.id) {
+      const ok = await confirm.ask({
+        title: 'Adicionar este produto à loja?',
+        message: '"' + payload.name + '" ' + (payload.active
+          ? 'vai ao ar na vitrine na hora.'
+          : 'fica salvo como INATIVO — só aparece depois de ativar.'),
+        confirmLabel: 'Adicionar produto',
+      })
+      if (!ok) return
+    } else if (original?.active && !payload.active) {
+      const ok = await confirm.ask({
+        title: 'Desativar "' + payload.name + '"?',
+        message: 'O produto sai da vitrine e das buscas. Nada é apagado — dá para reativar depois.',
+        confirmLabel: 'Desativar produto',
+      })
+      if (!ok) return
+    }
+
+    setBusy(true)
     const res = modal.id
       ? await supabase.from('products').update(payload).eq('id', modal.id)
       : await supabase.from('products').insert(payload)
@@ -84,7 +108,6 @@ export default function Products() {
     else {
       // Na edição: imagens trocadas/removidas saem do Storage também —
       // se não apagasse, o arquivo ficaria órfão ocupando o plano gratuito
-      const original = modal.id ? (products ?? []).find((x) => x.id === modal.id) : null
       if (original) {
         const antes = [original.image_url, ...(original.images ?? [])]
         const agora = new Set([payload.image_url, ...payload.images])
@@ -97,9 +120,15 @@ export default function Products() {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm('Excluir este produto?')) return
     // coleta as URLs ANTES de excluir (a lista some junto)
     const p = (products ?? []).find((x) => x.id === id)
+    const ok = await confirm.ask({
+      title: 'Excluir o produto "' + (p?.name ?? 'produto') + '"?',
+      message: 'Sai da vitrine e das buscas; as imagens são apagadas do Storage. Não tem como desfazer.',
+      confirmLabel: 'Excluir produto',
+      danger: true,
+    })
+    if (!ok) return
     const { error } = await supabase.from('products').delete().eq('id', id)
     if (error) setMsg({ type: 'err', text: 'Erro ao excluir: ' + error.message })
     else {
@@ -359,6 +388,9 @@ export default function Products() {
           </form>
         </div>
       )}
+
+      {/* confirmações em popup (adicionar/desativar/excluir produto) */}
+      {confirm.dialog}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, Pencil, Plus, TicketPercent, ToggleLeft, ToggleRight, Trash2, X } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
+import { useConfirmDialog } from '../../components/ConfirmDialog'
 import { formatBRL, formatDate } from '../../lib/utils'
 import { useModalA11y } from '../../lib/useModalA11y'
 
@@ -9,6 +10,7 @@ const EMPTY = { id: null, code: '', kind: 'percent', value: '', min_total: 0, ac
 // Área de cupons: o admin cria códigos (% ou R$ fixo, com valor mínimo);
 // o cliente digita o código no checkout e o desconto caí no total.
 export default function Coupons() {
+  const confirm = useConfirmDialog()
   const [rows, setRows] = useState(null)
   const [modal, setModal] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -28,6 +30,15 @@ export default function Coupons() {
     if (!(Number(modal.value) > 0)) { setMsg({ type: 'err', text: 'Valor do desconto precisa ser maior que zero.' }); return }
     if (modal.kind === 'percent' && Number(modal.value) > 95) {
       setMsg({ type: 'err', text: 'Percentual máximo: 95%.' }); return
+    }
+    // cupom novo pede confirmação (o código entra no ar para os clientes)
+    if (!modal.id) {
+      const ok = await confirm.ask({
+        title: 'Criar o cupom ' + code + '?',
+        message: 'Com ele ativo, qualquer cliente pode usar no checkout.',
+        confirmLabel: 'Criar cupom',
+      })
+      if (!ok) return
     }
     setBusy(true); setMsg(null)
     const payload = {
@@ -50,6 +61,15 @@ export default function Coupons() {
 
   async function toggleActive(c) {
     if (inFlight.current) return
+    // desativar muda o jogo na loja: cliente para de conseguir usá-lo
+    if (c.active) {
+      const ok = await confirm.ask({
+        title: 'Desativar o cupom ' + c.code + '?',
+        message: 'Deixa de valer no checkout (dá para reativar depois).',
+        confirmLabel: 'Desativar cupom',
+      })
+      if (!ok) return
+    }
     inFlight.current = true
     setMsg(null)
     const { error } = await supabase.from('coupons').update({ active: !c.active }).eq('id', c.id)
@@ -59,7 +79,14 @@ export default function Coupons() {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm('Excluir este cupom?')) return
+    const c = (rows ?? []).find((r) => r.id === id)
+    const ok = await confirm.ask({
+      title: 'Excluir o cupom ' + (c?.code ?? '') + '?',
+      message: 'Sai da lista e para de valer no checkout. Não tem como desfazer.',
+      confirmLabel: 'Excluir cupom',
+      danger: true,
+    })
+    if (!ok) return
     if (inFlight.current) return
     inFlight.current = true
     setMsg(null)
@@ -235,6 +262,9 @@ export default function Coupons() {
           </form>
         </div>
       )}
+
+      {/* confirmações em popup (criar/desativar/excluir cupom) */}
+      {confirm.dialog}
     </div>
   )
 }
