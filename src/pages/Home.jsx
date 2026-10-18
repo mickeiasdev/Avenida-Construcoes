@@ -8,6 +8,28 @@ import { ProductCard } from '../components/ProductCard'
 
 const PAGE_SIZE = 6
 const BEST_LIMIT = 12
+const PRODUCT_EMBED = '*, categories!products_category_id_fkey(name, slug)'
+
+// Ranking de mais vendidos (RPC migration-22): produtos com vendas,
+// ordenados pela quantidade vendida. Silencioso se a RPC não existir
+// ainda (devolve [] e a vitrine segue nas regras de completar).
+async function fetchRanked(limit) {
+  try {
+    const { data: top, error } = await supabase.rpc('top_selling_products', { p_limit: limit })
+    if (error || !top?.length) return []
+    const ids = top.map((t) => t.product_id)
+    const { data: list } = await supabase
+      .from('products')
+      .select(PRODUCT_EMBED)
+      .eq('active', true)
+      .in('id', ids)
+    if (!list?.length) return []
+    const rank = new Map(ids.map((id, i) => [id, i]))
+    return [...list].sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999))
+  } catch {
+    return []
+  }
+}
 
 // VITRINE: banner + menu "Explorar" (mais vendidos, produtos, categorias e
 // ofertas) + busca com debounce (o header escreve ?q=) + paginação.
@@ -34,6 +56,7 @@ export default function Home() {
   const [loadError, setLoadError] = useState(null)
   const [sort, setSort] = useState('recent')
   const [bestFallback, setBestFallback] = useState(false) // sem vendas → destaques
+  const rankedAllRef = useRef(null) // ranking do modo "Todos" (vive entre páginas)
 
   const activeCat = categories.find((c) => c.slug === catSlug)
   const isBest = !q && !catSlug
@@ -42,59 +65,77 @@ export default function Home() {
   const isSearch = Boolean(q)
 
   // ---------- carregamento ----------
+  // Regras da vitrine (val também para "Todos os produtos"):
+  //   1. quem TEM vendas vem primeiro, na ordem do ranking;
+  //   2. o limite vale para a lista FINAL (não só para os vendidos);
+  //   3. completar com os demais produtos da loja até o limite;
+  //   4. nunca repetir quem já está no ranking (exclusão direto no banco).
   const fetchProducts = useCallback(async (from, append) => {
     if (append) setLoadingMore(true); else setLoading(true)
     setLoadError(null)
 
-    // MAIS VENDIDOS: ranking do banco (soma de order_items). Sem vendas
-    // (ou migration-22 ausente), cai nos destaques — vitrine nunca abre vazia.
+    // ===== MAIS VENDIDOS: ranking + complemento até o limite =====
     if (isBest) {
       setBestFallback(false)
-      let ranked = []
-      try {
-        const { data: top, error: rpcErr } = await supabase.rpc('top_selling_products', { p_limit: BEST_LIMIT })
-        if (!rpcErr && top?.length) {
-          const ids = top.map((t) => t.product_id)
-          const { data: list } = await supabase
-            .from('products')
-            .select('*, categories!products_category_id_fkey(name, slug)')
-            .eq('active', true)
-            .in('id', ids)
-          if (list?.length) {
-            const rank = new Map(ids.map((id, i) => [id, i]))
-            ranked = [...list].sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999))
-          }
+      const ranked = await fetchRanked(BEST_LIMIT)
+      let fill = []
+      if (ranked.length < BEST_LIMIT) {
+        let query = supabase
+          .from('products')
+          .select(PRODUCT_EMBED)
+          .eq('active', true)
+          .order('views', { ascending: false })
+          .limit(BEST_LIMIT - ranked.length)
+        if (ranked.length) query = query.not('id', 'in', '(' + ranked.map((r) => r.id).join(',') + ')')
+        const { data, error } = await query
+        if (error) {
+          setLoadError(error.message ?? 'Falha ao carregar os produtos.')
+          setProducts([]); setTotalCount(0); setHasMore(false)
+          setLoading(false)
+          return
         }
-      } catch { /* RPC ausente/erro: destaques */ }
-      if (ranked.length) {
-        setProducts(ranked)
-        setTotalCount(ranked.length)
-        setHasMore(false)
-        setLoading(false)
-        return
+        fill = data ?? []
       }
-      // fallback: destaques da loja (mais vistos)
-      const { data: feat, error } = await supabase
-        .from('products')
-        .select('*, categories!products_category_id_fkey(name, slug)')
-        .eq('active', true)
-        .order('views', { ascending: false })
-        .limit(BEST_LIMIT)
-      if (error) {
-        setLoadError(error.message ?? 'Falha ao carregar os produtos.')
-        setProducts([]); setTotalCount(0); setHasMore(false)
-      } else {
-        setBestFallback(true)
-        setProducts(feat ?? [])
-        setTotalCount(feat?.length ?? 0)
-        setHasMore(false)
-      }
+      const list = [...ranked, ...fill].slice(0, BEST_LIMIT)
+      if (!ranked.length) setBestFallback(true)
+      setProducts(list)
+      setTotalCount(list.length)
+      setHasMore(false)
       setLoading(false)
       return
     }
 
-    // demais modos: categoria (via product_categories da migration-11),
-    // ofertas (promo no ar, independente da categoria existir) ou busca
+    // ===== TODOS OS PRODUTOS: mais vendidos no topo, resto na sequência =====
+    if (isAll && !q) {
+      if (from === 0 && !rankedAllRef.current) rankedAllRef.current = await fetchRanked(50)
+      const ranked = rankedAllRef.current ?? []
+      let query = supabase
+        .from('products')
+        .select(PRODUCT_EMBED, { count: 'exact' })
+        .eq('active', true)
+        .order(
+          sort === 'views' ? 'views' : (sort === 'price_asc' || sort === 'price_desc') ? 'price' : 'created_at',
+          { ascending: sort === 'price_asc' }
+        )
+      if (ranked.length) query = query.not('id', 'in', '(' + ranked.map((r) => r.id).join(',') + ')')
+      const { data, error, count } = await query.range(from, from + PAGE_SIZE - 1)
+      if (!error) {
+        const list = data ?? []
+        setProducts((prev) => (append ? [...prev, ...list] : [...ranked, ...list]))
+        // total da loja = complemento (count já exclui o ranking) + ranking
+        setTotalCount((typeof count === 'number' ? count : 0) + ranked.length)
+        setHasMore(typeof count === 'number' ? from + list.length < count : list.length === PAGE_SIZE)
+      } else {
+        console.error('[vitrine] erro ao carregar produtos:', error?.message ?? error)
+        setLoadError(error.message ?? 'Falha ao carregar os produtos.')
+        if (!append) { setProducts([]); setTotalCount(0); setHasMore(false) }
+      }
+      if (append) setLoadingMore(false); else setLoading(false)
+      return
+    }
+
+    // ===== demais modos: categoria (product_categories da migration-11),
+    // ofertas (promo no ar) ou busca =====
     let query = supabase
       .from('products')
       .select(
@@ -130,14 +171,21 @@ export default function Home() {
       if (!append) { setProducts([]); setTotalCount(0); setHasMore(false) }
     }
     if (append) setLoadingMore(false); else setLoading(false)
-  }, [activeCat, q, sort, isBest, isOfertas])
+  }, [activeCat, q, sort, isBest, isOfertas, isAll])
 
   useEffect(() => {
     if (catSlug && catSlug !== 'todas' && catSlug !== 'ofertas' && categories.length === 0) return
+    // ranking do modo "Todos" é recalculado a cada entrada no modo
+    if (catSlug !== 'todas') rankedAllRef.current = null
     fetchProducts(0, false)
   }, [fetchProducts, catSlug, categories.length])
 
-  function loadMore() { fetchProducts(products.length, true) }
+  // no modo "Todos" a lista exibida carrega o ranking no topo: o offset
+  // da próxima página é só da parte complementar
+  function loadMore() {
+    const rankedCount = isAll ? (rankedAllRef.current?.length ?? 0) : 0
+    fetchProducts(Math.max(0, products.length - rankedCount), true)
+  }
 
   function selectFilter(value) {
     const params = new URLSearchParams(searchParams)
