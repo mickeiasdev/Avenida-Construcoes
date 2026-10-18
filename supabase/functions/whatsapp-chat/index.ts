@@ -241,6 +241,36 @@ Deno.serve(async (req) => {
         console.warn('[whatsapp-chat] sync da tabela falhou (migration-19 rodou?):', (e as Error)?.message)
       }
 
+      // Mescla conversas CONHECIDAS salvas que ainda não existem na Evolution
+      // (aviso automático de pedido enviado, conversa aberta pelo admin…) —
+      // o painel mostra desde já, com o resumo do que foi enviado.
+      try {
+        const { data: saved } = await supabase
+          .from('whatsapp_chats')
+          .select('remote_jid, phone, name, last_message, last_message_at, last_from_me')
+          .eq('known', true)
+        const evoJids = new Set((chats as any[]).map((c: any) => c.jid))
+        for (const s of saved ?? []) {
+          const jid = personJid(s.remote_jid)
+          if (!jid || evoJids.has(jid)) continue
+          evoJids.add(jid)
+          const at = s.last_message_at ? Date.parse(String(s.last_message_at)) : null
+          ;(chats as any[]).push({
+            jid,
+            phone: String(s.phone ?? jid.replace(/@s\.whatsapp\.net|@lid$/, '')),
+            known: true,
+            name: s.name ?? null,
+            lastText: s.last_message ?? null,
+            lastAt: Number.isFinite(at) ? at : null,
+            fromMe: s.last_from_me ?? true,
+            unread: 0,
+          })
+        }
+        ;(chats as any[]).sort((a: any, b: any) => (b.lastAt ?? 0) - (a.lastAt ?? 0))
+      } catch (e) {
+        console.warn('[whatsapp-chat] mescla de conversas salvas falhou:', (e as Error)?.message)
+      }
+
       return json({ configured: true, chats })
     }
 
@@ -295,7 +325,26 @@ Deno.serve(async (req) => {
         body: JSON.stringify({ number: phone + '@s.whatsapp.net', text, delay: 0 }),
       })
       if (!r.ok) return json({ ok: false, reason: 'evolution-recusou' }, 502)
-      try { await supabase.rpc('wa_mark_read', { p_jid: phone + '@s.whatsapp.net' }) } catch { /* opcional */ }
+      // a mensagem saiu: a conversa entra no painel MESMO antes de o cliente
+      // responder (a Evolution só cria o chat dela quando há resposta) —
+      // gravamos aqui com o nome do pedido, como conversa conhecida
+      const chatJid = phone + '@s.whatsapp.net'
+      const now = new Date().toISOString()
+      try {
+        await supabase.from('whatsapp_chats').upsert({
+          remote_jid: chatJid,
+          phone,
+          known: true,
+          name: order.customer_name ?? null,
+          last_message: text.slice(0, 500),
+          last_message_at: now,
+          last_from_me: true,
+          unread_count: 0,
+          updated_at: now,
+        }, { onConflict: 'remote_jid' })
+      } catch (e) {
+        console.warn('[whatsapp-chat] conversa do aviso não foi salva:', (e as Error)?.message)
+      }
       return json({ ok: true, sent: true })
     }
 
