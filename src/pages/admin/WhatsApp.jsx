@@ -29,21 +29,21 @@ const AV_COLORS = ['bg-emerald-500', 'bg-teal-500', 'bg-blue-500', 'bg-indigo-50
 // senão busca UMA vez via action "avatar" (cache por jid). Sem foto → inicial.
 const avatarUrlCache = new Map()
 function ChatAvatar({ name, seed, jid, url, size = 'h-10 w-10' }) {
-  const cached = avatarUrlCache.get(jid)
-  const [photo, setPhoto] = useState(url || cached || null)
-  const [tried, setTried] = useState(Boolean(url || cached))
+  const [photo, setPhoto] = useState(url || avatarUrlCache.get(jid) || null)
+  const [triedJid, setTriedJid] = useState(url || avatarUrlCache.get(jid) ? jid : null)
 
+  // reset QUANDO O JID MUDA: puxa do cache/bank e reavalia (o useState
+  // inicial não atualiza sozinho quando troca de conversa)
   useEffect(() => {
-    if (url && !cached) {
-      avatarUrlCache.set(jid, url)
-      setPhoto(url)
-      setTried(true)
-    }
-  }, [url, jid])
+    const cached = avatarUrlCache.get(jid)
+    setPhoto(url || cached || null)
+    setTriedJid(url || cached ? jid : null)
+  }, [jid, url])
 
+  // busca a foto se ainda não tentou este jid
   useEffect(() => {
-    if (tried || !jid) return
-    setTried(true)
+    if (!jid || triedJid === jid) return
+    setTriedJid(jid)
     waCall('avatar', { chat: jid })
       .then((d) => {
         const u = d?.url ?? null
@@ -51,7 +51,7 @@ function ChatAvatar({ name, seed, jid, url, size = 'h-10 w-10' }) {
         setPhoto(u)
       })
       .catch(() => {})
-  }, [tried, jid])
+  }, [jid, triedJid])
 
   const h = [...String(seed ?? '')].reduce((a, c) => a + c.charCodeAt(0), 0)
   if (photo) {
@@ -1199,6 +1199,7 @@ export default function WhatsAppAdmin() {
                       <ArrowLeft className="h-5 w-5" />
                     </button>
                     <ChatAvatar
+                      key={activeJid}
                       name={chatName(activeChat ?? { jid: activeJid, phone: activeJidPhone })}
                       seed={activeJid}
                       jid={activeJid}
