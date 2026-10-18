@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { CheckCircle2, AlertCircle, Clock, ImagePlus, Loader2, Save } from 'lucide-react'
 import { useStore } from '../../context/StoreContext'
+import { useConfirmDialog } from '../../components/ConfirmDialog'
 import { applyFontScale, FONT_BASE_PX } from '../../lib/brandTheme'
 import { uploadImage, deleteImagesByUrls } from '../../lib/supabaseClient'
 import { formatBusinessHoursText, maskPhone, waLocal, waNumber } from '../../lib/utils'
@@ -17,6 +18,7 @@ const FONT_OPTIONS = [
 
 export default function Settings() {
   const { settings, updateSettings } = useStore()
+  const confirm = useConfirmDialog()
   const [form, setForm] = useState(null)
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState('')
@@ -86,6 +88,13 @@ export default function Settings() {
       setMsg({ type: 'err', text: 'As cores devem estar em hexadecimal válido (ex.: #f97316).' })
       return
     }
+    // configurar a loja muda a vitrine INTEIRA em tempo real — confirma
+    const ok = await confirm.ask({
+      title: 'Salvar as configurações da loja?',
+      message: 'Nome, cores, horários e WhatsApp refletem na vitrine na hora para todos os visitantes.',
+      confirmLabel: 'Salvar',
+    })
+    if (!ok) return
     setBusy(true)
     setMsg(null)
     // business_hours (texto do rodapé) é gerado automaticamente dos seletores
@@ -277,6 +286,9 @@ export default function Settings() {
           Salvar configurações
         </button>
       </div>
+
+      {/* confirmação em popup (salvar configurações da loja) */}
+      {confirm.dialog}
     </form>
   )
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Ban, CalendarClock, Loader2, Plus, Search, TicketPercent, X } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
+import { useConfirmDialog } from '../../components/ConfirmDialog'
 import { useStore } from '../../context/StoreContext'
 import { formatBRL, formatDateTime } from '../../lib/utils'
 import { useModalA11y } from '../../lib/useModalA11y'
@@ -32,6 +33,7 @@ function daysLeft(iso) {
 // preço volta ao original sozinho (hasActivePromo ignora data no passado).
 export default function Promotions() {
   const { categories } = useStore()
+  const confirm = useConfirmDialog()
   const [products, setProducts] = useState(null) // catálogo para o select
   const [promos, setPromos] = useState(null)     // produtos com promoção
   const [form, setForm] = useState(null)         // null = formulário fechado
@@ -99,6 +101,15 @@ export default function Promotions() {
     if (!(days >= 1 && days <= 365)) { setMsg({ type: 'err', text: 'O prazo precisa ser de 1 a 365 dias.' }); return }
     if (!preview) { setMsg({ type: 'err', text: 'Informe um valor promocional menor que o preço original.' }); return }
 
+    // promoção muda o preço na vitrine na hora — pede confirmação
+    const ok = await confirm.ask({
+      title: 'Colocar "' + selectedProduct.name + '" em promoção?',
+      message: 'Preço promocional ' + formatBRL(preview.final) + ' (-' + preview.off + '%) por ' + days + ' dia' + (days > 1 ? 's' : '') +
+        '. A vitrine e a aba Ofertas atualizam na hora.',
+      confirmLabel: 'Ativar promoção',
+    })
+    if (!ok) return
+
     setBusy(true)
     setMsg(null)
     // promo_price é o preço FINAL já resolvido; promo_until é a data de expiração
@@ -138,6 +149,13 @@ export default function Promotions() {
   // (a vitrine mostra Ofertas a partir de product_categories — ver Home.jsx,
   // então deixar o vínculo sujo faria o item continuar anunciado lá).
   async function endPromo(product) {
+    const ok = await confirm.ask({
+      title: 'Encerrar a promoção de "' + product.name + '"?',
+      message: 'O preço volta ao normal e o produto sai da aba Ofertas.',
+      confirmLabel: 'Encerrar promoção',
+      danger: true,
+    })
+    if (!ok) return
     setBusyId(product.id)
     setMsg(null)
     const { error } = await supabase
@@ -374,6 +392,9 @@ export default function Promotions() {
           </form>
         </div>
       )}
+
+      {/* confirmações em popup (ativar/encerrar promoção) */}
+      {confirm.dialog}
     </div>
   )
 }

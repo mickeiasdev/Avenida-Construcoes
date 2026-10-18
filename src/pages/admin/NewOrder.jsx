@@ -5,6 +5,7 @@ import { CheckoutForm } from '../../components/CheckoutForm'
 import { ADDRESS_FIELDS, ADDRESS_KEYS, EMPTY_FORM, missingFields } from '../../lib/checkout'
 import { supabase } from '../../lib/supabaseClient'
 import { createStoreOrder, DELIVERY_LABELS, fulfillmentTotals, PAYMENT_LABELS, groupByFulfillment } from '../../lib/storeOrder'
+import { useConfirmDialog } from '../../components/ConfirmDialog'
 import { effectivePrice, formatBRL, maskPhone, ORDER_LABELS } from '../../lib/utils'
 
 const PAYMENTS = [
@@ -19,6 +20,7 @@ const PAYMENTS = [
 // continua sendo calculado pela RPC place_order (migration-9).
 // ============================================================
 export default function NewOrderAdmin() {
+  const confirm = useConfirmDialog()
   const [products, setProducts] = useState(null)
   const [categories, setCategories] = useState([])
   const [search, setSearch] = useState('')
@@ -113,6 +115,16 @@ export default function NewOrderAdmin() {
       return
     }
     setMissing([])
+    // venda do balcão cria pedido de verdade (baixa estoque) — confirma antes
+    const units = items.reduce((acc, i) => acc + Number(i.quantity), 0)
+    const ok = await confirm.ask({
+      title: 'Finalizar a venda?',
+      message: units + ' unidade' + (units > 1 ? 's' : '') + ' · ' + formatBRL(total) +
+        ' · ' + (PAYMENT_LABELS[payment] ?? payment) +
+        '. O pedido é gravado e o estoque baixa na hora.',
+      confirmLabel: 'Finalizar venda',
+    })
+    if (!ok) return
     setBusy(true)
     try {
       const order = await createStoreOrder({ items, customer: form, paymentMethod: payment })
@@ -468,6 +480,9 @@ export default function NewOrderAdmin() {
           Finalizar venda
         </button>
       </div>
+
+      {/* confirmação em popup (finalizar venda) */}
+      {confirm.dialog}
     </div>
   )
 }
