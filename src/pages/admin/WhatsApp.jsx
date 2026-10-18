@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle, Archive, ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, Loader2, MessageCircle,
-  Pencil, Plus, PlusCircle, QrCode, RefreshCw, Search, Send, Smartphone, Trash2, X, Zap,
+  Pencil, Plus, PlusCircle, Printer, QrCode, RefreshCw, Search, Send, Smartphone, Trash2, X, Zap,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { waCall, toJid } from '../../lib/whatsappChat'
@@ -1022,13 +1022,23 @@ export default function WhatsAppAdmin() {
                           <span className="font-bold text-gray-700">{formatBRL(o.total)}</span>
                         </p>
 
-                        <button
-                          type="button"
-                          className="mt-1.5 flex items-center gap-1 text-xs font-bold text-primary transition hover:underline"
-                          onClick={() => toggleDetail(o.id)}
-                        >
-                          {detailId === o.id ? <><ChevronUp className="h-3.5 w-3.5" /> Ocultar detalhes</> : <><ChevronDown className="h-3.5 w-3.5" /> Exibir detalhes</>}
-                        </button>
+                        <div className="mt-1.5 flex items-center gap-3">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 text-xs font-bold text-primary transition hover:underline"
+                            onClick={() => toggleDetail(o.id)}
+                          >
+                            {detailId === o.id ? <><ChevronUp className="h-3.5 w-3.5" /> Ocultar detalhes</> : <><ChevronDown className="h-3.5 w-3.5" /> Exibir detalhes</>}
+                          </button>
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 text-xs font-bold text-gray-400 transition hover:text-primary"
+                            title="Imprimir cupom/nota deste pedido"
+                            onClick={() => window.open('/imprimir/pedido/' + o.id, '_blank', 'noopener')}
+                          >
+                            <Printer className="h-3.5 w-3.5" /> Imprimir
+                          </button>
+                        </div>
 
                         {detailId === o.id && (
                           <div className="mt-2 rounded-lg bg-white p-3 ring-1 ring-gray-100">

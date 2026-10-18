@@ -39,6 +39,8 @@ create table if not exists public.store_settings (
     check (font_scale between 80 and 130),
   -- respostas rápidas personalizadas do WhatsApp do painel [{ label, text }]
   quick_replies jsonb not null default '[]',
+  -- CNPJ da loja (só dígitos) — cabeçalho do cupom/nota de venda
+  cnpj text,
   updated_at timestamptz not null default now()
 );
 

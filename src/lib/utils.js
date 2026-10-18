@@ -68,6 +68,23 @@ export function maskCep(value) {
   return d.length <= 5 ? d : d.slice(0, 5) + '-' + d.slice(5)
 }
 
+// Máscara CNPJ enquanto digita: XX.XXX.XXX/0001-XX (14 dígitos)
+export function maskCnpj(value) {
+  const d = String(value ?? '').replace(/\D/g, '').slice(0, 14)
+  if (d.length <= 2) return d
+  if (d.length <= 5) return d.slice(0, 2) + '.' + d.slice(2)
+  if (d.length <= 8) return d.slice(0, 2) + '.' + d.slice(2, 5) + '.' + d.slice(5)
+  if (d.length <= 12) return d.slice(0, 2) + '.' + d.slice(2, 5) + '.' + d.slice(5, 8) + '/' + d.slice(8)
+  return d.slice(0, 2) + '.' + d.slice(2, 5) + '.' + d.slice(5, 8) + '/' + d.slice(8, 12) + '-' + d.slice(12)
+}
+
+// CNPJ exibição: dígitos -> XX.XXX.XXX/0001-XX (vazio devolve '—')
+export function formatCnpj(value) {
+  const d = String(value ?? '').replace(/\D/g, '').padStart(14, '0')
+  if (!String(value ?? '').replace(/\D/g, '')) return '—'
+  return d.slice(0, 2) + '.' + d.slice(2, 5) + '.' + d.slice(5, 8) + '/' + d.slice(8, 12) + '-' + d.slice(12)
+}
+
 export function onlyDigits(value) {
   return String(value ?? '').replace(/\D/g, '')
 }

@@ -4,7 +4,7 @@ import { useStore } from '../../context/StoreContext'
 import { useConfirmDialog } from '../../components/ConfirmDialog'
 import { applyFontScale, FONT_BASE_PX } from '../../lib/brandTheme'
 import { uploadImage, deleteImagesByUrls } from '../../lib/supabaseClient'
-import { formatBusinessHoursText, maskPhone, waLocal, waNumber } from '../../lib/utils'
+import { formatBusinessHoursText, maskCnpj, maskPhone, onlyDigits, waLocal, waNumber } from '../../lib/utils'
 
 const HEX = /^#[0-9a-fA-F]{6}$/
 
@@ -44,6 +44,7 @@ export default function Settings() {
       sun_close: settings.sun_close ? settings.sun_close.slice(0, 5) : '',
       // No formulário mostramos só DDD + número; o DDI 55 entra no save.
       whatsapp: maskPhone(waLocal(settings.whatsapp)),
+      cnpj: settings.cnpj ? maskCnpj(settings.cnpj) : '',
       primary_color: settings.primary_color ?? '#f97316',
       secondary_color: settings.secondary_color ?? '#1e293b',
       font_scale: settings.font_scale ?? 100,
@@ -99,7 +100,13 @@ export default function Settings() {
     setMsg(null)
     // business_hours (texto do rodapé) é gerado automaticamente dos seletores
     // Grava no banco no formato esperado pelo app: '55' + DDD + número, só dígitos.
-    const payload = { ...form, whatsapp: waNumber(form.whatsapp), business_hours: formatBusinessHoursText(form) }
+    const payload = {
+      ...form,
+      whatsapp: waNumber(form.whatsapp),
+      // CNPJ gravado em dígitos (o cupom/nota formatam na hora de imprimir)
+      cnpj: onlyDigits(form.cnpj) || null,
+      business_hours: formatBusinessHoursText(form),
+    }
     const { error } = await updateSettings(payload)
     if (!error) {
       dirtyRef.current = false
@@ -133,6 +140,17 @@ export default function Settings() {
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_slogan_descricao">Slogan / descrição</label>
           <input id="f_slogan_descricao" className="input" value={form.about} onChange={(e) => set('about', e.target.value)} />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_cnpj_da_loja_">CNPJ da loja (para o cupom e a nota de venda)</label>
+          <input
+            id="f_cnpj_da_loja_"
+            className="input max-w-xs font-mono"
+            inputMode="numeric"
+            placeholder="00.000.000/0000-00"
+            value={form.cnpj}
+            onChange={(e) => set('cnpj', maskCnpj(e.target.value))}
+          />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <UploadBox
