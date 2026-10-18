@@ -281,7 +281,10 @@ Deno.serve(async (req) => {
           // limpa apenas os DESCONHECIDOS que saíram da Evolution —
           // conversas abertas pelo admin (known) ficam de pé
           const jids = (chats as any[]).map((c) => c.jid).join(',')
-          await supabase.from('whatsapp_chats').delete().eq('known', false).not('remote_jid', 'in', `(${jids})`)
+          // o delete só limpa DESCONHECIDOS ABERTOS que saíram da Evolution.
+          // Conversas ENCERRADAS (closed=true) ficam de pé — voltam só com
+          // mensagem nova do cliente (webhook) ou startChat do admin.
+          await supabase.from('whatsapp_chats').delete().eq('known', false).eq('closed', false).not('remote_jid', 'in', `(${jids})`)
         }
       } catch (e) {
         console.warn('[whatsapp-chat] sync da tabela falhou (migration-19 rodou?):', (e as Error)?.message)

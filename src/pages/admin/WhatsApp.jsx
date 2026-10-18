@@ -640,8 +640,13 @@ export default function WhatsAppAdmin() {
     if (!ok) return
     try {
       await waCall('closeChat', { chat: activeJid })
+      // remove IMEDIATAMENTE da lista em tela (sem esperar o reload)
+      setChats((prev) => (prev ?? []).filter((c) => c.jid !== activeJid))
       setActiveJid(null)
       setMessages([])
+      // também limpa o Set local de "conhecidas nesta sessão"
+      adminKnownRef.current.delete(activeJid)
+      // reload em background pra sincronizar com o servidor
       loadChats()
     } catch (e) {
       setError(e.message)
