@@ -20,7 +20,10 @@ const ITEMS = [
   // "Início" abre a VITRINE da loja (mesma página que o cliente vê) —
   // caminho explícito, sem depender de achar o atalho do rodapé.
   { to: '/', label: 'Início', icon: Home, external: true },
+  // WhatsApp aqui em cima: é o atendimento do dia a dia, acesso rápido
+  // logo abaixo do Dashboard (com o selo de não lidas).
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, group: 'Operação' },
+  { to: '/admin/whatsapp', label: 'WhatsApp', icon: MessageCircle, waBadge: true },
   { to: '/admin/pedidos', label: 'Pedidos', icon: ClipboardList },
   { to: '/admin/nova-venda', label: 'Nova venda', icon: PlusCircle },
   { to: '/admin/produtos', label: 'Produtos', icon: Package, group: 'Catálogo' },
@@ -28,7 +31,6 @@ const ITEMS = [
   { to: '/admin/cupons', label: 'Cupons', icon: TicketPercent },
   { to: '/admin/promocoes', label: 'Promoções', icon: Percent },
   { to: '/admin/clientes', label: 'Clientes', icon: Users, group: 'Loja' },
-  { to: '/admin/whatsapp', label: 'WhatsApp', icon: MessageCircle, waBadge: true },
   { to: '/admin/configuracoes', label: 'Configurações', icon: SettingsIcon },
 ]
 
