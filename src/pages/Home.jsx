@@ -220,48 +220,24 @@ export default function Home() {
 
   return (
     <div className="space-y-6">
-      {/* ===== CARDÁPIO: header compacto (sem banner gigante) + faixa de mais vendidos ===== */}
+      {/* ===== CARDÁPIO: header compacto (sem banner) ===== */}
       {isMenu && (
-        <>
-          <header className="rounded-2xl bg-secondary p-5 text-white shadow-lg sm:p-6"
-            style={{ backgroundImage: 'linear-gradient(135deg, var(--brand-secondary), color-mix(in srgb, var(--brand-primary) 30%, var(--brand-secondary)))' }}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0">
-                <h1 className="truncate text-xl font-extrabold tracking-tight sm:text-2xl">{settings.store_name}</h1>
-                <p className="mt-0.5 text-sm text-white/80">{settings.about}</p>
-              </div>
-              <span className={'flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ' +
-                (openStatus.open ? 'bg-green-500/90' : 'bg-red-500/90')}>
-                <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                {openStatus.label}
-              </span>
+        <header className="rounded-2xl bg-secondary p-5 text-white shadow-lg sm:p-6"
+          style={{ backgroundImage: 'linear-gradient(135deg, var(--brand-secondary), color-mix(in srgb, var(--brand-primary) 30%, var(--brand-secondary)))' }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h1 className="truncate text-xl font-extrabold tracking-tight sm:text-2xl">{settings.store_name}</h1>
+              <p className="mt-0.5 text-sm text-white/80">{settings.about}</p>
             </div>
-            <p className="mt-2 text-xs text-white/60">{formatBusinessHoursText(settings) || settings.business_hours}</p>
-          </header>
-
-          {/* faixa horizontal de MAIS VENDIDOS — 4 cards no desktop, 2.5 no mobile */}
-          <section aria-label="Mais vendidos">
-            <h2 className="mb-2 flex items-center gap-1.5 text-sm font-bold uppercase tracking-widest text-gray-500">
-              <Flame className="h-4 w-4 text-primary" /> Mais vendidos
-            </h2>
-            <div className="scrollbar flex snap-x gap-3 overflow-x-auto pb-1"
-              style={{ scrollbarWidth: 'thin' }}>
-              {products
-                .filter((p) => {
-                  // no modo cardápio os produtos agrupados por categoria já estão
-                  // ordenados — pega os 8 primeiros únicos como destaque
-                  return true
-                })
-                .slice(0, 8)
-                .map((p) => (
-                  <div key={p.id} className="w-40 shrink-0 snap-start sm:w-44 lg:w-48">
-                    <MenuProductRow product={p} />
-                  </div>
-                ))}
-            </div>
-          </section>
-        </>
+            <span className={'flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ' +
+              (openStatus.open ? 'bg-green-500/90' : 'bg-red-500/90')}>
+              <span className="h-1.5 w-1.5 rounded-full bg-white" />
+              {openStatus.label}
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-white/60">{formatBusinessHoursText(settings) || settings.business_hours}</p>
+        </header>
       )}
 
       {/* HERO — banner gigante com degradê (APENAS layout loja) */}
@@ -291,15 +267,19 @@ export default function Home() {
       </section>
       )}
 
-      {/* EXPLORAR — dropdown (padrão: Mais vendidos) */}
-      <ExploreMenu
-        label={currentLabel}
-        onSelect={selectFilter}
-        current={catSlug}
-        categories={categories}
-        searching={isSearch}
-      />
+      {/* EXPLORAR — dropdown (padrão: Mais vendidos) — apenas layout loja */}
+      {!isMenu && (
+        <ExploreMenu
+          label={currentLabel}
+          onSelect={selectFilter}
+          current={catSlug}
+          categories={categories}
+          searching={isSearch}
+        />
+      )}
 
+      {/* título/contagem/ordenação — apenas layout loja */}
+      {!isMenu && (
       <div id="produtos" className="flex flex-wrap items-center justify-between gap-2 scroll-mt-24">
         <h3 className="text-lg font-bold text-gray-800">
           {currentLabel}
@@ -325,6 +305,7 @@ export default function Home() {
           )}
         </div>
       </div>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
@@ -345,16 +326,27 @@ export default function Home() {
           <p className="text-sm">Tente outra busca ou escolha outro filtro no Explorar.</p>
         </div>
       ) : isMenu && productsByCategory ? (
-        /* ===== LAYOUT CARDÁPIO: produtos agrupados por categoria ===== */
-        <div className="space-y-6">
+        /* ===== LAYOUT CARDÁPIO: carrossel horizontal por categoria ===== */
+        <div className="space-y-8">
           {[...productsByCategory.entries()].map(([cat, items]) => (
             <section key={cat.id} id={'cat-' + cat.slug} className="scroll-mt-24">
-              <h3 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-gray-500">
+              <h3 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-gray-500">
                 {cat.name}
                 <span className="text-xs font-normal normal-case text-gray-400">({items.length})</span>
               </h3>
-              <div className="space-y-2">
-                {items.map((p) => <MenuProductRow key={p.id} product={p} />)}
+              {/* carrossel: role pro lado quando houver mais itens que cabem */}
+              <div
+                className="scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2"
+                style={{ scrollbarWidth: 'thin' }}
+              >
+                {items.map((p) => (
+                  <div
+                    key={p.id}
+                    className="w-[calc(50%-0.375rem)] shrink-0 snap-start sm:w-44 lg:w-48 xl:w-52"
+                  >
+                    <ProductCard product={p} />
+                  </div>
+                ))}
               </div>
             </section>
           ))}
