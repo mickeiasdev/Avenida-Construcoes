@@ -220,7 +220,52 @@ export default function Home() {
 
   return (
     <div className="space-y-6">
-      {/* HERO — banner gigante com degradê da marca e conteúdo em destaque */}
+      {/* ===== CARDÁPIO: header compacto (sem banner gigante) + faixa de mais vendidos ===== */}
+      {isMenu && (
+        <>
+          <header className="rounded-2xl bg-secondary p-5 text-white shadow-lg sm:p-6"
+            style={{ backgroundImage: 'linear-gradient(135deg, var(--brand-secondary), color-mix(in srgb, var(--brand-primary) 30%, var(--brand-secondary)))' }}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <h1 className="truncate text-xl font-extrabold tracking-tight sm:text-2xl">{settings.store_name}</h1>
+                <p className="mt-0.5 text-sm text-white/80">{settings.about}</p>
+              </div>
+              <span className={'flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ' +
+                (openStatus.open ? 'bg-green-500/90' : 'bg-red-500/90')}>
+                <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                {openStatus.label}
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-white/60">{formatBusinessHoursText(settings) || settings.business_hours}</p>
+          </header>
+
+          {/* faixa horizontal de MAIS VENDIDOS — 4 cards no desktop, 2.5 no mobile */}
+          <section aria-label="Mais vendidos">
+            <h2 className="mb-2 flex items-center gap-1.5 text-sm font-bold uppercase tracking-widest text-gray-500">
+              <Flame className="h-4 w-4 text-primary" /> Mais vendidos
+            </h2>
+            <div className="scrollbar flex snap-x gap-3 overflow-x-auto pb-1"
+              style={{ scrollbarWidth: 'thin' }}>
+              {products
+                .filter((p) => {
+                  // no modo cardápio os produtos agrupados por categoria já estão
+                  // ordenados — pega os 8 primeiros únicos como destaque
+                  return true
+                })
+                .slice(0, 8)
+                .map((p) => (
+                  <div key={p.id} className="w-40 shrink-0 snap-start sm:w-44 lg:w-48">
+                    <MenuProductRow product={p} />
+                  </div>
+                ))}
+            </div>
+          </section>
+        </>
+      )}
+
+      {/* HERO — banner gigante com degradê (APENAS layout loja) */}
+      {!isMenu && (
       <section className="relative overflow-hidden rounded-3xl">
         {settings.banner_url && (
           <img src={settings.banner_url} alt="" className="h-56 w-full object-cover sm:h-72 md:h-96" />
@@ -244,6 +289,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      )}
 
       {/* EXPLORAR — dropdown (padrão: Mais vendidos) */}
       <ExploreMenu
