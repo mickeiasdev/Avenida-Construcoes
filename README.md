@@ -97,6 +97,7 @@ No `src/index.css`, importe o Tailwind e registre as cores dinâmicas:
 | [migration-24.sql](supabase/migration-24.sql) | **Encerrar atendimento**: `whatsapp_chats.closed` — conversa encerrada sai da lista; mensagem nova do cliente (ou aviso/abertura do admin) reabre |
 | [migration-25.sql](supabase/migration-25.sql) | **Respostas rápidas personalizadas**: `store_settings.quick_replies` — o lojista cria/edita as próprias respostas dentro do chat (menu ⚡) |
 | [migration-26.sql](supabase/migration-26.sql) | **Impressão**: `store_settings.cnpj` — CNPJ no cabeçalho do cupom térmico (80mm) e da nota de venda (A4), em /admin/configuracoes e nos botões de pedido |
+| [migration-27.sql](supabase/migration-27.sql) | **Histórico + refazer compra**: RPC `claim_guest_orders` — ao entrar na conta, pedidos de visitante com o mesmo CPF/telefone do perfil viram do cliente; /pedidos ganha "Refazer compra" |
 
    > ⚠️ **A migration-8 é obrigatória para o checkout seguro.** Sem ela o app continua
    > funcionando, mas cai no caminho antigo (preço calculado no navegador) e registra
@@ -410,6 +411,7 @@ vercel.json                       # SPA fallback para o deploy
 - [x] Rodar `supabase/migration-24.sql` (encerrar atendimento no chat)
 - [x] Rodar `supabase/migration-25.sql` (respostas rápidas editáveis no chat)
 - [x] Rodar `supabase/migration-26.sql` (impressão de cupom/nota de venda)
+- [x] Rodar `supabase/migration-27.sql` (histórico completo + refazer compra)
 - [x] Criar `admin@teste.com` e `cliente@teste.com` no Auth (auto-confirm)
 - [x] Rodar os UPDATEs para promover o admin
 - [x] Preencher `.env` com URL e anon key

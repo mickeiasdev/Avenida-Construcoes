@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useLocation } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, Loader2, Package, QrCode, Truck, X } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { AlertCircle, CheckCircle2, Loader2, Package, QrCode, RotateCcw, Truck, X } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { formatBRL, formatDateTime, ORDER_CLS, ORDER_LABELS, ORDER_PIPELINE, ORDER_SHORT } from '../lib/utils'
+import { formatBRL, formatDateTime, onlyDigits, ORDER_CLS, ORDER_LABELS, ORDER_PIPELINE, ORDER_SHORT } from '../lib/utils'
 import { PAYMENT_LABELS } from '../lib/storeOrder'
 import { MpPixDisplay } from '../components/MpPixDisplay'
 import { useCart } from '../context/CartContext'
@@ -11,9 +11,12 @@ import { useModalA11y } from '../lib/useModalA11y'
 import { createPixOrder } from '../lib/payments'
 
 // HISTÓRICO DE PEDIDOS com a etapa atual do processo de entrega
-// (atualizada pelo admin em /admin/pedidos)
+// (atualizada pelo admin em /admin/pedidos). Ao abrir, a loja "adota" os
+// pedidos feitos como VISITANTE com o mesmo CPF/telefone do perfil —
+// histórico completo — e cada pedido tem REFazer COMPRA (itens atuais).
 export default function Orders() {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
+  const navigate = useNavigate()
   const location = useLocation()
   const [orders, setOrders] = useState(null)
   // banner de confirmação quando chegamos de um checkout recém-finalizado
@@ -27,13 +30,24 @@ export default function Orders() {
   useModalA11y(!!mpModal, () => setMpModal(null))
 
   useEffect(() => {
-    const load = () => {
-      supabase
+    const load = async () => {
+      // 1) adota pedidos de VISITANTE com mesmo CPF/telefone (uma vez por
+      //    sessão — idempotente no banco). Aí a leitura normal cobre tudo.
+      try {
+        if (profile?.cpf || profile?.phone) {
+          await supabase.rpc('claim_guest_orders', {
+            p_cpf: onlyDigits(profile?.cpf ?? ''),
+            p_phone: onlyDigits(profile?.phone ?? ''),
+          })
+        }
+      } catch { /* sem a migration-27: histórico segue só do login */ }
+      // 2) histórico completo (adotados agora têm user_id = dono)
+      const { data } = await supabase
         .from('orders')
         .select('*, order_items(*)')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-        .then(({ data }) => setOrders(data ?? []))
+      setOrders(data ?? [])
     }
     load()
     const channel = supabase
@@ -41,12 +55,54 @@ export default function Orders() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, load)
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [user.id])
+  }, [user.id, profile?.cpf, profile?.phone])
 
   // status exatos de src/lib/utils.js (ORDER_PIPELINE/ORDER_LABELS):
   // shipping = 'Saiu para entrega' · delivered = 'Entregue'
   const STATUS_SHIPPING = 'shipping'
   const STATUS_DELIVERED = 'delivered'
+
+  // ---------- REFazer COMPRA ----------
+  // Recoloca no carrinho os itens do pedido com o preço/estoque ATUAIS:
+  // produto excluído/inativo/sem estoque é avisado, não trava o resto.
+  async function reorder(o) {
+    setBusyId(o.id)
+    setActionError(null)
+    try {
+      const itens = o.order_items ?? []
+      const ids = [...new Set(itens.map((i) => i.product_id).filter(Boolean))]
+      const { data: prods } = await supabase
+        .from('products')
+        .select('id, name, price, discount_percent, promo_price, promo_until, image_url, stock, active')
+        .in('id', ids)
+      const byId = new Map((prods ?? []).map((p) => [p.id, p]))
+      let added = 0
+      const missing = []
+      for (const it of itens) {
+        const p = it.product_id ? byId.get(it.product_id) : null
+        const quantity = Number(it.quantity) || 1
+        if (!p || !p.active || (p.stock != null && Number(p.stock) <= 0)) {
+          missing.push(it.product_name)
+          continue
+        }
+        const ok = addItem(p, quantity)
+        if (ok !== false) added++
+        else missing.push(p.name)
+      }
+      setBusyId(null)
+      if (added > 0) {
+        navigate('/carrinho')
+        if (missing.length > 0) {
+          window.alert('Itens adicionados à sacola!\\nAviso: ' + missing.length + ' produto(s) do pedido não está(ão) mais disponível(is): ' + missing.slice(0, 3).join(', ') + (missing.length > 3 ? '…' : ''))
+        }
+      } else {
+        window.alert('Nenhum item deste pedido está disponível na loja agora.')
+      }
+    } catch (e) {
+      setBusyId(null)
+      setActionError('Não foi possível refazer a compra: ' + (e?.message ?? 'erro'))
+    }
+  }
 
   // o cliente confirma a entrega caso a loja não atualize o pedido.
   // A RLS de orders limita a atualização ao próprio user_id; se a política
@@ -179,6 +235,19 @@ export default function Orders() {
                   </div>
                   <span className="font-bold text-primary">{formatBRL(o.total)}</span>
                 </div>
+
+                {/* REFazer COMPRA: itens do pedido de volta na sacola */}
+                <button
+                  type='button'
+                  className='btn-soft min-h-11 w-full sm:w-auto'
+                  onClick={() => reorder(o)}
+                  disabled={busyId === o.id}
+                >
+                  {busyId === o.id
+                    ? <Loader2 className='h-4 w-4 animate-spin' />
+                    : <RotateCcw className='h-4 w-4' />}
+                  Refazer compra
+                </button>
 
                 {/* o cliente confirma a entrega se a loja não marcar como entregue */}
                 {o.status === STATUS_SHIPPING && (
