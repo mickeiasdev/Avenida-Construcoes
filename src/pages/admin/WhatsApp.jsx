@@ -419,24 +419,23 @@ export default function WhatsAppAdmin() {
   }, [messages])
 
   // ---------- dados derivados ----------
-  // nome exibido: o cadastro da loja manda (pedidos/clientes); o proxy já
-  // entrega "name" resolvido — o cruzamento local é reforço
+  // nome exibido: cadastro da loja primeiro (pedidos/clientes); depois o
+  // pushName que o proxy já entrega; por último o número (legível)
   const chatName = useCallback((c) => {
     const local = contacts?.byPhone?.get(key9(c.phone))?.name
-    return local || c.name || 'Cliente'
+    if (local || c.name) return local || c.name
+    if (String(c.jid ?? '').endsWith('@lid')) return 'Contato WhatsApp'
+    return maskPhone(waLocal(c.phone))
   }, [contacts])
 
-  // A lista é DINÂMICA e restrita: só conversas de números que a loja
-  // conhece (cliente de pedido, cadastro, ou conversa aberta pelo admin).
-  // Spam/desconhecidos não aparecem no painel.
+  // A lista mostra TODAS as conversas da loja — quem tem cadastro aparece
+  // com o nome do cadastro; sem cadastro, entra o nome do PRÓPRIO WhatsApp
+  // do contato (pushName) e, por último, o número. Atendimentos encerrados
+  // (closed) não voltam até o cliente mandar mensagem nova.
   const visibleChats = useMemo(() => {
     const f = search.toLowerCase()
     const fd = onlyDigits(search)
     return (chats ?? []).filter((c) => {
-      const known = c.known
-        || contacts?.byPhone?.has(key9(c.phone))
-        || adminKnownRef.current.has(c.jid)
-      if (!known) return false
       if (!f) return true
       return (
         chatName(c).toLowerCase().includes(f) ||
@@ -444,7 +443,7 @@ export default function WhatsAppAdmin() {
         (fd.length >= 2 && c.phone.includes(fd))
       )
     })
-  }, [chats, search, chatName, contacts])
+  }, [chats, search, chatName])
 
   const activeChat = useMemo(
     () => (chats ?? []).find((c) => c.jid === activeJid) ?? null,

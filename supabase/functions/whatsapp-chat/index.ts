@@ -207,16 +207,20 @@ Deno.serve(async (req) => {
           const ts = toMs(last?.messageTimestamp)
             ?? (c?.updatedAt ? Date.parse(String(c.updatedAt)) : null)
           const phone = jid.replace(/@s\.whatsapp\.net|@lid$/, '')
-          // nome do CADASTRO da loja manda; pushName é só fallback visual
+          // nome do CADASTRO da loja manda; sem cadastro entra o NOME DO
+          // PRÓPRIO WHATSAPP do contato (pushName da última mensagem recebida)
           const storeName = jid.endsWith('@s.whatsapp.net')
             ? knownByDigits.get(phone.length >= 9 ? phone.slice(-9) : phone) ?? null
             : null
-          const push = typeof c?.pushName === 'string' && c.pushName.trim() && c.pushName !== 'Você' ? c.pushName : null
+          const chatName = typeof c?.name === 'string' && c.name.trim() ? c.name : null
+          const push = typeof last?.pushName === 'string' && last.pushName.trim() && last.pushName !== 'Você'
+            ? last.pushName
+            : (typeof c?.pushName === 'string' && c.pushName.trim() && c.pushName !== 'Você' ? c.pushName : null)
           return {
             jid,
             phone,
             known: Boolean(storeName),
-            name: storeName ?? (typeof c?.name === 'string' && c.name.trim() ? c.name : push),
+            name: storeName ?? chatName ?? push,
             lastText: text ?? (lastKey.fromMe ? 'Mensagem enviada' : null),
             lastAt: Number.isFinite(ts) ? ts : null,
             fromMe: Boolean(lastKey.fromMe),
