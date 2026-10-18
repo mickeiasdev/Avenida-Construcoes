@@ -82,7 +82,10 @@ function toMs(ts: unknown): number | null {
 }
 
 async function evoFetch(url: string, key: string, instance: string, path: string, init: RequestInit = {}) {
-  const full = url.replace(/\/$/, '') + path.replace(/^\//, '')
+  // junção à prova de erro: a base perde barras finais, o path ganha a inicial
+  const base = url.replace(/\/+$/, '')
+  const clean = path.startsWith('/') ? path : '/' + path
+  const full = base + clean
   return fetch(full, {
     ...init,
     headers: { 'Content-Type': 'application/json', apikey: key, ...(init.headers ?? {}) },
