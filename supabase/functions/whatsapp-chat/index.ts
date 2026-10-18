@@ -375,7 +375,15 @@ Deno.serve(async (req) => {
         method: 'POST',
         body: JSON.stringify({ number: phone + '@s.whatsapp.net', text, delay: 0 }),
       })
-      if (!r.ok) return json({ ok: false, reason: 'evolution-recusou' }, 502)
+      // recusas da Evolution são RESPOSTA DE NEGÓCIO (200 + reason), não erro
+      // de sistema: com status 5xx o front caia no catch genérico com jargão
+      // ("non-2xx") em vez da mensagem traduzida do painel.
+      if (!r.ok) {
+        const d = await r.json().catch(() => null)
+        const first = Array.isArray(d?.response?.message) ? d.response.message[0] : (Array.isArray(d) ? d[0] : null)
+        if (first?.exists === false) return json({ ok: false, reason: 'numero-inexistente' })
+        return json({ ok: false, reason: 'evolution-recusou' })
+      }
       // a mensagem saiu: a conversa entra no painel MESMO antes de o cliente
       // responder (a Evolution só cria o chat dela quando há resposta) —
       // gravamos aqui com o nome do pedido, como conversa conhecida

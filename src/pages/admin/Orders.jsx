@@ -70,13 +70,21 @@ export default function OrdersAdmin() {
         const motivos = {
           'sem-telefone': 'o pedido não tem telefone do cliente',
           'telefone-invalido': 'o telefone está incompleto (sem DDD?)',
-          'evolution-recusou': 'o número não existe no WhatsApp',
+          'numero-inexistente': 'o número não está no WhatsApp — confira o contato',
+          'evolution-recusou': 'o número não está no WhatsApp — confira o contato',
           'status-sem-aviso': 'esta etapa não tem mensagem automática',
         }
         window.alert('Pedido avançado ✔\nAviso no WhatsApp NÃO enviado: ' + (motivos[res.reason] ?? res.reason ?? 'motivo desconhecido') + '.')
       }
     } catch (e) {
-      window.alert('Pedido avançado ✔\nAviso no WhatsApp indisponível agora (' + (e?.message ?? 'erro') + ').')
+      // falha REAL de sistema (rede/timeout): traduz o jargão técnico
+      const raw = String(e?.message ?? '')
+      const causa = /edge function|non-2xx|fetch failed/i.test(raw)
+        ? 'serviço de WhatsApp fora do ar agora'
+        : /timeout|não respondeu/i.test(raw)
+          ? 'a conexão com o WhatsApp não respondeu'
+          : (raw || 'erro inesperado')
+      window.alert('Pedido avançado ✔\nAviso no WhatsApp indisponível: ' + causa + '. Tente de novo mais tarde.')
     }
   }
 
