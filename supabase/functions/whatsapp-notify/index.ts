@@ -55,6 +55,12 @@ const applyVars = (tpl: string, vars: Record<string, string>) =>
   tpl.replace(/\{(\w+)\}/g, (m, k) => vars[k] ?? m)
 const typingDelay = () => Math.floor(Math.random() * 1400) + 600
 
+// TODA mensagem do painel/notificação leva o nome da loja no cabeçalho:
+// "*Nome da Loja:*\n\n" antes do conteúdo.
+async function brandPrefix(storeName: string): Promise<string> {
+  return '*' + storeName + ':*\n\n'
+}
+
 const PAID_CLIENT = [
   'Olá, {nome}! ✅ Recebemos o pagamento do seu pedido nº {n} na {loja}.\n\nJá estamos preparando tudo! Qualquer dúvida, responde aqui.',
   'Oi, {nome}! Pagamento confirmado! 🎉\n\nO pedido nº {n} da {loja} já está em preparo. Obrigado! 😊',
@@ -244,7 +250,7 @@ Deno.serve(async (req) => {
         .select('product_name, quantity, unit_price')
         .eq('order_id', String(record.id ?? ''))
       const receipt = buildReceipt(record, itens ?? [], { storeName, cliente, orderShort })
-      if (receipt && await deliver(clientePhone, receipt)) sent.push('cliente')
+      if (receipt && await deliver(clientePhone, await brandPrefix(storeName) + receipt)) sent.push('cliente')
     }
   }
 
@@ -272,6 +278,7 @@ Deno.serve(async (req) => {
       const pixJaAvisado = newStatus === 'confirmed'
         && record.payment_method === 'mercado_pago'
         && String(record.payment_status ?? '').toLowerCase() === 'approved'
+      const brand = await brandPrefix(storeName)
       if (pixJaAvisado) { sent.push('cliente:skip-duplicado') }
       else if (newStatus === 'confirmed') {
         // confirmação manual (dinheiro/cartão/retirada): comprovante completo
@@ -280,11 +287,11 @@ Deno.serve(async (req) => {
           .select('product_name, quantity, unit_price')
           .eq('order_id', String(record.id ?? ''))
         const receipt = buildReceipt(record, itens ?? [], { storeName, cliente, orderShort })
-        if (receipt && await deliver(clientePhone, receipt, false)) sent.push('cliente:comprovante')
+        if (receipt && await deliver(clientePhone, brand + receipt, false)) sent.push('cliente:comprovante')
       } else if (STATUS_LABEL[newStatus]) {
         const etapa = STATUS_LABEL[newStatus] +
           (newStatus === 'delivered' ? ' — obrigado pela preferência! ⭐' : '')
-        const ok = await deliver(clientePhone, applyVars(pickVariant(STATUS_CLIENT), {
+        const ok = await deliver(clientePhone, brand + applyVars(pickVariant(STATUS_CLIENT), {
           nome: cliente,
           loja: storeName,
           n: orderShort,

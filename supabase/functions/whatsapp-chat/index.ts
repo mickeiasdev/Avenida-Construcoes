@@ -134,6 +134,22 @@ Deno.serve(async (req) => {
 
   const inst = encodeURIComponent(EV_INSTANCE)
 
+  // TODA mensagem enviada pelo painel leva o nome da loja no cabeçalho:
+  // "*Nome da Loja:*\n\n" antes do conteúdo. Para mídia, vai como caption.
+  let cachedStoreName: string | null = null
+  async function getStoreName(): Promise<string> {
+    if (cachedStoreName !== null) return cachedStoreName
+    try {
+      const { data: st } = await supabase.from('store_settings').select('store_name').eq('id', 1).maybeSingle()
+      cachedStoreName = st?.store_name ?? 'Loja'
+    } catch { cachedStoreName = 'Loja' }
+    return cachedStoreName
+  }
+  async function brandPrefix(): Promise<string> {
+    const name = await getStoreName()
+    return '*' + name + ':*\n\n'
+  }
+
   try {
     // ---------- STATUS da conexão ----------
     if (action === 'status') {
@@ -387,6 +403,7 @@ Deno.serve(async (req) => {
       if (!etapa[status]) return json({ ok: false, reason: 'status-sem-aviso' })
 
       const typingDelay = Math.floor(Math.random() * 1400) + 600 // 0,6-2s
+      const brand = await brandPrefix()
 
       let text: string
       if (status === 'confirmed') {
@@ -464,7 +481,7 @@ Deno.serve(async (req) => {
       }
       const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/message/sendText/${inst}`, {
         method: 'POST',
-        body: JSON.stringify({ number: phone + '@s.whatsapp.net', text, delay: typingDelay }),
+        body: JSON.stringify({ number: phone + '@s.whatsapp.net', text: brand + text, delay: typingDelay }),
       })
       // recusas da Evolution são RESPOSTA DE NEGÓCIO (200 + reason), não erro
       // de sistema: com status 5xx o front caia no catch genérico com jargão
@@ -546,9 +563,10 @@ Deno.serve(async (req) => {
           }, 400)
         }
       }
+      const brandedText = await brandPrefix() + text
       const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/message/sendText/${inst}`, {
         method: 'POST',
-        body: JSON.stringify({ number: chat, text, delay: 0 }),
+        body: JSON.stringify({ number: chat, text: brandedText, delay: 0 }),
       })
       if (!r.ok) {
         // a Evolution verifica se o número EXISTE no WhatsApp; traduzimos a
@@ -589,6 +607,8 @@ Deno.serve(async (req) => {
       if (!chat || !mediatype || !media) return json({ error: 'Mídia ou conversa inválida' }, 400)
       // base64 cresce ~33% sobre o arquivo; limite de segurança
       if (media.length > 6_500_000) return json({ error: 'Arquivo muito grande (máx. ~4,5 MB)' }, 400)
+      const brand = await brandPrefix()
+      const rawCaption = body.caption ? String(body.caption).slice(0, 400) : ''
       const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/message/sendMedia/${inst}`, {
         method: 'POST',
         body: JSON.stringify({
@@ -597,7 +617,7 @@ Deno.serve(async (req) => {
           mimetype: String(body.mimetype ?? 'application/octet-stream'),
           media,
           fileName: body.fileName ? String(body.fileName).slice(0, 120) : undefined,
-          caption: body.caption ? String(body.caption).slice(0, 500) : undefined,
+          caption: (brand + rawCaption).slice(0, 500) || undefined,
           delay: Math.floor(Math.random() * 1200) + 500,
         }),
       })
@@ -680,13 +700,14 @@ Deno.serve(async (req) => {
         return json({ ok: false, reason: 'evolution-recusou' })
       }
       const now = new Date().toISOString()
+      const storeN = await getStoreName()
       try {
         await supabase.rpc('wa_mark_read', { p_jid: chat })
         await supabase.from('whatsapp_chats').upsert({
           remote_jid: chat,
           phone: chat.replace(/@s\.whatsapp\.net|@lid$/, ''),
           closed: false,
-          last_message: '🎙️ Nota de voz',
+          last_message: storeN + ': 🎙️ Nota de voz',
           last_message_at: now,
           last_from_me: true,
           unread_count: 0,
