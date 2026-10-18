@@ -1182,7 +1182,7 @@ export default function WhatsAppAdmin() {
               aria-label="Conversa aberta"
             >
               {!activeJid ? (
-                <div className="hidden flex-col items-center justify-center gap-2 mt-2 px-6 text-center text-gray-400 md:flex">
+                <div className="hidden flex-1 flex-col items-center justify-center gap-2 px-6 text-center text-gray-400 md:flex">
                   <MessageCircle className="h-10 w-10 text-gray-200" />
                   <p className="text-sm">Selecione uma conversa para começar a responder.</p>
                 </div>
