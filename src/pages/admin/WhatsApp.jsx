@@ -83,6 +83,52 @@ function Avatar({ name, seed }) {
   )
 }
 
+// Imagem INLINE na bolha do chat: baixa o base64 via action "media" (lazy,
+// cacheia por id) e mostra a foto DENTRO da mensagem — não só um botão.
+const inlineImgCache = new Map()
+function InlineChatImage({ msg, chat, fromMe, onOpen }) {
+  const cached = inlineImgCache.get(msg.id)
+  const [src, setSrc] = useState(cached || null)
+  const [loading, setLoading] = useState(!cached)
+
+  useEffect(() => {
+    if (cached || loading === false) return
+    waCall('media', { chat, id: msg.id, fromMe: msg.fromMe })
+      .then((d) => {
+        const url = 'data:' + (d.mimetype ?? 'image/jpeg') + ';base64,' + d.base64
+        inlineImgCache.set(msg.id, url)
+        setSrc(url)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [msg.id, chat, msg.fromMe, cached, loading])
+
+  if (loading) {
+    return (
+      <div className={'flex h-32 w-48 items-center justify-center rounded-lg ' + (fromMe ? 'bg-white/10' : 'bg-gray-100')}>
+        <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+      </div>
+    )
+  }
+  if (!src) {
+    return (
+      <div className={'flex h-20 w-32 items-center justify-center rounded-lg text-xs ' + (fromMe ? 'bg-white/10 text-white/70' : 'bg-gray-100 text-gray-500')}>
+        <ImageIcon className="h-5 w-5" />
+      </div>
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(src)}
+      className="block overflow-hidden rounded-lg"
+      title="Clique para ampliar"
+    >
+      <img src={src} alt={msg.text || 'Imagem'} className="max-h-56 max-w-full rounded-lg object-cover" />
+    </button>
+  )
+}
+
 // hora da lista: hoje 14:32 · Ontem · ter · 12/03/25
 function fmtListTime(ts) {
   if (!ts) return ''
@@ -159,6 +205,7 @@ export default function WhatsAppAdmin() {
   const plusWrapRef = useRef(null)
   const plusBtnRef = useRef(null)
   const filePickRef = useRef(null)
+  const fileDocPickRef = useRef(null)
   const [mediaPreview, setMediaPreview] = useState(null) // {mediatype, base64, mimetype, fileName, caption, sizeKB, busy}
   const [productOpen, setProductOpen] = useState(false)
   const [productSearch, setProductSearch] = useState('')
@@ -1235,14 +1282,10 @@ export default function WhatsAppAdmin() {
                                   </span>
                                 </div>
                               ) : m.type === 'image' ? (
-                                <button
-                                  type="button"
-                                  className={'flex items-center gap-2 ' + (m.fromMe ? 'text-white' : 'text-gray-700')}
-                                  onClick={() => openImage(m)}
-                                  title="Ver imagem"
-                                >
-                                  <ImageIcon className="h-4 w-4" /> {m.text || '📷 Foto'}
-                                </button>
+                                <div className="space-y-1">
+                                  <InlineChatImage msg={m} chat={activeJid} fromMe={m.fromMe} onOpen={(src) => setLightbox({ base64: src })} />
+                                  {m.text && <p className="whitespace-pre-wrap break-words text-xs">{m.text}</p>}
+                                </div>
                               ) : m.type === 'document' ? (
                                 <button
                                   type="button"
@@ -1293,6 +1336,26 @@ export default function WhatsAppAdmin() {
                       </div>
                     </div>
                   )}
+
+                  {/* inputs de arquivo FORA do dropdown: o menu fecha mas o file picker continua abrindo */}
+                  <input
+                    ref={filePickRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; pickMediaFile(f) }}
+                    aria-hidden="true"
+                    tabIndex={-1}
+                  />
+                  <input
+                    ref={fileDocPickRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt,.csv"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; pickMediaFile(f) }}
+                    aria-hidden="true"
+                    tabIndex={-1}
+                  />
 
                   {/* respostas rápidas (menu ⚡) + envio */}
                   <form onSubmit={handleSend} className="border-t border-gray-100 bg-white">
@@ -1373,30 +1436,22 @@ export default function WhatsAppAdmin() {
                             aria-label="Opções de envio"
                             className="toast-in absolute bottom-full left-0 z-40 mb-2 w-60 rounded-2xl bg-white p-1.5 shadow-2xl ring-1 ring-gray-200"
                           >
-                            <label
-                              className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-primary/10"
-                              onClick={() => setPlusOpen(false)}
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-primary/10"
+                              onClick={() => { setPlusOpen(false); filePickRef.current?.click() }}
                             >
                               <ImageIcon className="h-4 w-4 text-primary" /> Enviar imagem
-                              <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; pickMediaFile(f) }}
-                              />
-                            </label>
-                            <label
-                              className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-primary/10"
-                              onClick={() => setPlusOpen(false)}
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-primary/10"
+                              onClick={() => { setPlusOpen(false); fileDocPickRef.current?.click() }}
                             >
                               <FileText className="h-4 w-4 text-primary" /> Enviar arquivo (PDF…)
-                              <input
-                                type="file"
-                                accept=".pdf,.doc,.docx,.txt,.csv"
-                                className="hidden"
-                                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; pickMediaFile(f) }}
-                              />
-                            </label>
+                            </button>
                             <button
                               type="button"
                               role="menuitem"
