@@ -213,17 +213,33 @@ export default function WhatsAppAdmin() {
     }
   }, [markRead])
 
-  async function openChat(jid, presetDraft = '') {
+  async function openChat(jid, presetDraft = '', { verify = false } = {}) {
+    // verify=true = número veio de DIGITAÇÃO ou de PEDIDO (não de conversa
+    // real): a Evolution confirma que existe no WhatsApp antes de abrir.
+    if (verify) {
+      try {
+        const res = await waCall('startChat', { chat: jid, verify: true })
+        if (res?.ok === false) {
+          window.alert('Este número não está no WhatsApp — confira o DDD e o telefone.')
+          return false
+        }
+      } catch (e) {
+        window.alert('Não foi possível confirmar este número agora (' + (e?.message ?? 'erro') + '). Tente novamente.')
+        return false
+      }
+    } else {
+      // conversa da lista: só marca como conhecida (já é real)
+      waCall('startChat', { chat: jid }).catch(() => null)
+    }
+    adminKnownRef.current.add(jid)
     setActiveJid(jid)
     setMessages([])
     setDraft(presetDraft)
     setMsgsLoading(true)
     lastInIdRef.current = ''
-    // conversa aberta pelo admin entra na lista (marca "conhecida" no banco)
-    waCall('startChat', { chat: jid }).catch(() => null)
-    adminKnownRef.current.add(jid)
     await loadMessages(jid, false)
     setMsgsLoading(false)
+    return true
   }
 
   // atalho de fora: /admin/whatsapp?to=5511...&text=... (botão "Avisar cliente")
@@ -231,7 +247,7 @@ export default function WhatsAppAdmin() {
     const to = params.get('to')
     if (!boot?.configured || boot.state !== 'open' || !to || deepDoneRef.current) return
     deepDoneRef.current = true
-    openChat(toJid(waNumber(to)), params.get('text') ?? '')
+    openChat(toJid(waNumber(to)), params.get('text') ?? '', { verify: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boot, params, loadChats, loadMessages])
 
@@ -762,13 +778,12 @@ export default function WhatsAppAdmin() {
 
             <div className="space-y-4 overflow-y-auto px-5 py-4">
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault()
                   const d = onlyDigits(newPhone)
                   if (d.length < 10) return
-                  setNewOpen(false)
-                  openChat(toJid(waNumber(d)))
-                  setNewPhone('')
+                  const ok = await openChat(toJid(waNumber(d)), '', { verify: true })
+                  if (ok) { setNewOpen(false); setNewPhone('') }
                 }}
                 className="flex gap-2"
               >
@@ -821,9 +836,9 @@ export default function WhatsAppAdmin() {
                           <button
                             type="button"
                             className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition hover:bg-gray-50"
-                            onClick={() => {
-                              setNewOpen(false)
-                              openChat(toJid(waNumber(phone)))
+                            onClick={async () => {
+                              const ok = await openChat(toJid(waNumber(phone)), '', { verify: true })
+                              if (ok) setNewOpen(false)
                             }}
                           >
                             <Avatar name={name} seed={phone} />

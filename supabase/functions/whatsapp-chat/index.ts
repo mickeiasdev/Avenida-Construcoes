@@ -291,6 +291,26 @@ Deno.serve(async (req) => {
     if (action === 'startChat') {
       const chat = personJid(body.chat)
       if (!chat) return json({ error: 'Conversa inválida' }, 400)
+      // verify=true (número digitado ou vindo de pedido): confirmamos com a
+      // Evolution que EXISTE no WhatsApp antes de entrar na lista. A
+      // verificação só bloqueia com resposta clara (exists=false) — erro de
+      // rede não trava a abertura (o envio valida de novo depois).
+      if (body.verify && chat.endsWith('@s.whatsapp.net')) {
+        const phone = chat.replace('@s.whatsapp.net', '')
+        try {
+          const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/chat/whatsappNumbers/${inst}`, {
+            method: 'POST',
+            body: JSON.stringify({ numbers: [phone] }),
+          })
+          const d = await r.json().catch(() => null)
+          const first = Array.isArray(d) ? d[0] : null
+          if (first && first.exists === false) {
+            return json({ configured: true, ok: false, reason: 'numero-inexistente' })
+          }
+        } catch (e) {
+          console.warn('[whatsapp-chat] verificação de número falhou, seguindo:', (e as Error)?.message)
+        }
+      }
       try {
         await supabase.from('whatsapp_chats').upsert({
           remote_jid: chat,
