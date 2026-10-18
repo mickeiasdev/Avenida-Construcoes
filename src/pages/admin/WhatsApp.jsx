@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle, Archive, ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, Loader2, MessageCircle,
-  PlusCircle, QrCode, RefreshCw, Search, Send, Smartphone, X,
+  PlusCircle, QrCode, RefreshCw, Search, Send, Smartphone, X, Zap,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { waCall, toJid } from '../../lib/whatsappChat'
@@ -88,6 +88,22 @@ export default function WhatsAppAdmin() {
   const [newPhone, setNewPhone] = useState('')
   const [newSearch, setNewSearch] = useState('')
   const [ordersOpen, setOrdersOpen] = useState(false)
+  const [quickOpen, setQuickOpen] = useState(false)   // menu de respostas rápidas
+  const quickWrapRef = useRef(null)
+  const quickBtnRef = useRef(null)
+
+  // menu de respostas: fora-clique e ESC fecham (foco volta ao botão)
+  useEffect(() => {
+    if (!quickOpen) return
+    const onClick = (e) => { if (!quickWrapRef.current?.contains(e.target)) setQuickOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') { setQuickOpen(false); quickBtnRef.current?.focus() } }
+    document.addEventListener('mousedown', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [quickOpen])
 
   useModalA11y(qrOpen, () => setQrOpen(false))
   useModalA11y(newOpen, () => setNewOpen(false))
@@ -668,21 +684,48 @@ export default function WhatsAppAdmin() {
                     <div ref={bottomRef} />
                   </div>
 
-                  {/* respostas rápidas + envio */}
+                  {/* respostas rápidas (menu ⚡) + envio */}
                   <form onSubmit={handleSend} className="border-t border-gray-100 bg-white">
-                    <div className="scrollbar flex gap-2 overflow-x-auto px-3 pt-2.5" role="toolbar" aria-label="Respostas rápidas">
-                      {quick.map((q) => (
-                        <button
-                          key={q.label}
-                          type="button"
-                          className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-primary/10 hover:text-primary hover:ring-primary/30"
-                          onClick={() => { setDraft(q.text); inputRef.current?.focus() }}
-                        >
-                          {q.label}
-                        </button>
-                      ))}
-                    </div>
                     <div className="flex items-end gap-2 p-3">
+                      <div className="relative shrink-0" ref={quickWrapRef}>
+                        <button
+                          ref={quickBtnRef}
+                          type="button"
+                          onClick={() => setQuickOpen((v) => !v)}
+                          aria-haspopup="menu"
+                          aria-expanded={quickOpen}
+                          title="Respostas rápidas"
+                          aria-label="Respostas rápidas"
+                          className="flex h-11 w-11 items-center justify-center rounded-lg bg-gray-100 text-gray-500 ring-1 ring-gray-200 transition hover:bg-primary/10 hover:text-primary hover:ring-primary/30"
+                        >
+                          <Zap className="h-5 w-5" />
+                        </button>
+
+                        {quickOpen && (
+                          <div
+                            role="menu"
+                            aria-label="Respostas rápidas"
+                            className="toast-in absolute bottom-full left-0 z-40 mb-2 w-72 max-w-[80vw] rounded-2xl bg-white p-1.5 shadow-2xl ring-1 ring-gray-200"
+                          >
+                            <p className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">
+                              Respostas rápidas
+                            </p>
+                            {quick.map((q) => (
+                              <button
+                                key={q.label}
+                                type="button"
+                                role="menuitem"
+                                className="flex w-full flex-col items-start gap-0.5 rounded-xl px-3 py-2 text-left transition hover:bg-primary/10"
+                                onClick={() => { setDraft(q.text); setQuickOpen(false); inputRef.current?.focus() }}
+                              >
+                                <span className="text-sm font-bold text-primary">{q.label}</span>
+                                <span className="line-clamp-2 text-xs leading-snug text-gray-500">{q.text}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
                       <textarea
                         ref={inputRef}
                         className="input max-h-32 min-h-11 flex-1 resize-none py-2.5"
