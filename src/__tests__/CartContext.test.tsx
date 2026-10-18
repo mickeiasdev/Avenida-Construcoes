@@ -86,7 +86,6 @@ type CartApi = {
     subtotal: number
     discount: number
     total: number
-    whatsappSent: boolean
     paymentMethod: string
     mpPix: { qr_code: string } | null
     mpError?: boolean
@@ -175,7 +174,9 @@ describe('CartContext', () => {
 
     expect(pedido?.total).toBe(20) // veio da RPC, não dos 999 * 2 do cliente
     expect(pedido?.discount).toBe(5)
-    expect(pedido?.whatsappSent).toBe(true)
+    // modelo antigo de WhatsApp (wa.me) foi REMOVIDO: o checkout não abre
+    // mais janela nenhuma — os avisos saem pela integração da Evolution
+    expect(window.open).not.toHaveBeenCalled()
     expect(supabase.rpc).toHaveBeenCalledWith('place_order', expect.objectContaining({
       p_items: [{ product_id: 'p1', quantity: 2 }],
       p_is_guest: false,
@@ -200,7 +201,6 @@ describe('CartContext', () => {
     // o fallback do CartContext ('mercado_pago') precisa ser aplicado de verdade
     expect(pedido?.paymentMethod).toBe('mercado_pago')
     expect(pedido?.mpPix?.qr_code).toBe('000201PIXTESTE')
-    expect(pedido?.whatsappSent).toBe(false)
     expect(window.open).not.toHaveBeenCalled()
 
     open.mockRestore()

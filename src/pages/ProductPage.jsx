@@ -247,11 +247,9 @@ export default function ProductPage() {
         <h1 className="text-xl font-extrabold tracking-tight text-gray-800">Pedido enviado!</h1>
         <p className="text-sm text-gray-500">
           Pedido nº <b className="text-gray-800">{String(buyDone.id).slice(0, 8)}</b> recebido.
-          {buyDone.whatsappSent
-            ? ' Abrimos o WhatsApp com o resumo — é só enviar para combinarmos a entrega.'
-            : buyDone.paymentMethod === 'mercado_pago'
-              ? ' O Pix não pôde ser gerado agora — a loja vai falar com você para combinar o pagamento.'
-              : ' A loja vai combinar com você o pagamento e a entrega.'}
+          {buyDone.paymentMethod === 'mercado_pago'
+            ? ' O Pix não pôde ser gerado agora — a loja vai falar com você para combinar o pagamento.'
+            : ' A loja já foi avisada e vai falar com você pelo WhatsApp para combinar o pagamento e a entrega.'}
         </p>
         <div className="mt-2 flex w-full flex-col gap-2 sm:flex-row">
           <Link to="/" className="btn-primary flex-1 text-center">Continuar comprando</Link>

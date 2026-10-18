@@ -9,8 +9,6 @@ import { useAuth } from './AuthContext'
 const CartContext = createContext(null)
 const STORAGE_KEY = 'wl_cart_v1'
 
-const paymentLabels = { dinheiro: 'Dinheiro', cartao: 'Cartão na entrega/retirada', mercado_pago: 'Pix online (QR + Copia e Cola)' }
-
 // Colunas REAIS de profiles. Usar Object.keys(form) mandaria cpf/on_behalf_of/
 // site_note no patch e o PostgREST recusaria o update INTEIRO.
 const PROFILE_COLUMNS = ['full_name', 'phone', 'street', 'number', 'complement', 'district', 'city', 'state', 'zip']
@@ -317,9 +315,6 @@ export function CartProvider({ children }) {
       } catch { /* sem permissão ou coluna ausente — segue o fluxo normal */ }
     }
 
-    const { data: store } = await supabase
-      .from('store_settings').select('store_name, whatsapp').eq('id', 1).maybeSingle()
-
     // PIX ONLINE: se escolheu mercado_pago (= "Pix online gerado"), cria a
     // cobrança no gateway ativo (src/lib/payments.js — hoje: AbacatePay).
     // O pedido já existe no banco com total autoritativo; a Edge Function lê e cria a cobrança.
@@ -355,79 +350,20 @@ export function CartProvider({ children }) {
       }
     }
 
-    // 4) mensagem para o WhatsApp — só texto, *negrito* nativo e emojis
-    // clássicos; emojis novos e box-drawing costumam virar caractere
-    // quebrado no WhatsApp Web e em celulares antigos.
-    const money = (n) => 'R$ ' + Number(n).toFixed(2).replace('.', ',')
-    const sep = '─────────────────'
-    const lines = []
-    lines.push('*NOVO PEDIDO — ' + (store?.store_name ?? 'Loja') + '*')
-    lines.push(sep)
-    lines.push('Pedido nº ' + orderId.slice(0, 8))
-    lines.push('')
-    lines.push('*CLIENTE*')
-    lines.push('Nome: ' + customerName)
-    if (form.phone) lines.push('Telefone: ' + form.phone)
-    if (observacao) lines.push(observacao)
-    lines.push('')
-    lines.push('*ITENS DO PEDIDO*')
-    checkoutItems.forEach((i, idx) => {
-      lines.push((idx + 1) + ') ' + i.quantity + 'x ' + i.name + ' — ' + money(i.price * i.quantity))
-    })
-    lines.push('')
-    lines.push(sep)
-    if (discount > 0) {
-      lines.push('Subtotal: ' + money(subtotal))
-      lines.push('Cupom ' + (coupon?.code ?? '') + ': -' + money(discount))
-    }
-    lines.push('*TOTAL: ' + money(totalValue) + '*')
-    lines.push(sep)
-    lines.push('')
-    if (deliveryMethod === 'retirada') {
-      lines.push('*RETIRADA NO BALCÃO*')
-      lines.push('O cliente vai buscar o pedido na loja')
-    } else {
-      lines.push('*ENDEREÇO DE ENTREGA*')
-      addressParts.filter(Boolean).forEach((p) => lines.push(p))
-    }
-    lines.push('')
-    lines.push('*PAGAMENTO*')
-    lines.push(paymentLabels[paymentMethod] || 'Pix')
-    lines.push('')
-    lines.push(new Date().toLocaleString('pt-BR'))
-    lines.push('')
-    lines.push('_Pedido enviado pelo site_')
-
-    // WhatsApp: para Pix online (QR) NÃO abre agora — só depois do pagamento
-    // aprovado (webhook). Se o usuário escolheu Pix online, o fluxo mostra o QR;
-    // o WhatsApp será enviado pela loja após confirmação, ou o cliente pode
-    // compartilhar o comprovante manualmente.
-    const waNumber = String(store?.whatsapp ?? '').replace(/\D/g, '')
-    let whatsappSent = false
-    if (paymentMethod !== 'mercado_pago') {
-      if (waNumber) {
-        const waUrl = 'https://wa.me/' + waNumber + '?text=' + encodeURIComponent(lines.join('\n'))
-        const win = window.open(waUrl, '_blank')
-        if (!win) window.location.href = waUrl
-        whatsappSent = true
-      } else {
-        console.warn('[checkout] WhatsApp da loja não configurado em /admin/configuracoes — ' +
-          'o pedido foi registrado, mas o resumo não foi aberto.')
-      }
-    } else {
-      // Pix online: não abre WhatsApp antes do Pix ser pago. Deixa o QR em tela.
-      whatsappSent = false
-    }
+    // (Modelo ANTIGO de WhatsApp removido: o checkout montava o resumo e abria
+    // wa.me para o cliente enviar à mão. Os avisos agora saem pela INTEGRAÇÃO
+    // da Evolution — whatsapp-notify avisa a LOJA em pedidos novos e o cliente
+    // nas mudanças de status; nada manual.)
 
     // Carrinho: com Pix online mantém até o pagamento confirmar (evita perder itens se o QR expirar)
     if (!directItems && paymentMethod !== 'mercado_pago') clearCart()
     if (paymentMethod === 'mercado_pago' && mpPix) {
-      return { id: orderId, subtotal, discount, total: totalValue, whatsappSent, mpPix, paymentMethod }
+      return { id: orderId, subtotal, discount, total: totalValue, mpPix, paymentMethod }
     }
     if (paymentMethod === 'mercado_pago') {
-      return { id: orderId, subtotal, discount, total: totalValue, whatsappSent, mpPix: null, paymentMethod, mpError: true, mpErrorDetail }
+      return { id: orderId, subtotal, discount, total: totalValue, mpPix: null, paymentMethod, mpError: true, mpErrorDetail }
     }
-    return { id: orderId, subtotal, discount, total: totalValue, whatsappSent, paymentMethod }
+    return { id: orderId, subtotal, discount, total: totalValue, paymentMethod }
   }
 
   // Helper para polling do status do Pix (Orders API)

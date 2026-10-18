@@ -221,13 +221,11 @@ export default function Cart() {
         <h1 className="text-xl font-extrabold tracking-tight text-gray-800">Pedido enviado!</h1>
         <p className="text-sm text-gray-500">
           Pedido nº <b className="text-gray-800">{doneOrder.id.slice(0, 8)}</b> recebido.
-          {doneOrder.whatsappSent
-            ? ' Abrimos o WhatsApp com o resumo — é só enviar para combinarmos a entrega.'
-            : doneOrder.mpPix
-              ? ' Pagamento confirmado. Vamos preparar seu pedido.'
-              : doneOrder.paymentMethod === 'mercado_pago'
-                ? ' O Pix não pôde ser gerado agora — a loja vai falar com você para combinar o pagamento.'
-                : ' A loja vai combinar com você o pagamento e a entrega.'}
+          {doneOrder.mpPix
+            ? ' Pagamento confirmado. Vamos preparar seu pedido.'
+            : doneOrder.paymentMethod === 'mercado_pago'
+              ? ' O Pix não pôde ser gerado agora — a loja vai falar com você para combinar o pagamento.'
+              : ' A loja já foi avisada e vai falar com você pelo WhatsApp para combinar o pagamento e a entrega.'}
         </p>
         <p className="text-xs text-gray-400">
           Criando uma conta, seus dados ficam salvos e você acompanha os próximos pedidos.
