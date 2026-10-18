@@ -199,8 +199,8 @@ export default function StoreLayout() {
             </div>
 
             <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-3 text-sm">
-              <DrawerLink to="/" end icon={HomeIcon} label="Início" />
-              <DrawerLink to="/favoritos" icon={Heart} label="Favoritos" />
+              <DrawerLink to="/" end icon={HomeIcon} label="Início" plain />
+              <DrawerLink to="/favoritos" icon={Heart} label="Favoritos" plain />
               <p className="mt-4 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">Categorias</p>
               {categories.map((c) => (
                 <DrawerLink key={c.id} to={'/?cat=' + c.slug} label={c.name} />
@@ -316,14 +316,16 @@ function BottomTab({ to, icon: Icon, label, end, badge }) {
   )
 }
 
-function DrawerLink({ to, icon: Icon, label, end }) {
+function DrawerLink({ to, icon: Icon, label, end, plain }) {
   return (
     <NavLink
       to={to}
       end={end}
       className={({ isActive }) =>
         'flex items-center gap-3 rounded-lg px-3 py-2.5 transition ' +
-        (isActive ? 'bg-primary text-white' : 'text-white/75 hover:bg-white/10 hover:text-white')
+        (plain
+          ? (isActive ? 'text-white font-bold' : 'text-white/75 hover:text-white')
+          : (isActive ? 'bg-primary text-white' : 'text-white/75 hover:bg-white/10 hover:text-white'))
       }
     >
       {Icon ? <Icon className="h-4 w-4" /> : <span className="h-1.5 w-1.5 rounded-full bg-white/40" />}

@@ -31,22 +31,23 @@ export default function Profile() {
   const emailConfirmed = Boolean(user?.email_confirmed_at || user?.confirmed_at)
 
   useEffect(() => {
-    if (profile) {
-      setForm({
-        full_name: profile.full_name ?? '',
-        phone: profile.phone ?? '',
-        // CPF volta a aparecer preenchido (antes o campo existia mas nunca
-        // carregava — parecia que o sistema "não salvava" o CPF)
-        cpf: profile.cpf ? maskCpf(profile.cpf) : '',
-        street: profile.street ?? '',
-        number: profile.number ?? '',
-        complement: profile.complement ?? '',
-        district: profile.district ?? '',
-        city: profile.city ?? '',
-        state: profile.state ?? '',
-        zip: profile.zip ?? '',
-      })
-    }
+    // profile pode ser null (conta nova sem linha em profiles ainda):
+    // o form abre VAZIO em vez de ficar carregando para sempre
+    const p = profile ?? {}
+    setForm({
+      full_name: p.full_name ?? '',
+      phone: p.phone ?? '',
+      // CPF volta a aparecer preenchido (antes o campo existia mas nunca
+      // carregava — parecia que o sistema "não salvava" o CPF)
+      cpf: p.cpf ? maskCpf(p.cpf) : '',
+      street: p.street ?? '',
+      number: p.number ?? '',
+      complement: p.complement ?? '',
+      district: p.district ?? '',
+      city: p.city ?? '',
+      state: p.state ?? '',
+      zip: p.zip ?? '',
+    })
   }, [profile])
 
   if (!form) {
