@@ -712,9 +712,9 @@ export default function WhatsAppAdmin() {
                       aria-label={'Pedidos deste cliente: ' + activeOrders.length}
                     >
                       <ClipboardList className="h-4 w-4" />
-                      Pedidos
+                      <span className="hidden sm:inline">Pedidos</span>
                       {activeOrders.length > 0 && (
-                        <span className="ml-1 rounded-full bg-primary px-1.5 text-[11px] font-bold text-white">
+                        <span className="rounded-full bg-primary px-1.5 text-[11px] font-bold leading-none text-white">
                           {activeOrders.length}
                         </span>
                       )}
