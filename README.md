@@ -95,6 +95,7 @@ No `src/index.css`, importe o Tailwind e registre as cores dinâmicas:
 | [migration-22.sql](supabase/migration-22.sql) | **Mais vendidos**: RPC `top_selling_products` (ranking público por soma de order_items) — a vitrine abre por padrão nos mais vendidos, com destaques como fallback para loja sem vendas |
 | [migration-23.sql](supabase/migration-23.sql) | **WhatsApp conhecido**: `whatsapp_chats.known` — a lista do painel só exibe números da loja (pedidos/clientes/conversas abertas pelo admin); o nome do cadastro é salvo na conversa |
 | [migration-24.sql](supabase/migration-24.sql) | **Encerrar atendimento**: `whatsapp_chats.closed` — conversa encerrada sai da lista; mensagem nova do cliente (ou aviso/abertura do admin) reabre |
+| [migration-25.sql](supabase/migration-25.sql) | **Respostas rápidas personalizadas**: `store_settings.quick_replies` — o lojista cria/edita as próprias respostas dentro do chat (menu ⚡) |
 
    > ⚠️ **A migration-8 é obrigatória para o checkout seguro.** Sem ela o app continua
    > funcionando, mas cai no caminho antigo (preço calculado no navegador) e registra
@@ -406,6 +407,7 @@ vercel.json                       # SPA fallback para o deploy
 - [x] Rodar `supabase/migration-22.sql` (vitrine abre nos mais vendidos)
 - [x] Rodar `supabase/migration-23.sql` (lista do WhatsApp só com contatos conhecidos)
 - [x] Rodar `supabase/migration-24.sql` (encerrar atendimento no chat)
+- [x] Rodar `supabase/migration-25.sql` (respostas rápidas editáveis no chat)
 - [x] Criar `admin@teste.com` e `cliente@teste.com` no Auth (auto-confirm)
 - [x] Rodar os UPDATEs para promover o admin
 - [x] Preencher `.env` com URL e anon key

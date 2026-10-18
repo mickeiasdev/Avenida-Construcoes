@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle, Archive, ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, Loader2, MessageCircle,
-  PlusCircle, QrCode, RefreshCw, Search, Send, Smartphone, X, Zap,
+  Pencil, Plus, PlusCircle, QrCode, RefreshCw, Search, Send, Smartphone, Trash2, X, Zap,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { waCall, toJid } from '../../lib/whatsappChat'
@@ -65,7 +65,7 @@ function quickReplies(settings) {
 }
 
 export default function WhatsAppAdmin() {
-  const { settings } = useStore()
+  const { settings, updateSettings } = useStore()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const confirm = useConfirmDialog()
@@ -91,6 +91,11 @@ export default function WhatsAppAdmin() {
   const [quickOpen, setQuickOpen] = useState(false)   // menu de respostas rápidas
   const quickWrapRef = useRef(null)
   const quickBtnRef = useRef(null)
+  const [editRepliesOpen, setEditRepliesOpen] = useState(false)
+  const [editList, setEditList] = useState([])   // [{ label, text }] em edição
+  const [repliesBusy, setRepliesBusy] = useState(false)
+  const [repliesMsg, setRepliesMsg] = useState(null)
+  useModalA11y(editRepliesOpen, () => setEditRepliesOpen(false))
 
   // menu de respostas: fora-clique e ESC fecham (foco volta ao botão)
   useEffect(() => {
@@ -289,6 +294,60 @@ export default function WhatsAppAdmin() {
     }
   }
 
+  // ---------- editor de respostas rápidas ----------
+  function openEditReplies() {
+    setQuickOpen(false)
+    setEditList(Array.isArray(settings?.quick_replies)
+      ? settings.quick_replies.map((q) => ({ label: q.label ?? '', text: q.text ?? '' }))
+      : [])
+    setRepliesMsg(null)
+    setEditRepliesOpen(true)
+  }
+
+  function setReplyField(i, key, value) {
+    setEditList((prev) => prev.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)))
+  }
+
+  function addReplyRow() {
+    setEditList((prev) => [...prev, { label: '', text: '' }])
+  }
+
+  async function removeReplyRow(i) {
+    const r = editList[i]
+    const ok = await confirm.ask({
+      title: 'Excluir a resposta "' + (r.label || 'sem título') + '"?',
+      message: 'Só sai da sua lista — as respostas automáticas da loja continuam.',
+      confirmLabel: 'Excluir resposta',
+      danger: true,
+    })
+    if (!ok) return
+    setEditList((prev) => prev.filter((_, idx) => idx !== i))
+  }
+
+  async function saveReplies(e) {
+    e?.preventDefault()
+    const clean = editList
+      .map((r) => ({ label: String(r.label ?? '').trim(), text: String(r.text ?? '').trim() }))
+      .filter((r) => r.label && r.text)
+    if (editList.length && clean.length !== editList.length) {
+      setRepliesMsg({ type: 'err', text: 'Preencha o título e o texto de todas as respostas (ou exclua as incompletas).' })
+      return
+    }
+    if (clean.length > 20) {
+      setRepliesMsg({ type: 'err', text: 'Máximo de 20 respostas personalizadas.' })
+      return
+    }
+    setRepliesBusy(true)
+    setRepliesMsg(null)
+    const { error } = await updateSettings({ quick_replies: clean })
+    if (error) {
+      setRepliesMsg({ type: 'err', text: 'Erro ao salvar: ' + error.message })
+    } else {
+      setEditRepliesOpen(false)
+    }
+    setRepliesBusy(false)
+  }
+
   // ---------- enviar ----------
   async function handleSend(e) {
     e?.preventDefault()
@@ -438,7 +497,16 @@ export default function WhatsAppAdmin() {
     await loadContactOrders()
     setDetailBusy(false)
   }
-  const quick = useMemo(() => quickReplies(settings), [settings])
+  // respostas do chat: as SUAS (salvas nas configurações, editáveis no
+  // menu ⚡) vêm primeiro; as automáticas usam os dados atuais da loja
+  const quick = useMemo(() => {
+    const mine = Array.isArray(settings?.quick_replies)
+      ? settings.quick_replies
+          .filter((q) => q && String(q.label ?? '').trim() && String(q.text ?? '').trim())
+          .map((q) => ({ label: String(q.label), text: String(q.text) }))
+      : []
+    return [...mine, ...quickReplies(settings)]
+  }, [settings])
 
   const contactsList = useMemo(() => {
     if (!contacts) return []
@@ -722,6 +790,15 @@ export default function WhatsAppAdmin() {
                                 <span className="line-clamp-2 text-xs leading-snug text-gray-500">{q.text}</span>
                               </button>
                             ))}
+                            <div className="my-1 h-px bg-gray-100" role="presentation" />
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-gray-500 transition hover:bg-gray-50 hover:text-gray-800"
+                              onClick={openEditReplies}
+                            >
+                              <Pencil className="h-3.5 w-3.5" /> Editar respostas…
+                            </button>
                           </div>
                         )}
                       </div>
@@ -1010,6 +1087,106 @@ export default function WhatsAppAdmin() {
                 onClick={() => { setOrdersOpen(false); navigate('/admin/pedidos') }}
               >
                 <ClipboardList className="h-4 w-4" /> Abrir painel de pedidos
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============ modal: editar respostas rápidas ============ */}
+      {editRepliesOpen && (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 sm:items-center sm:p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Editar respostas rápidas"
+            className="toast-in flex max-h-[88dvh] w-full max-w-md flex-col rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-800">Respostas rápidas</h2>
+                <p className="text-xs text-gray-500">As suas respostas aparecem antes das automáticas no menu ⚡.</p>
+              </div>
+              <button type="button" onClick={() => setEditRepliesOpen(false)} aria-label="Fechar" className="rounded-lg p-1 text-gray-500 hover:bg-gray-100">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+              {/* automáticas da loja (somem leitura): usam as config da loja */}
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Da loja · automáticas</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Estas usam os dados das configurações (nome, endereço, horário) e se atualizam sozinhas — não são editáveis aqui.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {quickReplies(settings).map((q) => (
+                    <span key={q.label} className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+                      {q.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Suas respostas</p>
+                <div className="mt-2 space-y-3">
+                  {editList.length === 0 && (
+                    <p className="rounded-xl bg-gray-50 p-3 text-sm text-gray-500 ring-1 ring-gray-100">
+                      Nenhuma resposta personalizada ainda. Crie a primeira — ex.: "Entrega hoje mesmo 🚚".
+                    </p>
+                  )}
+                  {editList.map((r, i) => (
+                    <div key={i} className="space-y-2 rounded-xl bg-gray-50 p-3 ring-1 ring-gray-100">
+                      <div className="flex items-center gap-2">
+                        <input
+                          className="input py-1.5 text-sm"
+                          placeholder="Título (ex.: Entrega hoje)"
+                          value={r.label}
+                          onChange={(e) => setReplyField(i, 'label', e.target.value)}
+                          maxLength={40}
+                          aria-label={'Título da resposta ' + (i + 1)}
+                        />
+                        <button
+                          type="button"
+                          className="shrink-0 rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-500"
+                          onClick={() => removeReplyRow(i)}
+                          aria-label={'Excluir resposta ' + (r.label || (i + 1))}
+                          title="Excluir"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <textarea
+                        className="input min-h-16 resize-none py-2 text-sm"
+                        placeholder="Texto que vai para o cliente…"
+                        value={r.text}
+                        onChange={(e) => setReplyField(i, 'text', e.target.value)}
+                        maxLength={600}
+                        aria-label={'Texto da resposta ' + (i + 1)}
+                      />
+                    </div>
+                  ))}
+                  <button type="button" className="btn-soft w-full" onClick={addReplyRow}>
+                    <Plus className="h-4 w-4" /> Adicionar resposta
+                  </button>
+                </div>
+              </div>
+
+              {repliesMsg && (
+                <div className={'rounded-lg p-3 text-sm ' +
+                  (repliesMsg.type === 'err'
+                    ? 'bg-red-50 text-red-700 ring-1 ring-red-200'
+                    : 'bg-green-50 text-green-700 ring-1 ring-green-200')}>
+                  {repliesMsg.text}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-gray-100 px-5 py-3">
+              <button type="button" className="btn-primary w-full" onClick={() => saveReplies()} disabled={repliesBusy}>
+                {repliesBusy && <Loader2 className="h-4 w-4 animate-spin" />}
+                Salvar respostas
               </button>
             </div>
           </div>

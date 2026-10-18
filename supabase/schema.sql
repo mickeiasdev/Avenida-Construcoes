@@ -37,6 +37,8 @@ create table if not exists public.store_settings (
   -- escala de fonte do sistema (100 = normal) — ajustada no painel admin
   font_scale int not null default 100 constraint store_settings_font_scale_range
     check (font_scale between 80 and 130),
+  -- respostas rápidas personalizadas do WhatsApp do painel [{ label, text }]
+  quick_replies jsonb not null default '[]',
   updated_at timestamptz not null default now()
 );
 
