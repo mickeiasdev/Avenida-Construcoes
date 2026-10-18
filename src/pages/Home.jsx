@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Flame, Loader2, Package, SearchX, Tag } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
