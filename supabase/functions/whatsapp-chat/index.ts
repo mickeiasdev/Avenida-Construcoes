@@ -252,13 +252,31 @@ Deno.serve(async (req) => {
       const text = String(body.text ?? '').trim()
       if (!chat || !text) return json({ error: 'Mensagem vazia ou conversa inválida' }, 400)
       if (text.length > 4000) return json({ error: 'Mensagem muito longa (máx. 4000 caracteres)' }, 400)
+      // número real precisa de DDI+DDD (>=12 dígitos; o BR é 55+10/11).
+      // @lid é endereço interno — sempre válido, sem essa checagem.
+      if (chat.endsWith('@s.whatsapp.net')) {
+        const digits = chat.replace('@s.whatsapp.net', '')
+        if (digits.length < 12) {
+          return json({
+            error: 'Telefone incompleto — este contato não tem DDD (' + digits.length + ' dígitos). Corrija o telefone no cadastro do cliente e tente de novo.',
+          }, 400)
+        }
+      }
       const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/message/sendText/${inst}`, {
         method: 'POST',
         body: JSON.stringify({ number: chat, text, delay: 0 }),
       })
       if (!r.ok) {
-        const t = await r.text().catch(() => '')
-        return json({ error: 'A Evolution recusou o envio (' + r.status + ')' + (t ? ': ' + t.slice(0, 200) : '') }, 502)
+        // a Evolution verifica se o número EXISTE no WhatsApp; traduzimos a
+        // resposta técnica ("exists":false) para algo que o lojista entende
+        const d = await r.json().catch(() => null)
+        const first = Array.isArray(d?.response?.message) ? d.response.message[0] : null
+        if (first?.exists === false) {
+          return json({
+            error: 'Este número não existe no WhatsApp (' + String(first.number ?? chat).split('@')[0] + ') — confira o DDD e o telefone do cliente.',
+          }, 400)
+        }
+        return json({ error: 'A Evolution recusou o envio (' + r.status + ')' }, 502)
       }
       try {
         await supabase.rpc('wa_mark_read', { p_jid: chat })

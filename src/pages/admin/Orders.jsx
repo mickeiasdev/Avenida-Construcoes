@@ -355,8 +355,11 @@ export default function OrdersAdmin() {
                     {o.customer_phone && !cancelled && (
                       <button
                         type="button"
-                        title="Abre a conversa no WhatsApp do painel com a atualização já escrita — é só enviar"
-                        className="inline-flex items-center gap-2 rounded-lg bg-green-50 px-4 py-2 text-sm font-bold text-green-700 ring-1 ring-green-300 transition hover:bg-green-100"
+                        title={onlyDigits(o.customer_phone).length < 10
+                          ? 'Telefone sem DDD neste pedido — corrija o contato para avisar pelo WhatsApp'
+                          : 'Abre a conversa no WhatsApp do painel com a atualização já escrita — é só enviar'}
+                        disabled={onlyDigits(o.customer_phone).length < 10}
+                        className="inline-flex items-center gap-2 rounded-lg bg-green-50 px-4 py-2 text-sm font-bold text-green-700 ring-1 ring-green-300 transition hover:bg-green-100 disabled:opacity-40 disabled:hover:bg-green-50"
                         onClick={() => avisarCliente(o)}
                       >
                         <MessageCircle className="h-4 w-4" /> Avisar cliente
