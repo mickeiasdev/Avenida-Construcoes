@@ -560,6 +560,7 @@ Deno.serve(async (req) => {
         })
         .filter(Boolean)
         .sort((a: any, b: any) => a.at - b.at)
+      return json({ configured: true, messages })
     }
 
     // ---------- ENVIAR texto (jid completo — cobre número e @lid) ----------
