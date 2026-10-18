@@ -749,7 +749,7 @@ Deno.serve(async (req) => {
       return json({ configured: true, ok: true })
     }
 
-    return json({ error: 'Ação desconhecida: ' + action }, 400)
+    return json({ error: 'Ação desconhecida: ' + action + ' — disponíveis: status,connect,chats,messages,send,read,startChat,notifyOrder,closeChat,sendMedia,sendVoice,media,avatar' }, 400)
   } catch (e) {
     const msg = (e as Error)?.name === 'TimeoutError'
       ? 'A Evolution API não respondeu (timeout de 20s)'
