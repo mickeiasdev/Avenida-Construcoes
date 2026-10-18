@@ -45,6 +45,20 @@
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      PWA: dois "apps" instaláveis da mesma loja.
+      Na VITRINE o manifest é o da loja (ícone M cinza); no /admin, o do
+      PAINEL (ícone M escuro, abre direto no painel). O Chrome/Edge oferece
+      "Instalar" com o nome/ícone certos conforme a página que está aberta.
+    -->
+    <script>
+      (function () {
+        var link = document.querySelector('link[rel="manifest"]')
+        if (link && location.pathname.indexOf('/admin') === 0) {
+          link.setAttribute('href', '/admin-manifest.webmanifest')
+        }
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
