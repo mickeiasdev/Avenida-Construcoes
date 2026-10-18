@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  AlertCircle, Archive, ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, Loader2, MessageCircle,
-  Pencil, Plus, PlusCircle, Printer, QrCode, RefreshCw, Search, Send, Smartphone, Trash2, X, Zap,
+  AlertCircle, Archive, ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, FileText, Image as ImageIcon, Loader2, MessageCircle,
+  Pencil, Plus, PlusCircle, Printer, QrCode, RefreshCw, Search, Send, Smartphone, Tag, TicketPercent, X, Zap,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { waCall, toJid } from '../../lib/whatsappChat'
-import { formatBRL, formatDateTime, maskPhone, onlyDigits, ORDER_CLS, ORDER_NEXT_ACTION, ORDER_PIPELINE, ORDER_SHORT, waLocal, waNumber } from '../../lib/utils'
+import { formatBRL, formatDateTime, effectivePrice, hasActivePromo, maskPhone, onlyDigits, ORDER_CLS, ORDER_NEXT_ACTION, ORDER_PIPELINE, ORDER_SHORT, waLocal, waNumber } from '../../lib/utils'
 import { PAYMENT_LABELS } from '../../lib/storeOrder'
 import { useStore } from '../../context/StoreContext'
 import { useModalA11y } from '../../lib/useModalA11y'
 import { useConfirmDialog } from '../../components/ConfirmDialog'
-import { QUICK_THEMES, applyTemplate, pickVariant } from '../../lib/waTemplates'
+import { QUICK_THEMES, PRODUCT_TEMPLATES, COUPON_TEMPLATES, OFFERS_TEMPLATES, applyTemplate, pickVariant } from '../../lib/waTemplates'
 
 // ============ WhatsApp da loja, dentro do painel ============
 // Mesma sessão da Evolution API (pareada por QR — igual ao WhatsApp Web):
@@ -104,6 +104,19 @@ export default function WhatsAppAdmin() {
   const quickWrapRef = useRef(null)
   const quickBtnRef = useRef(null)
   const [editRepliesOpen, setEditRepliesOpen] = useState(false)
+  // menu "+" (mídia, produto, cupom, ofertas)
+  const [plusOpen, setPlusOpen] = useState(false)
+  const plusWrapRef = useRef(null)
+  const plusBtnRef = useRef(null)
+  const filePickRef = useRef(null)
+  const [mediaPreview, setMediaPreview] = useState(null) // {mediatype, base64, mimetype, fileName, caption, sizeKB, busy}
+  const [productOpen, setProductOpen] = useState(false)
+  const [productSearch, setProductSearch] = useState('')
+  const [productList, setProductList] = useState(null)
+  const [couponOpen, setCouponOpen] = useState(false)
+  const [couponList, setCouponList] = useState(null)
+  useModalA11y(productOpen, () => setProductOpen(false))
+  useModalA11y(couponOpen, () => setCouponOpen(false))
   const [editList, setEditList] = useState([])   // [{ label, text }] em edição
   const [repliesBusy, setRepliesBusy] = useState(false)
   const [repliesMsg, setRepliesMsg] = useState(null)
@@ -121,6 +134,195 @@ export default function WhatsAppAdmin() {
       document.removeEventListener('keydown', onKey)
     }
   }, [quickOpen])
+
+  // menu "+" (mesma dinâmica do menu de respostas)
+  useEffect(() => {
+    if (!plusOpen) return
+    const onClick = (e) => { if (!plusWrapRef.current?.contains(e.target)) setPlusOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') { setPlusOpen(false); plusBtnRef.current?.focus() } }
+    document.addEventListener('mousedown', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [plusOpen])
+
+  // ---------- "+": enviar imagem (comprimida em base64 — nada no banco) ----------
+  async function pickMediaFile(file) {
+    if (!file || !activeJid) return
+    setError(null)
+    if (file.size > 4 * 1024 * 1024) {
+      window.alert('Arquivo muito grande (máx. 4 MB). Reduza a imagem ou envie o arquivo por outro canal.')
+      return
+    }
+    if (file.type.startsWith('image/')) {
+      // comprime (máx 1280px, JPEG 85%) para caber leve na rede
+      const dataUrl = await new Promise((res, rej) => {
+        const fr = new FileReader()
+        fr.onload = () => res(fr.result)
+        fr.onerror = rej
+        fr.readAsDataURL(file)
+      })
+      const img = new Image()
+      img.src = dataUrl
+      await new Promise((res) => { img.onload = res; img.onerror = res })
+      const max = 1280
+      const scale = Math.min(1, max / Math.max(img.width || 1, img.height || 1))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round((img.width || 1) * scale)
+      canvas.height = Math.round((img.height || 1) * scale)
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+      const out = canvas.toDataURL('image/jpeg', 0.85)
+      setMediaPreview({
+        mediatype: 'image',
+        base64: out.split(',')[1],
+        mimetype: 'image/jpeg',
+        fileName: file.name.replace(/\.[^.]+$/, '') + '.jpg',
+        url: out,
+        caption: '',
+        sizeKB: Math.round((out.length * 0.75) / 1024),
+      })
+    } else {
+      // documento (PDF etc): base64 direto
+      const dataUrl = await new Promise((res, rej) => {
+        const fr = new FileReader()
+        fr.onload = () => res(fr.result)
+        fr.onerror = rej
+        fr.readAsDataURL(file)
+      })
+      setMediaPreview({
+        mediatype: 'document',
+        base64: dataUrl.split(',')[1],
+        mimetype: file.type || 'application/octet-stream',
+        fileName: file.name,
+        caption: '',
+        sizeKB: Math.round(file.size / 1024),
+      })
+    }
+  }
+
+  async function sendMediaNow(e) {
+    e?.preventDefault()
+    const m = mediaPreview
+    if (!m || m.busy || !activeJid) return
+    setMediaPreview({ ...m, busy: true })
+    setError(null)
+    try {
+      const res = await waCall('sendMedia', {
+        chat: activeJid,
+        mediatype: m.mediatype,
+        mimetype: m.mimetype,
+        media: m.base64,
+        fileName: m.fileName,
+        caption: m.caption || undefined,
+      })
+      if (res?.ok === false) {
+        const motivos = {
+          'numero-inexistente': 'o número não está no WhatsApp — confira o contato',
+          'evolution-recusou': 'o número não está no WhatsApp — confira o contato',
+        }
+        window.alert('Mídia NÃO enviada: ' + (motivos[res.reason] ?? res.reason ?? 'motivo desconhecido') + '.')
+      } else {
+        setMediaPreview(null)
+        await loadMessages(activeJid)
+        loadChats()
+      }
+    } catch (e2) {
+      window.alert('Falha ao enviar a mídia (' + (e2?.message ?? 'erro') + '). Tente novamente.')
+    }
+    setMediaPreview((prev) => (prev ? { ...prev, busy: false } : null))
+  }
+
+  // ---------- "+": enviar produto da loja (texto + link, 10 variações) ----------
+  async function openProductPicker() {
+    setPlusOpen(false)
+    setProductSearch('')
+    setProductList(null)
+    setProductOpen(true)
+    const { data } = await supabase
+      .from('products')
+      .select('id, name, price, discount_percent, promo_price, promo_until, stock, active, image_url')
+      .eq('active', true)
+      .order('name')
+      .limit(300)
+    setProductList(data ?? [])
+  }
+
+  function sendProductDraft(p) {
+    const link = window.location.origin + '/produto/' + p.id
+    const text = applyTemplate(pickVariant(PRODUCT_TEMPLATES), {
+      produto: p.name,
+      preco: formatBRL(effectivePrice(p)),
+      link,
+      loja: settings?.store_name || 'nossa loja',
+    })
+    setProductOpen(false)
+    setDraft(text)
+    inputRef.current?.focus()
+  }
+
+  // ---------- "+": enviar cupom ativo (10 variações) ----------
+  async function openCouponPicker() {
+    setPlusOpen(false)
+    setCouponList(null)
+    setCouponOpen(true)
+    const { data } = await supabase
+      .from('coupons')
+      .select('code, kind, value, min_total, active')
+      .eq('active', true)
+      .order('code')
+      .limit(100)
+    setCouponList(data ?? [])
+  }
+
+  function sendCouponDraft(c) {
+    const desconto = c.kind === 'percent'
+      ? Number(c.value) + '% OFF'
+      : formatBRL(Number(c.value)) + ' OFF'
+    const text = applyTemplate(pickVariant(COUPON_TEMPLATES), {
+      codigo: c.code,
+      desconto,
+      minimo: Number(c.min_total) > 0 ? 'para compras acima de ' + formatBRL(Number(c.min_total)) : 'qualquer valor',
+      link: window.location.origin,
+    })
+    setCouponOpen(false)
+    setDraft(text)
+    inputRef.current?.focus()
+  }
+
+  // ---------- "+": ofertas ativas (promoções no ar, 10 variações) ----------
+  async function sendOffersDraft() {
+    setPlusOpen(false)
+    setError(null)
+    try {
+      const { data } = await supabase
+        .from('products')
+        .select('id, name, price, promo_price, promo_until')
+        .eq('active', true)
+        .not('promo_price', 'is', null)
+        .order('views', { ascending: false })
+        .limit(60)
+      const ofertas = (data ?? []).filter(hasActivePromo).slice(0, 5)
+      if (ofertas.length === 0) {
+        window.alert('Nenhuma promoção ativa na loja agora. Crie promoções em Painel → Promoções.')
+        return
+      }
+      const itens = ofertas
+        .map((p) => '• ' + p.name + ' — ' + formatBRL(Number(p.promo_price)) + ' (era ' + formatBRL(Number(p.price)) + ')')
+        .join('\n')
+      const text = applyTemplate(pickVariant(OFFERS_TEMPLATES), {
+        itens,
+        loja: settings?.store_name || 'nossa loja',
+        link: window.location.origin + '/?cat=ofertas',
+      })
+      setDraft(text)
+      inputRef.current?.focus()
+    } catch (e) {
+      setError('Não foi possível carregar as ofertas: ' + (e?.message ?? 'erro'))
+    }
+  }
 
   useModalA11y(qrOpen, () => setQrOpen(false))
   useModalA11y(newOpen, () => setNewOpen(false))
@@ -859,6 +1061,79 @@ export default function WhatsAppAdmin() {
                         )}
                       </div>
 
+                      {/* botão "+" (mídia, produto, cupom, ofertas) */}
+                      <div className="relative shrink-0" ref={plusWrapRef}>
+                        <button
+                          ref={plusBtnRef}
+                          type="button"
+                          onClick={() => setPlusOpen((v) => !v)}
+                          aria-haspopup="menu"
+                          aria-expanded={plusOpen}
+                          title="Enviar mídia, produto, cupom ou ofertas"
+                          aria-label="Mais opções de envio"
+                          className="flex h-11 w-11 items-center justify-center rounded-lg bg-gray-100 text-gray-500 ring-1 ring-gray-200 transition hover:bg-primary/10 hover:text-primary hover:ring-primary/30"
+                        >
+                          <Plus className="h-5 w-5" />
+                        </button>
+
+                        {plusOpen && (
+                          <div
+                            role="menu"
+                            aria-label="Opções de envio"
+                            className="toast-in absolute bottom-full left-0 z-40 mb-2 w-60 rounded-2xl bg-white p-1.5 shadow-2xl ring-1 ring-gray-200"
+                          >
+                            <label
+                              className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-primary/10"
+                              onClick={() => setPlusOpen(false)}
+                            >
+                              <ImageIcon className="h-4 w-4 text-primary" /> Enviar imagem
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; pickMediaFile(f) }}
+                              />
+                            </label>
+                            <label
+                              className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-primary/10"
+                              onClick={() => setPlusOpen(false)}
+                            >
+                              <FileText className="h-4 w-4 text-primary" /> Enviar arquivo (PDF…)
+                              <input
+                                type="file"
+                                accept=".pdf,.doc,.docx,.txt,.csv"
+                                className="hidden"
+                                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; pickMediaFile(f) }}
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-primary/10"
+                              onClick={openProductPicker}
+                            >
+                              <Tag className="h-4 w-4 text-primary" /> Produto da loja
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-primary/10"
+                              onClick={openCouponPicker}
+                            >
+                              <TicketPercent className="h-4 w-4 text-primary" /> Cupom de desconto
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-primary/10"
+                              onClick={sendOffersDraft}
+                            >
+                              <Zap className="h-4 w-4 text-primary" /> Ofertas ativas
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
                       <textarea
                         ref={inputRef}
                         className="input max-h-32 min-h-11 flex-1 resize-none py-2.5"
@@ -1255,6 +1530,184 @@ export default function WhatsAppAdmin() {
                 {repliesBusy && <Loader2 className="h-4 w-4 animate-spin" />}
                 Salvar respostas
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============ modal: prévia da mídia antes de enviar ============ */}
+      {mediaPreview && (
+        <div className="fixed inset-0 z-[75] flex items-end justify-center bg-black/50 sm:items-center sm:p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Enviar mídia"
+            className="toast-in flex max-h-[85dvh] w-full max-w-md flex-col rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-2xl"
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-800">
+                {mediaPreview.mediatype === 'image' ? 'Enviar imagem' : 'Enviar arquivo'}
+              </h2>
+              <button type="button" className="rounded-lg p-1 text-gray-500 hover:bg-gray-100" onClick={() => setMediaPreview(null)} aria-label="Fechar">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {mediaPreview.mediatype === 'image' ? (
+              <img src={mediaPreview.url} alt="Prévia da imagem" className="mx-auto max-h-56 rounded-xl ring-1 ring-gray-200" />
+            ) : (
+              <div className="flex items-center gap-3 rounded-xl bg-gray-50 p-3 ring-1 ring-gray-100">
+                <FileText className="h-8 w-8 text-primary" />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-gray-800">{mediaPreview.fileName}</p>
+                  <p className="text-xs text-gray-500">{mediaPreview.sizeKB} KB</p>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-3">
+              <label className="field-label" htmlFor="mp_caption">Legenda (opcional)</label>
+              <input
+                id="mp_caption"
+                className="input"
+                maxLength={300}
+                placeholder={mediaPreview.mediatype === 'image' ? 'Ex.: Foto do produto' : 'Ex.: Orçamento em anexo'}
+                value={mediaPreview.caption}
+                onChange={(e) => setMediaPreview((prev) => ({ ...prev, caption: e.target.value }))}
+              />
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" className="btn-soft" onClick={() => setMediaPreview(null)} disabled={mediaPreview.busy}>
+                Cancelar
+              </button>
+              <button type="button" className="btn-primary" onClick={() => sendMediaNow()} disabled={mediaPreview.busy}>
+                {mediaPreview.busy && <Loader2 className="h-4 w-4 animate-spin" />}
+                <Send className="h-4 w-4" /> Enviar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============ modal: seletor de produto da loja ============ */}
+      {productOpen && (
+        <div className="fixed inset-0 z-[75] flex items-end justify-center bg-black/50 sm:items-center sm:p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Enviar produto da loja"
+            className="toast-in flex max-h-[85dvh] w-full max-w-md flex-col rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-800">Produto da loja</h2>
+                <p className="text-xs text-gray-500">Escolha um produto — enviamos nome, preço e link com 10 redações sorteadas.</p>
+              </div>
+              <button type="button" onClick={() => setProductOpen(false)} aria-label="Fechar" className="rounded-lg p-1 text-gray-500 hover:bg-gray-100">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="px-5 pt-3">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  className="input pl-10"
+                  placeholder="Buscar produto…"
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  aria-label="Buscar produto"
+                />
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
+              {productList === null ? (
+                <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+              ) : (() => {
+                const f = productSearch.trim().toLowerCase()
+                const visible = (productList ?? []).filter((p) => !f || p.name.toLowerCase().includes(f)).slice(0, 30)
+                if (visible.length === 0) return <p className="py-10 text-center text-sm text-gray-500">Nenhum produto encontrado.</p>
+                return (
+                  <ul className="divide-y divide-gray-50">
+                    {visible.map((p) => (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition hover:bg-gray-50"
+                          onClick={() => sendProductDraft(p)}
+                        >
+                          {p.image_url ? (
+                            <img src={p.image_url} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
+                          ) : (
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-300">
+                              <Tag className="h-4 w-4" />
+                            </span>
+                          )}
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800">{p.name}</span>
+                          <span className="shrink-0 text-xs font-bold text-primary">{formatBRL(effectivePrice(p))}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============ modal: seletor de cupom ativo ============ */}
+      {couponOpen && (
+        <div className="fixed inset-0 z-[75] flex items-end justify-center bg-black/50 sm:items-center sm:p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Enviar cupom de desconto"
+            className="toast-in flex max-h-[85dvh] w-full max-w-md flex-col rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-800">Cupom de desconto</h2>
+                <p className="text-xs text-gray-500">Envia o código com instruções — 10 redações sorteadas.</p>
+              </div>
+              <button type="button" onClick={() => setCouponOpen(false)} aria-label="Fechar" className="rounded-lg p-1 text-gray-500 hover:bg-gray-100">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
+              {couponList === null ? (
+                <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+              ) : (couponList ?? []).length === 0 ? (
+                <p className="py-10 text-center text-sm text-gray-500">
+                  Nenhum cupom ativo na loja.<br />Crie em Painel → Cupons.
+                </p>
+              ) : (
+                <ul className="divide-y divide-gray-50">
+                  {(couponList ?? []).map((c) => (
+                    <li key={c.code}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition hover:bg-gray-50"
+                        onClick={() => sendCouponDraft(c)}
+                      >
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <TicketPercent className="h-5 w-5" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-mono text-sm font-bold text-gray-800">{c.code}</p>
+                          <p className="text-xs text-gray-500">
+                            {c.kind === 'percent' ? Number(c.value) + '% OFF' : formatBRL(Number(c.value)) + ' OFF'}
+                            {Number(c.min_total) > 0 ? ' · mín. ' + formatBRL(Number(c.min_total)) : ''}
+                          </p>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         </div>

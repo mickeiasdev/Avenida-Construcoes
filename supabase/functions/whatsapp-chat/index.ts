@@ -565,6 +565,55 @@ Deno.serve(async (req) => {
       return json({ configured: true, ok: true })
     }
 
+    // ---------- ENVIAR MÍDIA (imagem/arquivo) via base64 ----------
+    // A mídia vai DIRETO pra Evolution (sendMedia, base64) — nada é gravado
+    // no Supabase Storage. Documento (PDF etc) ou imagem, com legenda opcional.
+    if (action === 'sendMedia') {
+      const chat = personJid(body.chat)
+      const media = String(body.media ?? '')
+      const mediatype = ['image', 'document', 'video', 'audio'].includes(body.mediatype) ? body.mediatype : null
+      if (!chat || !mediatype || !media) return json({ error: 'Mídia ou conversa inválida' }, 400)
+      // base64 cresce ~33% sobre o arquivo; limite de segurança
+      if (media.length > 6_500_000) return json({ error: 'Arquivo muito grande (máx. ~4,5 MB)' }, 400)
+      const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/message/sendMedia/${inst}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          number: chat,
+          mediatype,
+          mimetype: String(body.mimetype ?? 'application/octet-stream'),
+          media,
+          fileName: body.fileName ? String(body.fileName).slice(0, 120) : undefined,
+          caption: body.caption ? String(body.caption).slice(0, 500) : undefined,
+          delay: Math.floor(Math.random() * 1200) + 500,
+        }),
+      })
+      // recusas de negócio (200 + reason), como no envio de texto
+      if (!r.ok) {
+        const d = await r.json().catch(() => null)
+        const first = Array.isArray(d?.response?.message) ? d.response.message[0] : (Array.isArray(d) ? d[0] : null)
+        if (first?.exists === false) return json({ ok: false, reason: 'numero-inexistente' })
+        return json({ ok: false, reason: 'evolution-recusou' })
+      }
+      const preview = mediatype === 'image' ? '📷 Foto' : '📎 ' + String(body.fileName ?? 'Arquivo')
+      try {
+        const now = new Date().toISOString()
+        await supabase.rpc('wa_mark_read', { p_jid: chat })
+        await supabase.from('whatsapp_chats').upsert({
+          remote_jid: chat,
+          phone: chat.replace(/@s\.whatsapp\.net|@lid$/, ''),
+          closed: false,
+          last_message: String(body.caption || preview).slice(0, 500),
+          last_message_at: now,
+          last_from_me: true,
+          unread_count: 0,
+          updated_at: now,
+        }, { onConflict: 'remote_jid' })
+      } catch (e) {
+        console.warn('[whatsapp-chat] sync pós-mídia falhou:', (e as Error)?.message)
+      }
+      return json({ configured: true, ok: true })
+    }
+
     // ---------- MARCAR como lida (2.3.7: markMessageAsRead) ----------
     if (action === 'read') {
       const chat = personJid(body.chat)

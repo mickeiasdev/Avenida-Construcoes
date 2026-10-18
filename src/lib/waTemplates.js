@@ -140,3 +140,48 @@ export const QUICK_THEMES = {
     '📍 Como chegar:\n{endereco}\n🕐 {horario}\n— Equipe {loja}',
   ],
 }
+
+// ---------- ENVIAR PRODUTO DA LOJA (10) ----------
+// {produto} {preco} {link} {loja}
+export const PRODUCT_TEMPLATES = [
+  'Olha o que temos: *{produto}* — {preco}! 🛒\n\nConfere aqui: {link}\n\nQualquer dúvida, responde! — {loja}',
+  'Recomendação da {loja}: *{produto}* por {preco}. 😊\n\nDetalhes e compra: {link}',
+  'Esse aqui faz o seu serviço render: *{produto}* — {preco}\n\n👇 Tudo aqui: {link}\n\n— Equipe {loja}',
+  'Separamos pra você: *{produto}* ({preco})\n\nVeja as infos e peça pelo site: {link}',
+  'Olá! A {loja} tem *{produto}* no valor de {preco}.\n\nLink direto: {link} 🛒',
+  'Chegou o que você procura? *{produto}* — {preco}\n\nConfere: {link} — qualquer coisa, chama!',
+  'Só dar uma olhada: *{produto}* ({preco}) — disponível na {loja}!\n\n{link}',
+  'Se precisar, temos *{produto}* por {preco} prontinho. 🙌\n\nInfos completas: {link}\n\n— {loja}',
+  'Dica da {loja} 🛠️: *{produto}* a {preco}.\n\nCompra em 1 clique: {link}',
+  'Produto da loja que combina com seu pedido: *{produto}* — {preco}\n\nSaiba mais: {link}',
+]
+
+// ---------- ENVIAR CUPOM (10) ----------
+// {codigo} {desconto} {minimo} {link}
+export const COUPON_TEMPLATES = [
+  'Presente pra você! 🎁\nUse o cupom *{codigo}* e leve {desconto} na sua compra.\n\nAplica direto no carrinho 😉\n{link}',
+  'Cupom exclusivo: *{codigo}* — {desconto}!\n\nVale no checkout do site: {link}',
+  'Aproveita esse: cupom *{codigo}*, {desconto} na sua próxima compra. 🛒\n\n{link}',
+  'Só pra você: use *{codigo}* e ganhe {desconto}!\n\nVálido no carrinho: {link}',
+  'Descontão na sua mão: *{codigo}* ({desconto}).\n\nAplica lá: {link}',
+  '🎁 Olha o cupom que o {minimo} libera pra você: *{codigo}* com {desconto}!\n\nCorre: {link}',
+  'Bora economizar: cupom *{codigo}*, {desconto}!\n\nÉ só colar no carrinho: {link}',
+  'Selinho de desconto: *{codigo}*\n{desconto} na sua compra. 😊\n\n{link}',
+  'Vale um desconto: usa o código *{codigo}* e leva {desconto}.\n\nCompra aqui: {link}',
+  'Do pro seu pedido: cupom *{codigo}*, {desconto}! 🛒\n\nAplica e finaliza: {link}',
+]
+
+// ---------- OFERTAS ATIVAS (10) ----------
+// {itens} {loja} {link}
+export const OFFERS_TEMPLATES = [
+  '🔥 *Ofertas da {loja} em destaque!*\n\n{itens}\n\nConfira tudo: {link}',
+  'Olha as promoções que estão valendo agora na {loja}: 🛒\n\n{itens}\n\n{link}',
+  'Tá rolando desconto! {itens}\n\nVem ver: {link} — {loja}',
+  '*Promoções ativas* 🏷️ — {loja}\n\n{itens}\n\nPeça pelo site: {link}',
+  'Dá uma olhada nessas ofertas:\n\n{itens}\n\n— {loja} | {link}',
+  'Barganhas de hoje na {loja}! 🏷️\n\n{itens}\n\n{link}',
+  'Separamos as melhores promoções pra você:\n\n{itens}\n\nAproveite: {link}',
+  '🔥 Ofertas quentes — {loja}\n\n{itens}\n\nTudo aqui: {link}',
+  'Com desconto agora:\n\n{itens}\n\nCompre fácil: {link} — {loja}',
+  '*Atenção, promoção!* 😄 {itens}\n\n{loja} — {link}',
+]
