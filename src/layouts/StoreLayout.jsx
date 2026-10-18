@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ShoppingCart, User, LogOut, Package, Settings as SettingsIcon, Home as HomeIcon, Phone, MessageCircle, Menu, X, Heart } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -21,6 +21,31 @@ export default function StoreLayout() {
   const [searchParams] = useSearchParams()
   const [showNav, setShowNav] = useState(false)
   const [drawer, setDrawer] = useState(false)
+  const accountRef = useRef(null)
+
+  // Dropdown da conta dinâmico como menu de verdade: fecha ao clicar FORA,
+  // no ESC e ao escolher qualquer item (link/botão interno) — o <details>
+  // nativo sozinho só fecha clicando de novo no próprio nome.
+  useEffect(() => {
+    const onDown = (e) => {
+      const el = accountRef.current
+      if (!el || !el.open) return
+      if (!el.contains(e.target) || e.target.closest('a, button')) {
+        el.open = false
+      }
+    }
+    const onKey = (e) => {
+      if (e.key === 'Escape' && accountRef.current?.open) {
+        accountRef.current.open = false
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [])
   useModalA11y(drawer, () => setDrawer(false))
   // Loja nova (seed) começa com whatsapp vazio: sem número, o atalho
   // não pode virar um link https://wa.me/ quebrado.
@@ -77,7 +102,7 @@ export default function StoreLayout() {
             )}
           </Link>
 
-          <details className="relative hidden shrink-0 md:block">
+          <details ref={accountRef} className="relative hidden shrink-0 md:block">
             <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-1.5 transition hover:bg-white/10" aria-label="Conta">
               <User className="h-5 w-5" />
               <span className="hidden max-w-32 truncate text-sm lg:inline">
