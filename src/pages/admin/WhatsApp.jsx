@@ -174,8 +174,36 @@ export default function WhatsAppAdmin() {
       const d = await waCall('chats')
       setChats(d.chats ?? [])
     } catch (e) {
-      setChats((prev) => prev ?? [])
       setError(e.message)
+      // BLINDAGEM: a Evolution engasgou? A lista NÃO esvazia — mantém o que
+      // já está na tela e, se estiver vazia, usa o CACHE da caixa de entrada
+      // (tabela whatsapp_chats, atualizada pelo webhook) como reserva.
+      setChats((prev) => {
+        if ((prev ?? []).length) return prev
+        return null // dispara o cache abaixo
+      })
+      supabase
+        .from('whatsapp_chats')
+        .select('*')
+        .neq('closed', true)
+        .order('last_message_at', { ascending: false, nullsFirst: false })
+        .limit(100)
+        .then(({ data }) => {
+          setChats((prev) => {
+            if ((prev ?? []).length) return prev
+            return (data ?? []).map((r) => ({
+              jid: r.remote_jid,
+              phone: r.phone ?? String(r.remote_jid ?? '').split('@')[0],
+              known: r.known,
+              name: r.name,
+              lastText: r.last_message,
+              lastAt: r.last_message_at ? Date.parse(r.last_message_at) : null,
+              fromMe: r.last_from_me,
+              unread: r.unread_count ?? 0,
+            }))
+          })
+        })
+        .catch(() => {/* sem cache: segue vazia até a próxima tentativa */})
     }
   }, [])
 
