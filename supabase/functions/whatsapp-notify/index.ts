@@ -95,6 +95,65 @@ const STATUS_CLIENT = [
   'Oi, {nome}, tudo certo por aí? 😊\n\nSeu pedido nº {n} na {loja}: *{etapa}*\n\nEstamos à disposição!',
 ]
 
+// ---------- COMPROVANTE COMPLETO (pedido confirmado/pago) ----------
+// Dados únicos por pedido quebram repetição; título/rodapé sorteiam 3.
+function buildReceipt(
+  order: Record<string, unknown>,
+  itens: Array<Record<string, unknown>>,
+  ctx: { storeName: string; cliente: string; orderShort: string },
+): string | null {
+  const m = (v: unknown) => 'R$ ' + Number(v ?? 0).toFixed(2).replace('.', ',')
+  const sep = '─────────────────'
+  const digits = String(order.customer_cpf ?? '').replace(/\D/g, '')
+  const cpf = digits.length === 11
+    ? digits.slice(0, 3) + '.' + digits.slice(3, 6) + '.' + digits.slice(6, 9) + '-' + digits.slice(9)
+    : ''
+  const retirada = order.delivery_method === 'retirada'
+  const pay: Record<string, string> = {
+    mercado_pago: 'Pix (QR + Copia e Cola)',
+    pix: 'Pix',
+    dinheiro: 'Dinheiro na entrega/retirada',
+    cartao: 'Cartão na entrega/retirada',
+  }
+  const titulo = ['NOVO PEDIDO', 'PEDIDO CONFIRMADO', 'SEU PEDIDO'][Math.floor(Math.random() * 3)]
+  const rodape = [
+    '> *Pedido enviado pelo site — em caso de dúvidas envie uma mensagem.*',
+    '> *Comprovante do seu pedido — dúvidas? Responde aqui!*',
+    '> *Qualquer coisa, manda mensagem por aqui!* 😊',
+  ][Math.floor(Math.random() * 3)]
+  const L: string[] = []
+  L.push('*' + titulo + ' — ' + ctx.storeName + '*')
+  L.push(sep)
+  L.push('Pedido nº ' + ctx.orderShort)
+  L.push('')
+  L.push('*CLIENTE*')
+  L.push('Nome: ' + (order.customer_name ?? ctx.cliente ?? 'Cliente'))
+  if (order.customer_phone) L.push('Telefone: ' + String(order.customer_phone))
+  if (cpf) L.push('CPF: ' + cpf)
+  L.push('')
+  L.push('*ITENS DO PEDIDO*')
+  itens.forEach((it, i) =>
+    L.push((i + 1) + ') ' + Number(it.quantity) + 'x ' + String(it.product_name) + ' — ' + m(Number(it.unit_price) * Number(it.quantity))))
+  L.push(sep)
+  const total = Number(order.total ?? 0)
+  const desconto = Number(order.discount ?? 0)
+  if (desconto > 0) {
+    L.push('Subtotal: ' + m(total + desconto))
+    L.push('Desconto: -' + m(desconto))
+  }
+  L.push('*TOTAL: ' + m(total) + '*')
+  L.push(sep)
+  L.push('')
+  L.push(retirada ? '*RETIRADA NO BALCÃO*' : '*ENDEREÇO DE ENTREGA*')
+  if (!retirada && order.delivery_address) L.push(String(order.delivery_address))
+  L.push('')
+  L.push('*PAGAMENTO*')
+  L.push(pay[String(order.payment_method ?? '')] ?? String(order.payment_method ?? '—'))
+  L.push('')
+  L.push(rodape)
+  return L.join('\n')
+}
+
 // rótulos de etapa (espelho de ORDER_LABELS do app; função vive isolada)
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Pedido recebido',
@@ -178,7 +237,15 @@ Deno.serve(async (req) => {
       loja: storeName,
     }
     if (await deliver(storePhone, applyVars(pickVariant(PAID_STORE), vars))) sent.push('loja')
-    if (await deliver(clientePhone, applyVars(pickVariant(PAID_CLIENT), vars))) sent.push('cliente')
+    // CLIENTE recebe o COMPROVANTE COMPLETO do pedido (itens/endereço/pagamento)
+    if (clientePhone) {
+      const { data: itens } = await supabase
+        .from('order_items')
+        .select('product_name, quantity, unit_price')
+        .eq('order_id', String(record.id ?? ''))
+      const receipt = buildReceipt(record, itens ?? [], { storeName, cliente, orderShort })
+      if (receipt && await deliver(clientePhone, receipt)) sent.push('cliente')
+    }
   }
 
   // ---------- pedido NOVO (DB webhook INSERT): avisa a LOJA ----------
@@ -199,16 +266,32 @@ Deno.serve(async (req) => {
   if (dbType === 'UPDATE') {
     const oldStatus = String(body.old_record?.status ?? '')
     const newStatus = String(record.status ?? '')
-    if (newStatus !== oldStatus && STATUS_LABEL[newStatus] && clientePhone && newStatus !== 'cancelled') {
-      const etapa = STATUS_LABEL[newStatus] +
-        (newStatus === 'delivered' ? ' — obrigado pela preferência! ⭐' : '')
-      const ok = await deliver(clientePhone, applyVars(pickVariant(STATUS_CLIENT), {
-        nome: cliente,
-        loja: storeName,
-        n: orderShort,
-        etapa,
-      }), false)
-      if (ok) sent.push('cliente:' + newStatus)
+    if (newStatus !== oldStatus && newStatus !== 'cancelled' && clientePhone) {
+      // Pix pago: o webhook de pagamento JÁ mandou o comprovante completo
+      // — não duplicar na transição pending→confirmed automática
+      const pixJaAvisado = newStatus === 'confirmed'
+        && record.payment_method === 'mercado_pago'
+        && String(record.payment_status ?? '').toLowerCase() === 'approved'
+      if (pixJaAvisado) { sent.push('cliente:skip-duplicado') }
+      else if (newStatus === 'confirmed') {
+        // confirmação manual (dinheiro/cartão/retirada): comprovante completo
+        const { data: itens } = await supabase
+          .from('order_items')
+          .select('product_name, quantity, unit_price')
+          .eq('order_id', String(record.id ?? ''))
+        const receipt = buildReceipt(record, itens ?? [], { storeName, cliente, orderShort })
+        if (receipt && await deliver(clientePhone, receipt, false)) sent.push('cliente:comprovante')
+      } else if (STATUS_LABEL[newStatus]) {
+        const etapa = STATUS_LABEL[newStatus] +
+          (newStatus === 'delivered' ? ' — obrigado pela preferência! ⭐' : '')
+        const ok = await deliver(clientePhone, applyVars(pickVariant(STATUS_CLIENT), {
+          nome: cliente,
+          loja: storeName,
+          n: orderShort,
+          etapa,
+        }), false)
+        if (ok) sent.push('cliente:' + newStatus)
+      }
     }
   }
 

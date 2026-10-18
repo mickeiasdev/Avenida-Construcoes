@@ -367,27 +367,83 @@ Deno.serve(async (req) => {
       }
       const status = String(body.status ?? order.status ?? '')
       if (!etapa[status]) return json({ ok: false, reason: 'status-sem-aviso' })
-      // ANTI-BAN: redação sorteada entre 10 variações + delay humano de
-      // "digitação" — nada de mensagem idêntica em sequência.
-      const variants: string[] = [
-        'Olá, {nome}! Aqui é da {loja} 👋\n\nAtualização do seu pedido nº {n}: *{etapa}*\n\nQualquer dúvida é só responder por aqui.',
-        'Oi, {nome}! Passando da {loja} pra avisar 😊\n\nSeu pedido nº {n}: *{etapa}*\n\nSe precisar de algo, estamos por aqui!',
-        'Fala, {nome}! Equipe {loja} falando 🙌\n\nNovidade do pedido nº {n}: *{etapa}*\n\nAbraço — qualquer coisa chama!',
-        'Olá, {nome}, tudo bem? 😃\n\nDa {loja}: o pedido nº {n} agora está assim: *{etapa}*\n\nDúvidas? Responde aqui.',
-        'Olá, {nome}! Aviso rápido da {loja}:\n\nPedido nº {n} — *{etapa}*\n\nTamo junto!',
-        'Oi, {nome}! 👋 Aqui é a {loja}.\n\nO pedido nº {n} teve novidade: *{etapa}*\n\nQualquer coisa, é só chamar!',
-        '{nome}, olha só quem apareceu 😄 — a {loja}, com notícia do pedido nº {n}:\n\n*{etapa}*\n\nPrecisando, estamos aqui!',
-        'Olá, {nome}!\n\nA {loja} avisando que o pedido nº {n} está: *{etapa}*\n\nObrigado pela confiança!',
-        'Ei, {nome}! 🚀 Atualização da {loja}:\n\nPedido nº {n} → *{etapa}*\n\nDeu tudo certo? Qualquer coisa responde!',
-        'Oi, {nome}, tudo certo por aí? 😊\n\nSeu pedido nº {n} na {loja}: *{etapa}*\n\nEstamos à disposição!',
-      ]
-      const pick = variants[Math.floor(Math.random() * variants.length)]
-      const text = pick
-        .replace(/\{nome\}/g, String(order.customer_name ?? 'cliente'))
-        .replace(/\{loja\}/g, storeName)
-        .replace(/\{n\}/g, short)
-        .replace(/\{etapa\}/g, etapa[status])
-      const typingDelay = Math.floor(Math.random() * 1400) + 600 // 0,6–2s
+
+      const typingDelay = Math.floor(Math.random() * 1400) + 600 // 0,6-2s
+
+      let text: string
+      if (status === 'confirmed') {
+        // CONFIRMAÇÃO: comprovante COMPLETO (itens, endereço, pagamento).
+        // Dados únicos por pedido já quebram repetição; título/rodapé
+        // sorteiam entre 3 variações.
+        const money = (v: unknown) => 'R$ ' + Number(v ?? 0).toFixed(2).replace('.', ',')
+        const sep = '─────────────────'
+        const digits = String(order.customer_cpf ?? '').replace(/\D/g, '')
+        const cpf = digits.length === 11
+          ? digits.slice(0, 3) + '.' + digits.slice(3, 6) + '.' + digits.slice(6, 9) + '-' + digits.slice(9)
+          : ''
+        const retirada = order.delivery_method === 'retirada'
+        const pay: Record<string, string> = {
+          mercado_pago: 'Pix (QR + Copia e Cola)',
+          pix: 'Pix',
+          dinheiro: 'Dinheiro na entrega/retirada',
+          cartao: 'Cartão na entrega/retirada',
+        }
+        const titulo = ['NOVO PEDIDO', 'PEDIDO CONFIRMADO', 'SEU PEDIDO'][Math.floor(Math.random() * 3)]
+        const rodape = [
+          '> *Pedido enviado pelo site — em caso de dúvidas envie uma mensagem.*',
+          '> *Comprovante do seu pedido — dúvidas? Responde aqui!*',
+          '> *Qualquer coisa, manda mensagem por aqui!* 😊',
+        ][Math.floor(Math.random() * 3)]
+        const L: string[] = []
+        L.push('*' + titulo + ' — ' + storeName + '*')
+        L.push(sep)
+        L.push('Pedido nº ' + short)
+        L.push('')
+        L.push('*CLIENTE*')
+        L.push('Nome: ' + (order.customer_name ?? 'Cliente'))
+        if (order.customer_phone) L.push('Telefone: ' + order.customer_phone)
+        if (cpf) L.push('CPF: ' + cpf)
+        L.push('')
+        L.push('*ITENS DO PEDIDO*')
+        ;(orderItems ?? []).forEach((it: any, i: number) =>
+          L.push((i + 1) + ') ' + Number(it.quantity) + 'x ' + it.product_name + ' — ' + money(Number(it.unit_price) * Number(it.quantity))))
+        L.push(sep)
+        if (Number(order.discount ?? 0) > 0) {
+          L.push('Subtotal: ' + money(Number(order.total ?? 0) + Number(order.discount ?? 0)))
+          L.push('Desconto: -' + money(Number(order.discount ?? 0)))
+        }
+        L.push('*TOTAL: ' + money(order.total) + '*')
+        L.push(sep)
+        L.push('')
+        L.push(retirada ? '*RETIRADA NO BALCÃO*' : '*ENDEREÇO DE ENTREGA*')
+        if (!retirada && order.delivery_address) L.push(order.delivery_address)
+        L.push('')
+        L.push('*PAGAMENTO*')
+        L.push(pay[order.payment_method] ?? String(order.payment_method ?? '—'))
+        L.push('')
+        L.push(rodape)
+        text = L.join('\n')
+      } else {
+        // demais etapas: redação curta sorteada entre 10 variações
+        const variants: string[] = [
+          'Olá, {nome}! Aqui é da {loja} 👋\n\nAtualização do seu pedido nº {n}: *{etapa}*\n\nQualquer dúvida é só responder por aqui.',
+          'Oi, {nome}! Passando da {loja} pra avisar 😊\n\nSeu pedido nº {n}: *{etapa}*\n\nSe precisar de algo, estamos por aqui!',
+          'Fala, {nome}! Equipe {loja} falando 🙌\n\nNovidade do pedido nº {n}: *{etapa}*\n\nAbraço — qualquer coisa chama!',
+          'Olá, {nome}, tudo bem? 😃\n\nDa {loja}: o pedido nº {n} agora está assim: *{etapa}*\n\nDúvidas? Responde aqui.',
+          'Olá, {nome}! Aviso rápido da {loja}:\n\nPedido nº {n} — *{etapa}*\n\nTamo junto!',
+          'Oi, {nome}! 👋 Aqui é a {loja}.\n\nO pedido nº {n} teve novidade: *{etapa}*\n\nQualquer coisa, é só chamar!',
+          '{nome}, olha só quem apareceu 😄 — a {loja}, com notícia do pedido nº {n}:\n\n*{etapa}*\n\nPrecisando, estamos aqui!',
+          'Olá, {nome}!\n\nA {loja} avisando que o pedido nº {n} está: *{etapa}*\n\nObrigado pela confiança!',
+          'Ei, {nome}! 🚀 Atualização da {loja}:\n\nPedido nº {n} → *{etapa}*\n\nDeu tudo certo? Qualquer coisa responde!',
+          'Oi, {nome}, tudo certo por aí? 😊\n\nSeu pedido nº {n} na {loja}: *{etapa}*\n\nEstamos à disposição!',
+        ]
+        const pick = variants[Math.floor(Math.random() * variants.length)]
+        text = pick
+          .replace(/\{nome\}/g, String(order.customer_name ?? 'cliente'))
+          .replace(/\{loja\}/g, storeName)
+          .replace(/\{n\}/g, short)
+          .replace(/\{etapa\}/g, etapa[status])
+      }
       const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/message/sendText/${inst}`, {
         method: 'POST',
         body: JSON.stringify({ number: phone + '@s.whatsapp.net', text, delay: typingDelay }),
