@@ -87,11 +87,18 @@ function Avatar({ name, seed }) {
 // cacheia por id) e mostra a foto DENTRO da mensagem — não só um botão.
 const inlineImgCache = new Map()
 function InlineChatImage({ msg, chat, fromMe, onOpen }) {
+  // prioridade: URL direta do WhatsApp (instantânea) → cache → base64 (lento)
   const cached = inlineImgCache.get(msg.id)
-  const [src, setSrc] = useState(cached || null)
-  const [loading, setLoading] = useState(!cached)
+  const [src, setSrc] = useState(msg.mediaUrl || cached || null)
+  const [loading, setLoading] = useState(!msg.mediaUrl && !cached)
 
   useEffect(() => {
+    if (msg.mediaUrl && !cached) {
+      inlineImgCache.set(msg.id, msg.mediaUrl)
+      setSrc(msg.mediaUrl)
+      setLoading(false)
+      return
+    }
     if (cached || loading === false) return
     waCall('media', { chat, id: msg.id, fromMe: msg.fromMe })
       .then((d) => {
@@ -101,7 +108,7 @@ function InlineChatImage({ msg, chat, fromMe, onOpen }) {
         setLoading(false)
       })
       .catch(() => setLoading(false))
-  }, [msg.id, chat, msg.fromMe, cached, loading])
+  }, [msg.id, msg.mediaUrl, chat, msg.fromMe, cached, loading])
 
   if (loading) {
     return (

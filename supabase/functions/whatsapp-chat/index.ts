@@ -532,22 +532,34 @@ Deno.serve(async (req) => {
       const d = await r.json().catch(() => ({}))
       // resposta: { messages: { records: [...] } } — mas aceitamos formatos antigos
       const raw = firstArray(d?.messages?.records, d?.response, d?.messages?.messages, d?.messages, d)
-
       const messages = raw
         .map((m) => {
+          const msg = m?.message ?? {}
           const text = extractText(m?.message)
-          if (!text) return null // reações/protocolo não entram na lista
+          let type = 'text'
+          let mediaUrl: string | null = null
+          if (msg.imageMessage || msg.stickerMessage) {
+            type = 'image'
+            mediaUrl = msg.imageMessage?.url ?? msg.stickerMessage?.url ?? null
+          } else if (msg.audioMessage || msg.pttMessage) {
+            type = 'audio'
+          } else if (msg.documentMessage) {
+            type = 'document'
+          } else if (msg.videoMessage) {
+            type = 'video'
+          }
+          if (!text && type === 'text') return null // reações/protocolo saem
           return {
             id: String(m?.key?.id ?? ''),
             fromMe: Boolean(m?.key?.fromMe),
-            text,
+            type,
+            mediaUrl,
+            text: text ?? '',
             at: toMs(m?.messageTimestamp ?? m?.messageTimestamp?.low) ?? Date.now(),
           }
         })
         .filter(Boolean)
         .sort((a: any, b: any) => a.at - b.at)
-
-      return json({ configured: true, messages })
     }
 
     // ---------- ENVIAR texto (jid completo — cobre número e @lid) ----------
