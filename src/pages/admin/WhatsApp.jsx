@@ -808,9 +808,10 @@ export default function WhatsAppAdmin() {
   // pushName que o proxy já entrega; por último o número (legível)
   const chatName = useCallback((c) => {
     const local = contacts?.byPhone?.get(key9(c.phone))?.name
-    if (local || c.name) return local || c.name
-    if (String(c.jid ?? '').endsWith('@lid')) return 'Contato WhatsApp'
-    return maskPhone(waLocal(c.phone))
+    if (local) return local
+    if (c.name) return 'Cliente - ' + c.name
+    if (String(c.jid ?? '').endsWith('@lid')) return 'Cliente - contato WhatsApp'
+    return 'Cliente - ' + maskPhone(waLocal(c.phone))
   }, [contacts])
 
   // A lista mostra TODAS as conversas da loja — quem tem cadastro aparece

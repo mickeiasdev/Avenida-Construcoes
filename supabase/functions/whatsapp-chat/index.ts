@@ -195,7 +195,6 @@ Deno.serve(async (req) => {
           .eq('closed', true)
         for (const row of closed ?? []) closedJids.add(String(row.remote_jid))
       } catch { /* migration-24 ausente: sem filtro */ }
-
       const chats = raw
         .map((c) => {
           const jid = personJid(c?.remoteJid)
@@ -207,6 +206,11 @@ Deno.serve(async (req) => {
           const ts = toMs(last?.messageTimestamp)
             ?? (c?.updatedAt ? Date.parse(String(c.updatedAt)) : null)
           const phone = jid.replace(/@s\.whatsapp\.net|@lid$/, '')
+          // DEDUPE: chats @lid têm remoteJidAlt (número real) na última
+          // mensagem — se o alt resolve pra outro jid, o chat real já
+          // existe na lista; este (LID) é duplicado e sai.
+          const alt = personJid(lastKey.remoteJidAlt)
+          if (alt && alt !== jid) return null
           // nome do CADASTRO da loja manda; sem cadastro entra o NOME DO
           // PRÓPRIO WHATSAPP do contato (pushName da última mensagem recebida)
           const storeName = jid.endsWith('@s.whatsapp.net')
@@ -216,11 +220,14 @@ Deno.serve(async (req) => {
           const push = typeof last?.pushName === 'string' && last.pushName.trim() && last.pushName !== 'Você'
             ? last.pushName
             : (typeof c?.pushName === 'string' && c.pushName.trim() && c.pushName !== 'Você' ? c.pushName : null)
+          const displayName = storeName ?? chatName ?? push
           return {
             jid,
             phone,
             known: Boolean(storeName),
-            name: storeName ?? chatName ?? push,
+            name: displayName,
+            // exibição no painel sempre com prefixo quando não é cadastro
+            label: displayName ? 'Cliente - ' + displayName : null,
             lastText: text ?? (lastKey.fromMe ? 'Mensagem enviada' : null),
             lastAt: Number.isFinite(ts) ? ts : null,
             fromMe: Boolean(lastKey.fromMe),
@@ -228,6 +235,8 @@ Deno.serve(async (req) => {
           }
         })
         .filter(Boolean)
+        // dedupe extra: mesmo número real = mesmo contato (fica o mais recente)
+        .filter((c: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.phone === c.phone) === i)
         .sort((a: any, b: any) => (b.lastAt ?? 0) - (a.lastAt ?? 0))
 
       // Sincroniza o cache do selo do menu (best-effort: migration opcional)
