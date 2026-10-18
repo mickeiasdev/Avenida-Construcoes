@@ -252,7 +252,7 @@ export default function Home() {
               {products.slice(0, 10).map((p) => (
                 <div
                   key={p.id}
-                  className="w-[calc(50%-0.375rem)] shrink-0 snap-start sm:w-44 lg:w-48 xl:w-52"
+                  className="w-[calc(48%-0.375rem)] shrink-0 snap-start sm:w-52 md:w-56 lg:w-60 xl:w-64"
                 >
                   <ProductCard product={p} />
                 </div>
