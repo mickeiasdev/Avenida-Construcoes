@@ -1,17 +1,24 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Loader2, SearchX } from 'lucide-react'
+import { ChevronDown, ChevronRight, Flame, Loader2, Package, SearchX, Tag } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { useStore } from '../context/StoreContext'
 import { getOpenStatus, formatBusinessHoursText } from '../lib/utils'
 import { ProductCard } from '../components/ProductCard'
 
 const PAGE_SIZE = 6
+const BEST_LIMIT = 12
 
-// VITRINE: banner + filtro por categoria (chips) + busca com debounce
-// (o header escreve ?q=) + paginação "Carregar mais".
-// A barra de categorias do header só aparece quando o usuário rola
-// a página até aqui — por isso os chips existem sempre no topo.
+// VITRINE: banner + menu "Explorar" (mais vendidos, produtos, categorias e
+// ofertas) + busca com debounce (o header escreve ?q=) + paginação.
+//
+// PADRÃO DA ABERTURA = MAIS VENDIDOS (ranking do banco via RPC migration-22).
+// Loja ainda sem vendas? A aba não fica vazia: mostramos os destaques (mais
+// vistos) e o título avisa "destaques da loja" — o filtro escolhido pelo
+// lojista continua sendo "Mais vendidos".
+//
+// Modos via URL: (vazio)=mais vendidos · ?cat=todas · ?cat=<slug> ·
+// ?cat=ofertas (promoções no ar, funciona mesmo sem a categoria Ofertas) · ?q=
 export default function Home() {
   const { settings, categories } = useStore()
   const openStatus = getOpenStatus(settings)
@@ -26,17 +33,68 @@ export default function Home() {
   const [totalCount, setTotalCount] = useState(0)
   const [loadError, setLoadError] = useState(null)
   const [sort, setSort] = useState('recent')
+  const [bestFallback, setBestFallback] = useState(false) // sem vendas → destaques
 
   const activeCat = categories.find((c) => c.slug === catSlug)
+  const isBest = !q && !catSlug
+  const isOfertas = catSlug === 'ofertas'
+  const isAll = catSlug === 'todas'
+  const isSearch = Boolean(q)
 
+  // ---------- carregamento ----------
   const fetchProducts = useCallback(async (from, append) => {
     if (append) setLoadingMore(true); else setLoading(true)
     setLoadError(null)
 
-    // A categoria é resolvida por product_categories (N:N criado na migration-11),
-    // o MESMO lugar onde a tela de promoções vincula o produto a "Ofertas".
-    // O embed !inner só entra quando há categoria ativa: sem ele, produto sem
-    // categoria continuaria aparecendo na vitrine "Todas".
+    // MAIS VENDIDOS: ranking do banco (soma de order_items). Sem vendas
+    // (ou migration-22 ausente), cai nos destaques — vitrine nunca abre vazia.
+    if (isBest) {
+      setBestFallback(false)
+      let ranked = []
+      try {
+        const { data: top, error: rpcErr } = await supabase.rpc('top_selling_products', { p_limit: BEST_LIMIT })
+        if (!rpcErr && top?.length) {
+          const ids = top.map((t) => t.product_id)
+          const { data: list } = await supabase
+            .from('products')
+            .select('*, categories!products_category_id_fkey(name, slug)')
+            .eq('active', true)
+            .in('id', ids)
+          if (list?.length) {
+            const rank = new Map(ids.map((id, i) => [id, i]))
+            ranked = [...list].sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999))
+          }
+        }
+      } catch { /* RPC ausente/erro: destaques */ }
+      if (ranked.length) {
+        setProducts(ranked)
+        setTotalCount(ranked.length)
+        setHasMore(false)
+        setLoading(false)
+        return
+      }
+      // fallback: destaques da loja (mais vistos)
+      const { data: feat, error } = await supabase
+        .from('products')
+        .select('*, categories!products_category_id_fkey(name, slug)')
+        .eq('active', true)
+        .order('views', { ascending: false })
+        .limit(BEST_LIMIT)
+      if (error) {
+        setLoadError(error.message ?? 'Falha ao carregar os produtos.')
+        setProducts([]); setTotalCount(0); setHasMore(false)
+      } else {
+        setBestFallback(true)
+        setProducts(feat ?? [])
+        setTotalCount(feat?.length ?? 0)
+        setHasMore(false)
+      }
+      setLoading(false)
+      return
+    }
+
+    // demais modos: categoria (via product_categories da migration-11),
+    // ofertas (promo no ar, independente da categoria existir) ou busca
     let query = supabase
       .from('products')
       .select(
@@ -51,8 +109,8 @@ export default function Home() {
       )
 
     if (activeCat) query = query.eq('product_categories.category_id', activeCat.id)
-    // "Ofertas" só lista promoção no ar (promo_until no futuro), como no preço
-    if (activeCat?.slug === 'ofertas') {
+    if (isOfertas) {
+      // promoção ATIVA, igual ao preço exibido no card (hasActivePromo)
       query = query.not('promo_price', 'is', null).gt('promo_until', new Date().toISOString())
     }
     if (q) {
@@ -65,7 +123,6 @@ export default function Home() {
       const list = data ?? []
       setProducts((prev) => (append ? [...prev, ...list] : list))
       if (typeof count === 'number') setTotalCount(count)
-      // com o total exato não sobra um clique extra quando o total é múltiplo da página
       setHasMore(typeof count === 'number' ? from + list.length < count : list.length === PAGE_SIZE)
     } else {
       console.error('[vitrine] erro ao carregar produtos:', error?.message ?? error)
@@ -73,20 +130,28 @@ export default function Home() {
       if (!append) { setProducts([]); setTotalCount(0); setHasMore(false) }
     }
     if (append) setLoadingMore(false); else setLoading(false)
-  }, [activeCat, q, sort])
+  }, [activeCat, q, sort, isBest, isOfertas])
 
   useEffect(() => {
-    if (catSlug && categories.length === 0) return
+    if (catSlug && catSlug !== 'todas' && catSlug !== 'ofertas' && categories.length === 0) return
     fetchProducts(0, false)
   }, [fetchProducts, catSlug, categories.length])
 
   function loadMore() { fetchProducts(products.length, true) }
 
-  function selectCategory(slug) {
+  function selectFilter(value) {
     const params = new URLSearchParams(searchParams)
-    if (slug) params.set('cat', slug); else params.delete('cat')
-    setSearchParams(params)
+    if (value) params.set('cat', value); else params.delete('cat')
+    setSearchParams(params, { preventScrollReset: true })
   }
+
+  // rótulos do modo atual (título + botão do dropdown)
+  const currentLabel = isSearch
+    ? 'Resultados da busca'
+    : isBest ? 'Mais vendidos'
+    : isAll ? 'Todos os produtos'
+    : isOfertas ? 'Todas as ofertas'
+    : (activeCat?.name ?? catSlug)
 
   return (
     <div className="space-y-6">
@@ -115,35 +180,38 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FILTROS POR CATEGORIA (todos os tamanhos de tela) */}
-      <div>
-        <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-gray-400">Explorar categorias</h2>
-        <div className="flex gap-2.5 overflow-x-auto py-1 [scrollbar-width:none]">
-          <Chips active={!catSlug} onClick={() => selectCategory('')} label="Todas" />
-          {categories.map((c) => (
-            <Chips key={c.id} active={catSlug === c.slug} onClick={() => selectCategory(c.slug)} label={c.name} />
-          ))}
-        </div>
-      </div>
+      {/* EXPLORAR — dropdown (padrão: Mais vendidos) */}
+      <ExploreMenu
+        label={currentLabel}
+        onSelect={selectFilter}
+        current={catSlug}
+        categories={categories}
+        searching={isSearch}
+      />
 
       <div id="produtos" className="flex flex-wrap items-center justify-between gap-2 scroll-mt-24">
         <h3 className="text-lg font-bold text-gray-800">
-          {activeCat ? activeCat.name : 'Todos os produtos'}
+          {currentLabel}
+          {bestFallback && <span className="ml-2 text-sm font-normal text-gray-400">· destaques da loja</span>}
+          {isBest && !bestFallback && <span className="ml-2 text-sm font-normal text-gray-400">· top {products.length}</span>}
           {q && <span className="ml-2 text-sm font-normal text-gray-500">· busca: “{q}”</span>}
         </h3>
         <div className="flex items-center gap-2">
           <span className="hidden text-xs text-gray-400 sm:inline">{totalCount} produto(s)</span>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            className="input w-36 py-1.5 text-xs"
-            aria-label="Ordenar produtos"
-          >
-            <option value="recent">Mais recentes</option>
-            <option value="views">Mais vistos</option>
-            <option value="price_asc">Menor preço</option>
-            <option value="price_desc">Maior preço</option>
-          </select>
+          {/* ordenação não faz sentido no ranking de vendos */}
+          {!isBest && (
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+              className="input w-36 py-1.5 text-xs"
+              aria-label="Ordenar produtos"
+            >
+              <option value="recent">Mais recentes</option>
+              <option value="views">Mais vistos</option>
+              <option value="price_asc">Menor preço</option>
+              <option value="price_desc">Maior preço</option>
+            </select>
+          )}
         </div>
       </div>
 
@@ -152,7 +220,6 @@ export default function Home() {
           {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : loadError ? (
-        // falha de rede/RLS NÃO é "nada encontrado": o lojista precisa saber a diferença
         <div className="card flex flex-col items-center gap-2 py-16 text-center text-gray-500">
           <p className="font-medium text-gray-700">Não foi possível carregar os produtos</p>
           <p className="text-sm">{loadError}</p>
@@ -164,11 +231,10 @@ export default function Home() {
         <div className="card flex flex-col items-center gap-2 py-16 text-center text-gray-500">
           <SearchX className="h-8 w-8 text-gray-300" />
           <p className="font-medium">Nenhum produto encontrado</p>
-          <p className="text-sm">Tente outra busca ou remova os filtros de categoria.</p>
+          <p className="text-sm">Tente outra busca ou escolha outro filtro no Explorar.</p>
         </div>
       ) : (
         <>
-          {/* 2 colunas no mobile para exibir mais itens por vez */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
             {products.map((p) => <ProductCard key={p.id} product={p} />)}
           </div>
@@ -186,6 +252,95 @@ export default function Home() {
   )
 }
 
+// ============ DROPDOWN "EXPLORAR" ============
+// Mais vendidos (padrão) · Todos os produtos · CATEGORIAS (lista) · Ofertas.
+// Fora-clique e ESC fecham; foco volta ao botão que abriu.
+function ExploreMenu({ label, current, categories, onSelect, searching }) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef(null)
+  const btnRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onClick = (e) => { if (!wrapRef.current?.contains(e.target)) setOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') { setOpen(false); btnRef.current?.focus() } }
+    document.addEventListener('mousedown', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  function pick(value) {
+    setOpen(false)
+    onSelect(value)
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2" ref={wrapRef}>
+      <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400">Explorar</h2>
+      <div className="relative">
+        <button
+          ref={btnRef}
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          className="flex min-h-11 w-full min-w-[13rem] items-center justify-between gap-3 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-gray-800 shadow-sm ring-1 ring-gray-200 transition hover:ring-primary/40 sm:w-auto"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            {current === '' && !searching && <Flame className="h-4 w-4 shrink-0 text-primary" />}
+            <span className="truncate">{searching ? 'Resultados da busca' : label}</span>
+          </span>
+          <ChevronDown className={'h-4 w-4 shrink-0 text-gray-400 transition ' + (open ? 'rotate-180' : '')} />
+        </button>
+
+        {open && (
+          <div
+            role="menu"
+            aria-label="Explorar produtos"
+            className="toast-in absolute right-0 z-40 mt-2 max-h-[70dvh] w-72 overflow-y-auto rounded-2xl bg-white p-1.5 shadow-2xl ring-1 ring-gray-200"
+          >
+            <MenuItem icon={Flame} label="Mais vendidos" desc="Os preferidos da loja" active={current === '' && !searching} onClick={() => pick('')} />
+            <MenuItem icon={Package} label="Todos os produtos" active={current === 'todas'} onClick={() => pick('todas')} />
+
+            <p className="mt-1 px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+              Categorias
+            </p>
+            {categories.length === 0 && (
+              <p className="px-3 py-2 text-xs text-gray-400">Nenhuma categoria cadastrada.</p>
+            )}
+            {categories.map((c) => (
+              <MenuItem key={c.id} icon={ChevronRight} label={c.name} active={current === c.slug} onClick={() => pick(c.slug)} />
+            ))}
+
+            <div className="my-1.5 h-px bg-gray-100" role="presentation" />
+            <MenuItem icon={Tag} label="Todas as ofertas" desc="Promoções no ar" active={current === 'ofertas'} onClick={() => pick('ofertas')} />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MenuItem({ icon: Icon, label, desc, active, onClick }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className={'flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition ' +
+        (active ? 'bg-primary/10 font-bold text-primary' : 'font-medium text-gray-700 hover:bg-gray-50')}
+    >
+      {Icon && <Icon className="h-4 w-4 shrink-0 opacity-70" />}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {desc && <span className="shrink-0 text-[11px] text-gray-400">{desc}</span>}
+      {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+    </button>
+  )
+}
+
 // Skeleton: sensação de velocidade no mobile (sem spinner solitário)
 function SkeletonCard() {
   return (
@@ -197,21 +352,5 @@ function SkeletonCard() {
         <div className="h-6 w-1/3 animate-pulse rounded bg-gray-200" />
       </div>
     </div>
-  )
-}
-
-function Chips({ active, onClick, label }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={'inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold ring-1 transition duration-200 active:scale-95 ' +
-        (active
-          ? 'bg-secondary text-white ring-secondary shadow-md'
-          : 'bg-white text-gray-600 ring-gray-200 hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md hover:ring-primary/30')}
-    >
-      {active && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
-      {label}
-    </button>
   )
 }

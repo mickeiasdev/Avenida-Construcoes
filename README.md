@@ -92,6 +92,7 @@ No `src/index.css`, importe o Tailwind e registre as cores dinâmicas:
 | [migration-19.sql](supabase/migration-19.sql) | **WhatsApp no painel** — tabela `whatsapp_chats` (selo de não lidas + Realtime) |
 | [migration-20.sql](supabase/migration-20.sql) | **Tamanho da fonte do sistema** (`store_settings.font_scale`) — ajustável em /admin/configuracoes |
 | [migration-21.sql](supabase/migration-21.sql) | **CPF completo no fluxo**: `orders.customer_cpf` (coluna própria), `place_order` grava CPF + observação (visitante incluso), guarda CPF no perfil do comprador e `lookup_cpf_account` sugere "entrar na sua conta" no checkout sem login |
+| [migration-22.sql](supabase/migration-22.sql) | **Mais vendidos**: RPC `top_selling_products` (ranking público por soma de order_items) — a vitrine abre por padrão nos mais vendidos, com destaques como fallback para loja sem vendas |
 
    > ⚠️ **A migration-8 é obrigatória para o checkout seguro.** Sem ela o app continua
    > funcionando, mas cai no caminho antigo (preço calculado no navegador) e registra
@@ -400,6 +401,7 @@ vercel.json                       # SPA fallback para o deploy
 - [x] Rodar `supabase/migration-19.sql` (WhatsApp no painel — só se for usar o atendimento)
 - [x] Rodar `supabase/migration-20.sql` (tamanho da fonte configurável nas Configurações)
 - [x] Rodar `supabase/migration-21.sql` (CPF no pedido/perfil + sugestão de login por CPF)
+- [x] Rodar `supabase/migration-22.sql` (vitrine abre nos mais vendidos)
 - [x] Criar `admin@teste.com` e `cliente@teste.com` no Auth (auto-confirm)
 - [x] Rodar os UPDATEs para promover o admin
 - [x] Preencher `.env` com URL e anon key

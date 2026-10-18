@@ -53,7 +53,10 @@ Deno.serve(async (req) => {
 
   // ---------- quem está chamando? ----------
   const authHeader = req.headers.get('Authorization') ?? ''
-  const token = authHeader.replace(/^Bearers+/i, '').trim()
+  // tira o prefixo "Bearer " DE VERDADE: a regex antiga ("Bearers+") não casava
+  // com o espaço — o token ia com prefixo colado, o getUser falhava e o cliente
+  // LOGADO tomava "Faça login para pagar este pedido" (visitante não sofria).
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim()
   let callerId: string | null = null
   if (token) {
     const { data } = await supabase.auth.getUser(token)

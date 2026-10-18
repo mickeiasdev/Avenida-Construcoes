@@ -235,6 +235,23 @@ drop policy if exists "admin delete store assets" on storage.objects;
 create policy "admin delete store assets" on storage.objects
   for delete using (bucket_id = 'store' and public.is_admin());
 
+-- Mais vendidos da vitrine (ranking público; visitante não lê order_items,
+-- então a função roda como SECURITY DEFINER e devolve só id + total).
+create or replace function public.top_selling_products(p_limit int default 12)
+returns table (product_id uuid, sold bigint)
+language sql security definer set search_path = public as $$
+  select oi.product_id, coalesce(sum(oi.quantity), 0)::bigint as sold
+    from public.order_items oi
+    join public.orders o on o.id = oi.order_id
+   where oi.product_id is not null
+     and o.status <> 'cancelled'
+   group by oi.product_id
+   order by sold desc, max(o.created_at) desc
+   limit greatest(1, least(coalesce(p_limit, 12), 50))
+$$;
+revoke all on function public.top_selling_products(int) from public;
+grant execute on function public.top_selling_products(int) to anon, authenticated;
+
 -- SEED (produção): só a identidade da loja — produtos e categorias
 -- são cadastrados pelo painel admin (/admin/produtos e /admin/categorias)
 insert into public.store_settings (id) values (1) on conflict (id) do nothing;
