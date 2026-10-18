@@ -35,7 +35,7 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirmar'
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end mb-4">
           <button type="button" className="btn-soft" onClick={onCancel}>
             {cancelLabel}
           </button>
