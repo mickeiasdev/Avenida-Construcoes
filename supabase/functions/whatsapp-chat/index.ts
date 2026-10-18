@@ -614,6 +614,63 @@ Deno.serve(async (req) => {
       return json({ configured: true, ok: true })
     }
 
+    // ---------- BAIXAR MÍDIA de uma mensagem (áudio pra ouvir, imagem p/ ver) ----------
+    if (action === 'media') {
+      const chat = personJid(body.chat)
+      const id = String(body.id ?? '')
+      if (!chat || !id) return json({ error: 'Mídia inválida' }, 400)
+      const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/chat/getBase64FromMediaMessage/${inst}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          key: { id, fromMe: Boolean(body.fromMe), remoteJid: chat },
+        }),
+      })
+      if (!r.ok) {
+        const d = await r.json().catch(() => null)
+        return json({ error: 'Não foi possível baixar a mídia (' + r.status + ')' + (d?.response?.message ? ': ' + String(d.response.message).slice(0, 120) : '') }, 502)
+      }
+      const d = await r.json().catch(() => null)
+      const base64 = d?.base64 ?? d?.data?.base64 ?? null
+      const mimetype = d?.mimetype ?? d?.data?.mimetype ?? 'application/octet-stream'
+      if (!base64) return json({ error: 'Mídia não encontrada na Evolution' }, 404)
+      return json({ configured: true, base64, mimetype })
+    }
+
+    // ---------- ENVIAR NOTA DE VOZ (gravação do microfone, base64 PTT) ----------
+    if (action === 'sendVoice') {
+      const chat = personJid(body.chat)
+      const audio = String(body.audio ?? '')
+      if (!chat || !audio) return json({ error: 'Áudio ou conversa inválida' }, 400)
+      if (audio.length > 6_500_000) return json({ error: 'Áudio muito longo (máx. ~4,5 MB)' }, 400)
+      const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/message/sendWhatsAppAudio/${inst}`, {
+        method: 'POST',
+        body: JSON.stringify({ number: chat, audio, delay: Math.floor(Math.random() * 1200) + 500 }),
+      })
+      if (!r.ok) {
+        const d = await r.json().catch(() => null)
+        const first = Array.isArray(d?.response?.message) ? d.response.message[0] : (Array.isArray(d) ? d[0] : null)
+        if (first?.exists === false) return json({ ok: false, reason: 'numero-inexistente' })
+        return json({ ok: false, reason: 'evolution-recusou' })
+      }
+      const now = new Date().toISOString()
+      try {
+        await supabase.rpc('wa_mark_read', { p_jid: chat })
+        await supabase.from('whatsapp_chats').upsert({
+          remote_jid: chat,
+          phone: chat.replace(/@s\.whatsapp\.net|@lid$/, ''),
+          closed: false,
+          last_message: '🎙️ Nota de voz',
+          last_message_at: now,
+          last_from_me: true,
+          unread_count: 0,
+          updated_at: now,
+        }, { onConflict: 'remote_jid' })
+      } catch (e) {
+        console.warn('[whatsapp-chat] sync pós-áudio falhou:', (e as Error)?.message)
+      }
+      return json({ configured: true, ok: true })
+    }
+
     // ---------- MARCAR como lida (2.3.7: markMessageAsRead) ----------
     if (action === 'read') {
       const chat = personJid(body.chat)

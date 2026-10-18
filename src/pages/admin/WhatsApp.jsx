@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  AlertCircle, Archive, ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, FileText, Image as ImageIcon, Loader2, MessageCircle,
-  Pencil, Plus, PlusCircle, Printer, QrCode, RefreshCw, Search, Send, Smartphone, Tag, TicketPercent, X, Zap,
+  AlertCircle, Archive, ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, Download, ExternalLink, FileText, FolderOpen,
+  Image as ImageIcon, Loader2, MessageCircle, Mic, Pause, Pencil, Play, Plus, PlusCircle, Printer, QrCode, RefreshCw, Search, Send,
+  Smartphone, Square, Tag, TicketPercent, X, Zap,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { waCall, toJid } from '../../lib/whatsappChat'
@@ -117,6 +118,21 @@ export default function WhatsAppAdmin() {
   const [couponList, setCouponList] = useState(null)
   useModalA11y(productOpen, () => setProductOpen(false))
   useModalA11y(couponOpen, () => setCouponOpen(false))
+  // central de mídias (mensagens inteiras p/ abas de mídia/arquivo/link)
+  const [galleryOpen, setGalleryOpen] = useState(false)
+  const [galleryTab, setGalleryTab] = useState('midias') // 'midias' | 'arquivos' | 'links'
+  const [galleryMsgs, setGalleryMsgs] = useState(null)
+  useModalA11y(galleryOpen, () => setGalleryOpen(false))
+  // player de áudio / lightbox de imagem / download
+  const [lightbox, setLightbox] = useState(null) // { base64, mimetype, busy }
+  const audioCacheRef = useRef(new Map()) // id -> dataURL
+  const [playingId, setPlayingId] = useState(null)
+  const audioElRef = useRef(null)
+  // gravação de nota de voz
+  const [recording, setRecording] = useState(null) // { stream, recorder, seconds }
+  const recTimerRef = useRef(null)
+  const [voicePreview, setVoicePreview] = useState(null) // { blob, dataUrl, seconds, busy }
+  const recordSecondsRef = useRef(0)
   const [editList, setEditList] = useState([])   // [{ label, text }] em edição
   const [repliesBusy, setRepliesBusy] = useState(false)
   const [repliesMsg, setRepliesMsg] = useState(null)
@@ -533,6 +549,145 @@ export default function WhatsAppAdmin() {
       loadChats()
     } catch (e) {
       setError(e.message)
+    }
+  }
+
+  // ---------- central de mídias / áudio / gravação ----------
+  async function openGallery() {
+    setGalleryOpen(true)
+    setGalleryTab('midias')
+    setGalleryMsgs(null)
+    try {
+      const d = await waCall('messages', { chat: activeJid, count: 100 })
+      setGalleryMsgs(d.messages ?? [])
+    } catch (e) {
+      setGalleryMsgs([])
+      setError('Não foi possível carregar a central de mídias: ' + (e?.message ?? 'erro'))
+    }
+  }
+
+  async function fetchMedia(msg) {
+    if (audioCacheRef.current.has(msg.id)) return audioCacheRef.current.get(msg.id)
+    const d = await waCall('media', { chat: activeJid, id: msg.id, fromMe: msg.fromMe })
+    const url = 'data:' + (d.mimetype ?? 'application/octet-stream') + ';base64,' + d.base64
+    audioCacheRef.current.set(msg.id, url)
+    return url
+  }
+
+  async function playAudio(msg) {
+    try {
+      if (playingId === msg.id) {
+        audioElRef.current?.pause()
+        setPlayingId(null)
+        return
+      }
+      const url = await fetchMedia(msg)
+      if (!audioElRef.current) {
+        audioElRef.current = new Audio()
+        audioElRef.current.onended = () => setPlayingId(null)
+      }
+      audioElRef.current.src = url
+      audioElRef.current.play()
+      setPlayingId(msg.id)
+    } catch (e) {
+      window.alert('Não foi possível reproduzir o áudio (' + (e?.message ?? 'erro') + ').')
+    }
+  }
+
+  async function openImage(msg) {
+    setLightbox({ busy: true })
+    try {
+      const url = await fetchMedia(msg)
+      setLightbox({ base64: url })
+    } catch (e) {
+      setLightbox(null)
+      window.alert('Não foi possível abrir a mídia (' + (e?.message ?? 'erro') + ').')
+    }
+  }
+
+  async function downloadDoc(msg) {
+    try {
+      const url = await fetchMedia(msg)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = msg.text?.replace(/^📄 /, '') || 'arquivo'
+      a.click()
+    } catch (e) {
+      window.alert('Não foi possível baixar (' + (e?.message ?? 'erro') + ').')
+    }
+  }
+
+  // ---------- gravação de nota de voz ----------
+  async function startRecording() {
+    if (!activeJid || recording || voicePreview) return
+    setError(null)
+    if (!navigator.mediaDevices?.getUserMedia) {
+      window.alert('Seu navegador não suporta gravação de áudio. Use o Chrome/Edge atualizado.')
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const chunks = []
+      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '')
+      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream)
+      recorder.ondataavailable = (e) => { if (e.data?.size > 0) chunks.push(e.data) }
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop())
+        const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' })
+        if (blob.size < 1000) { setRecording(null); return }
+        const seconds = recordSecondsRef.current
+        const fr = new FileReader()
+        fr.onload = () => setVoicePreview({ blob, dataUrl: fr.result, seconds, busy: false })
+        fr.readAsDataURL(blob)
+      }
+      recorder.start()
+      const rec = { stream, recorder, seconds: 0 }
+      setRecording(rec)
+      recordSecondsRef.current = 0
+      recTimerRef.current = setInterval(() => {
+        recordSecondsRef.current += 1
+        setRecording((prev) => (prev ? { ...prev, seconds: recordSecondsRef.current } : prev))
+      }, 1000)
+    } catch (e) {
+      if (String(e?.name) === 'NotAllowedError') {
+        window.alert('Permissão de microfone negada. Libere o microfone nas configurações do site para gravar.')
+      } else {
+        window.alert('Não foi possível acessar o microfone (' + (e?.message ?? 'erro') + ').')
+      }
+    }
+  }
+
+  function stopRecording() {
+    if (!recording) return
+    if (recTimerRef.current) clearInterval(recTimerRef.current)
+    recording.recorder.stop()
+    setRecording(null)
+  }
+
+  function cancelRecording() {
+    if (!recording) return
+    if (recTimerRef.current) clearInterval(recTimerRef.current)
+    recording.stream.getTracks().forEach((t) => t.stop())
+    setRecording(null)
+  }
+
+  async function sendVoiceNow() {
+    const v = voicePreview
+    if (!v || v.busy || !activeJid) return
+    setVoicePreview({ ...v, busy: true })
+    setError(null)
+    try {
+      const res = await waCall('sendVoice', { chat: activeJid, audio: v.dataUrl.split(',')[1] })
+      if (res?.ok === false) {
+        window.alert('Áudio NÃO enviado: o número não está no WhatsApp — confira o contato.')
+      } else {
+        setVoicePreview(null)
+        await loadMessages(activeJid)
+        loadChats()
+      }
+    } catch (e) {
+      window.alert('Falha ao enviar o áudio (' + (e?.message ?? 'erro') + '). Tente novamente.')
+      setVoicePreview((prev) => (prev ? { ...prev, busy: false } : null))
     }
   }
 
@@ -984,24 +1139,105 @@ export default function WhatsAppAdmin() {
                         Início da conversa. Envie a primeira mensagem 👋
                       </div>
                     )}
-                    {messages.map((m) => (
-                      <div key={m.id} className={'flex ' + (m.fromMe ? 'justify-end' : 'justify-start')}>
-                        <div
-                          className={'max-w-[82%] rounded-2xl px-3.5 py-2 text-sm shadow-sm sm:max-w-md '
-                            + (m.fromMe
-                              ? 'rounded-br-md bg-primary text-white'
-                              : 'rounded-bl-md bg-white text-gray-800 ring-1 ring-gray-200')}
-                        >
-                          <p className="whitespace-pre-wrap break-words">{m.text}</p>
-                          <span className={'mt-1 block text-right text-[10px] ' + (m.fromMe ? 'text-white/70' : 'text-gray-400')}>
-                            {new Date(m.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                            {m.fromMe && <Check className="ml-1 inline h-3 w-3" />}
-                          </span>
+                    {messages.map((m, i) => {
+                      const prev = messages[i - 1]
+                      const showDate = !prev || new Date(prev.at).toDateString() !== new Date(m.at).toDateString()
+                      const isToday = new Date(m.at).toDateString() === new Date().toDateString()
+                      const isYesterday = (() => {
+                        const y = new Date(); y.setDate(y.getDate() - 1)
+                        return new Date(m.at).toDateString() === y.toDateString()
+                      })()
+                      const dateLabel = isToday ? 'HOJE' : isYesterday ? 'ONTEM' : new Date(m.at).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()
+                      const hhmm = new Date(m.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                      return (
+                        <div key={m.id}>
+                          {showDate && (
+                            <div className="my-2 flex justify-center">
+                              <span className="rounded-lg bg-gray-200/70 px-3 py-1 text-[11px] font-bold text-gray-600">{dateLabel}</span>
+                            </div>
+                          )}
+                          <div className={'flex ' + (m.fromMe ? 'justify-end' : 'justify-start')}>
+                            <div
+                              className={'max-w-[82%] rounded-2xl px-3.5 py-2 text-sm shadow-sm sm:max-w-md '
+                                + (m.fromMe
+                                  ? 'rounded-br-md bg-primary text-white'
+                                  : 'rounded-bl-md bg-white text-gray-800 ring-1 ring-gray-200')}
+                            >
+                              {m.type === 'audio' ? (
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    className={'flex h-9 w-9 shrink-0 items-center justify-center rounded-full '
+                                      + (m.fromMe ? 'bg-white/20 text-white' : 'bg-primary/10 text-primary')}
+                                    onClick={() => playAudio(m)}
+                                    aria-label={playingId === m.id ? 'Pausar áudio' : 'Ouvir áudio'}
+                                    title={playingId === m.id ? 'Pausar' : 'Ouvir'}
+                                  >
+                                    {playingId === m.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                                  </button>
+                                  <span className={'text-xs ' + (m.fromMe ? 'text-white/80' : 'text-gray-500')}>
+                                    {playingId === m.id ? 'Tocando…' : 'Nota de voz'} 🎙️
+                                  </span>
+                                </div>
+                              ) : m.type === 'image' ? (
+                                <button
+                                  type="button"
+                                  className={'flex items-center gap-2 ' + (m.fromMe ? 'text-white' : 'text-gray-700')}
+                                  onClick={() => openImage(m)}
+                                  title="Ver imagem"
+                                >
+                                  <ImageIcon className="h-4 w-4" /> {m.text || '📷 Foto'}
+                                </button>
+                              ) : m.type === 'document' ? (
+                                <button
+                                  type="button"
+                                  className={'flex items-center gap-2 ' + (m.fromMe ? 'text-white' : 'text-gray-700')}
+                                  onClick={() => downloadDoc(m)}
+                                  title="Baixar arquivo"
+                                >
+                                  <Download className="h-4 w-4" /> {m.text || '📄 Arquivo'}
+                                </button>
+                              ) : (
+                                <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                              )}
+                              <span className={'mt-1 block text-right text-[10px] ' + (m.fromMe ? 'text-white/70' : 'text-gray-400')}>
+                                {hhmm}
+                                {m.fromMe && <Check className="ml-1 inline h-3 w-3" />}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                     <div ref={bottomRef} />
                   </div>
+
+                  {/* prévia da nota de voz gravada (revisar antes de enviar) */}
+                  {voicePreview && (
+                    <div className="flex items-center gap-3 border-t border-gray-100 bg-green-50 px-3 py-2.5">
+                      <audio src={voicePreview.dataUrl} controls className="h-9 max-w-[55%]" />
+                      <span className="text-xs font-semibold text-green-700">{voicePreview.seconds}s</span>
+                      <div className="ml-auto flex gap-2">
+                        <button
+                          type="button"
+                          className="btn-soft min-h-9 px-3 text-xs"
+                          onClick={() => setVoicePreview(null)}
+                          disabled={voicePreview.busy}
+                        >
+                          <X className="h-3.5 w-3.5" /> Descartar
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-primary min-h-9 px-3 text-xs"
+                          onClick={sendVoiceNow}
+                          disabled={voicePreview.busy}
+                        >
+                          {voicePreview.busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                          Enviar áudio
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* respostas rápidas (menu ⚡) + envio */}
                   <form onSubmit={handleSend} className="border-t border-gray-100 bg-white">
@@ -1144,14 +1380,46 @@ export default function WhatsAppAdmin() {
                         onKeyDown={onKeyDown}
                         aria-label="Mensagem"
                       />
-                      <button
-                        type="submit"
-                        className="btn-primary min-h-11 min-w-11 shrink-0 !px-3"
-                        disabled={sending || !draft.trim()}
-                        aria-label="Enviar mensagem"
-                      >
-                        {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-                      </button>
+                      {recording ? (
+                        <>
+                          <button
+                            type="button"
+                            className="flex h-11 min-w-11 items-center gap-2 rounded-lg bg-red-50 px-3 text-xs font-bold text-red-600 ring-1 ring-red-200"
+                            onClick={cancelRecording}
+                            aria-label="Cancelar gravação"
+                          >
+                            <Square className="h-4 w-4" /> {recording.seconds}s · cancelar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-primary min-h-11 shrink-0 !px-4"
+                            onClick={stopRecording}
+                            aria-label="Parar e revisar gravação"
+                          >
+                            <Square className="h-4 w-4" /> Parar
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="submit"
+                          className="btn-primary min-h-11 min-w-11 shrink-0 !px-3"
+                          disabled={sending || !draft.trim()}
+                          aria-label="Enviar mensagem"
+                        >
+                          {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                        </button>
+                      )}
+                      {!recording && !voicePreview && !draft.trim() && (
+                        <button
+                          type="button"
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500 ring-1 ring-gray-200 transition hover:bg-primary/10 hover:text-primary hover:ring-primary/30"
+                          onClick={startRecording}
+                          aria-label="Gravar nota de voz"
+                          title="Gravar nota de voz"
+                        >
+                          <Mic className="h-5 w-5" />
+                        </button>
+                      )}
                     </div>
                   </form>
                 </>
@@ -1710,6 +1978,139 @@ export default function WhatsAppAdmin() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ============ modal: central de mídias/arquivos/links ============ */}
+      {galleryOpen && (
+        <div className="fixed inset-0 z-[75] flex items-end justify-center bg-black/50 sm:items-center sm:p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Mídias, arquivos e links"
+            className="toast-in flex max-h-[85dvh] w-full max-w-lg flex-col rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <h2 className="text-lg font-bold text-gray-800">Mídias, arquivos e links</h2>
+              <button type="button" onClick={() => setGalleryOpen(false)} aria-label="Fechar" className="rounded-lg p-1 text-gray-500 hover:bg-gray-100">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex gap-1.5 px-5 pt-3">
+              {[
+                { k: 'midias', l: '🖼️ Mídias' },
+                { k: 'arquivos', l: '📎 Arquivos' },
+                { k: 'links', l: '🔗 Links' },
+              ].map((t) => (
+                <button
+                  key={t.k}
+                  type="button"
+                  onClick={() => setGalleryTab(t.k)}
+                  className={'rounded-full px-3.5 py-1.5 text-xs font-bold transition ' +
+                    (galleryTab === t.k ? 'bg-secondary text-white' : 'bg-gray-100 text-gray-500 hover:text-gray-700')}
+                >
+                  {t.l}
+                </button>
+              ))}
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
+              {galleryMsgs === null ? (
+                <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+              ) : (() => {
+                if (galleryTab === 'links') {
+                  const links = []
+                  for (const m of galleryMsgs ?? []) {
+                    const urls = String(m.text ?? '').match(/https?:\/\/[^\s]+/g) ?? []
+                    for (const u of urls) links.push({ url: u, at: m.at, fromMe: m.fromMe })
+                  }
+                  if (links.length === 0) return <p className="py-10 text-center text-sm text-gray-500">Nenhum link trocado nesta conversa.</p>
+                  return (
+                    <ul className="space-y-2">
+                      {[...links].reverse().slice(0, 50).map((l, i) => (
+                        <li key={i} className="flex items-center gap-2.5 rounded-xl bg-gray-50 p-3 ring-1 ring-gray-100">
+                          <ExternalLink className="h-4 w-4 shrink-0 text-primary" />
+                          <a
+                            href={l.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="min-w-0 flex-1 truncate text-sm font-medium text-primary hover:underline"
+                          >
+                            {l.url}
+                          </a>
+                          <span className="shrink-0 text-[10px] text-gray-400">
+                            {new Date(l.at).toLocaleDateString('pt-BR')}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                }
+                const want = galleryTab === 'midias' ? ['image', 'video'] : ['document']
+                const list = (galleryMsgs ?? []).filter((m) => want.includes(m.type)).reverse().slice(0, 60)
+                if (list.length === 0) {
+                  return (
+                    <p className="py-10 text-center text-sm text-gray-500">
+                      {galleryTab === 'midias' ? 'Nenhuma imagem ou vídeo trocado ainda.' : 'Nenhum arquivo trocado ainda.'}
+                    </p>
+                  )
+                }
+                if (galleryTab === 'midias') {
+                  return (
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                      {list.map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => openImage(m)}
+                          className="flex aspect-square items-center justify-center rounded-xl bg-gray-100 ring-1 ring-gray-200 transition hover:ring-primary/50"
+                          title="Abrir"
+                        >
+                          <span className="text-lg">{m.type === 'video' ? '🎥' : '🖼️'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                }
+                return (
+                  <ul className="space-y-2">
+                    {list.map((m) => (
+                      <li key={m.id} className="flex items-center gap-3 rounded-xl bg-gray-50 p-3 ring-1 ring-gray-100">
+                        <FileText className="h-5 w-5 shrink-0 text-primary" />
+                        <button type="button" className="min-w-0 flex-1 truncate text-left text-sm font-medium text-gray-800 hover:text-primary hover:underline" onClick={() => downloadDoc(m)}>
+                          {m.text?.replace(/^[\u{1F4C4}]\s*/u, '') || 'Arquivo'}
+                        </button>
+                        <span className="shrink-0 text-[10px] text-gray-400">{new Date(m.at).toLocaleDateString('pt-BR')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* lightbox de imagem/vídeo baixado da Evolution */}
+      {lightbox?.base64 && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4" onClick={() => setLightbox(null)}>
+          <div className="relative max-h-full max-w-full" onClick={(e) => e.stopPropagation()}>
+            <img src={lightbox.base64} alt="Mídia da conversa" className="max-h-[85dvh] max-w-full rounded-xl ring-1 ring-white/20" />
+            <button
+              type="button"
+              onClick={() => setLightbox(null)}
+              aria-label="Fechar"
+              className="absolute right-2 top-2 rounded-lg bg-black/60 p-2 text-white hover:bg-black/80"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      )}
+      {lightbox && !lightbox.base64 && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80" role="status">
+          <Loader2 className="h-8 w-8 animate-spin text-white" />
         </div>
       )}
 
