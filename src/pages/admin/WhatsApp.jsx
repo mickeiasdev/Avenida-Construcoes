@@ -677,7 +677,7 @@ export default function WhatsAppAdmin() {
               ) : (
                 <>
                   {/* cabeçalho da conversa */}
-                  <div className="flex items-center gap-3 border-b border-gray-100 bg-white px-3 py-2.5">
+                  <div className="@container flex items-center gap-2 border-b border-gray-100 bg-white px-3 py-2.5">
                     <button
                       type="button"
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 md:hidden"
@@ -695,24 +695,27 @@ export default function WhatsAppAdmin() {
                         {activeJid.endsWith('@lid') ? 'WhatsApp (endereço interno)' : maskPhone(waLocal(activeJidPhone))}
                       </p>
                     </div>
+                    {/* Botões RÍGIDOS (shrink-0) e compactos; os rótulos só
+                        aparecem quando a PRÓPRIA coluna do chat tem espaço
+                        (container query) — o nome nunca mais é espremido. */}
                     <button
                       type="button"
-                      className="btn-soft min-h-9 px-3"
+                      className="btn-soft min-h-9 shrink-0 px-2.5"
                       onClick={closeAttendance}
                       title="Encerrar atendimento — a conversa sai da lista"
                       aria-label="Encerrar atendimento"
                     >
                       <Archive className="h-4 w-4" />
-                      <span className="hidden sm:inline">Encerrar</span>
+                      <span className="hidden @min-[30rem]:inline">Encerrar</span>
                     </button>
                     <button
                       type="button"
-                      className="btn-soft px-3"
+                      className="btn-soft min-h-9 shrink-0 px-2.5"
                       onClick={() => setOrdersOpen(true)}
                       aria-label={'Pedidos deste cliente: ' + activeOrders.length}
                     >
                       <ClipboardList className="h-4 w-4" />
-                      <span className="hidden sm:inline">Pedidos</span>
+                      <span className="hidden @min-[30rem]:inline">Pedidos</span>
                       {activeOrders.length > 0 && (
                         <span className="rounded-full bg-primary px-1.5 text-[11px] font-bold leading-none text-white">
                           {activeOrders.length}
