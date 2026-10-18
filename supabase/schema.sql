@@ -235,7 +235,8 @@ create policy "admin upload store assets" on storage.objects
   for insert with check (bucket_id = 'store' and public.is_admin());
 drop policy if exists "admin update store assets" on storage.objects;
 create policy "admin update store assets" on storage.objects
-  for update using (bucket_id = 'store' and public.is_admin());
+  for update using (bucket_id = 'store' and public.is_admin())
+  with check (bucket_id = 'store' and public.is_admin());
 -- exclusão de arquivo quando produto é excluído ou logo/banner trocados
 drop policy if exists "admin delete store assets" on storage.objects;
 create policy "admin delete store assets" on storage.objects

@@ -70,6 +70,7 @@ supabase db push --yes
 | [migration-26](supabase/migration-26.sql) | CNPJ da loja (cupom/nota de venda) |
 | [migration-27](supabase/migration-27.sql) | Histórico completo + refazer compra (claim_guest_orders) |
 | [migration-28](supabase/migration-28.sql) | Layout da vitrine (loja x cardápio) |
+| [migration-29](supabase/migration-29.sql) | Corrige upload de imagens (RLS Storage com with check) |
 
 ---
 
