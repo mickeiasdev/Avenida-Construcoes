@@ -16,11 +16,9 @@ export function AddToCartModal() {
   return (
     <div
       className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center sm:p-4"
-      onClick={dismissLastAdded}
     >
       <div
         className="toast-in w-full max-w-sm space-y-4 rounded-t-2xl bg-white p-5 pb-7 shadow-2xl ring-1 ring-gray-100 safe-bottom sm:rounded-2xl"
-        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Adicionado ao carrinho"

@@ -20,7 +20,6 @@ export function GuestCheckoutModal({ open, onClose, onContinueGuest, from }) {
   return (
     <div
       className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
-      onClick={onClose}
     >
       <div
         className="toast-in w-full max-w-md space-y-5 rounded-t-2xl bg-white p-6 shadow-2xl safe-bottom sm:rounded-2xl"

@@ -15,7 +15,6 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirmar'
   return (
     <div
       className="fixed inset-0 z-[80] flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
-      onClick={onCancel}
     >
       <div
         className="toast-in w-full max-w-sm space-y-5 rounded-t-2xl bg-white p-6 shadow-2xl safe-bottom sm:rounded-2xl"
