@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  AlertCircle, ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, Loader2, MessageCircle,
+  AlertCircle, Archive, ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, Loader2, MessageCircle,
   PlusCircle, QrCode, RefreshCw, Search, Send, Smartphone, X,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
@@ -10,6 +10,7 @@ import { formatBRL, formatDateTime, maskPhone, onlyDigits, ORDER_CLS, ORDER_NEXT
 import { PAYMENT_LABELS } from '../../lib/storeOrder'
 import { useStore } from '../../context/StoreContext'
 import { useModalA11y } from '../../lib/useModalA11y'
+import { useConfirmDialog } from '../../components/ConfirmDialog'
 
 // ============ WhatsApp da loja, dentro do painel ============
 // Mesma sessão da Evolution API (pareada por QR — igual ao WhatsApp Web):
@@ -67,6 +68,7 @@ export default function WhatsAppAdmin() {
   const { settings } = useStore()
   const navigate = useNavigate()
   const [params] = useSearchParams()
+  const confirm = useConfirmDialog()
 
   const [boot, setBoot] = useState(null)       // { configured, state }
   const [error, setError] = useState(null)
@@ -232,6 +234,28 @@ export default function WhatsAppAdmin() {
     openChat(toJid(waNumber(to)), params.get('text') ?? '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boot, params, loadChats, loadMessages])
+
+  // ---------- encerrar atendimento ----------
+  // A conversa sai da lista do painel (closed=true). Se o cliente mandar
+  // mensagem, o webhook reabre sozinho — nada é apagado.
+  async function closeAttendance() {
+    if (!activeJid) return
+    const who = activeChat ? chatName(activeChat) : maskPhone(waLocal(activeJidPhone))
+    const ok = await confirm.ask({
+      title: 'Encerrar o atendimento com ' + who + '?',
+      message: 'A conversa sai da lista do painel (nada é apagado). Se o cliente mandar mensagem, ela volta sozinha com as não lidas.',
+      confirmLabel: 'Encerrar atendimento',
+    })
+    if (!ok) return
+    try {
+      await waCall('closeChat', { chat: activeJid })
+      setActiveJid(null)
+      setMessages([])
+      loadChats()
+    } catch (e) {
+      setError(e.message)
+    }
+  }
 
   // ---------- enviar ----------
   async function handleSend(e) {
@@ -571,6 +595,16 @@ export default function WhatsAppAdmin() {
                         {activeJid.endsWith('@lid') ? 'WhatsApp (endereço interno)' : maskPhone(waLocal(activeJidPhone))}
                       </p>
                     </div>
+                    <button
+                      type="button"
+                      className="btn-soft min-h-9 px-3"
+                      onClick={closeAttendance}
+                      title="Encerrar atendimento — a conversa sai da lista"
+                      aria-label="Encerrar atendimento"
+                    >
+                      <Archive className="h-4 w-4" />
+                      <span className="hidden sm:inline">Encerrar</span>
+                    </button>
                     <button
                       type="button"
                       className="btn-soft px-3"
@@ -923,6 +957,9 @@ export default function WhatsAppAdmin() {
           </div>
         </div>
       )}
+
+      {/* confirmações (encerrar atendimento) */}
+      {confirm.dialog}
     </div>
   )
 }

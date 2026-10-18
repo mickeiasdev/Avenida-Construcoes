@@ -185,10 +185,22 @@ Deno.serve(async (req) => {
         console.warn('[whatsapp-chat] base de clientes indisponível:', (e as Error)?.message)
       }
 
+      // atendimentos ENCERRADOS ficam fora da lista (closed=true no cache).
+      // Se o cliente mandar mensagem, o webhook reabre e a conversa volta.
+      const closedJids = new Set<string>()
+      try {
+        const { data: closed } = await supabase
+          .from('whatsapp_chats')
+          .select('remote_jid')
+          .eq('closed', true)
+        for (const row of closed ?? []) closedJids.add(String(row.remote_jid))
+      } catch { /* migration-24 ausente: sem filtro */ }
+
       const chats = raw
         .map((c) => {
           const jid = personJid(c?.remoteJid)
           if (!jid) return null // grupos/@newsletter ficam fora
+          if (closedJids.has(jid)) return null // atendimento encerrado
           const last = c?.lastMessage ?? null
           const lastKey = last?.key ?? {}
           const text = extractText(last?.message)
@@ -249,6 +261,7 @@ Deno.serve(async (req) => {
           .from('whatsapp_chats')
           .select('remote_jid, phone, name, last_message, last_message_at, last_from_me')
           .eq('known', true)
+          .eq('closed', false)
         const evoJids = new Set((chats as any[]).map((c: any) => c.jid))
         for (const s of saved ?? []) {
           const jid = personJid(s.remote_jid)
@@ -283,10 +296,28 @@ Deno.serve(async (req) => {
           remote_jid: chat,
           phone: chat.replace(/@s\.whatsapp\.net|@lid$/, ''),
           known: true,
+          closed: false, // abrir/reabrir pelo admin devolve a conversa à lista
           updated_at: new Date().toISOString(),
         }, { onConflict: 'remote_jid' })
       } catch { /* migration opcional */ }
       return json({ configured: true, ok: true })
+    }
+
+    // ---------- ENCERRAR atendimento (sai da lista do painel) ----------
+    if (action === 'closeChat') {
+      const chat = personJid(body.chat)
+      if (!chat) return json({ error: 'Conversa inválida' }, 400)
+      try {
+        await supabase.from('whatsapp_chats').upsert({
+          remote_jid: chat,
+          phone: chat.replace(/@s\.whatsapp\.net|@lid$/, ''),
+          closed: true,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'remote_jid' })
+        return json({ configured: true, ok: true })
+      } catch (e) {
+        return json({ error: 'Não foi possível encerrar: ' + ((e as Error)?.message ?? 'erro') }, 500)
+      }
     }
 
     // ---------- AVISO AUTOMÁTICO ao atualizar o pedido ----------
@@ -336,6 +367,7 @@ Deno.serve(async (req) => {
           phone,
           known: true,
           name: order.customer_name ?? null,
+          closed: false, // novo aviso reabre atendimento encerrado
           last_message: text.slice(0, 500),
           last_message_at: now,
           last_from_me: true,
