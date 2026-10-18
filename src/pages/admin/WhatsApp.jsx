@@ -116,12 +116,12 @@ export default function WhatsAppAdmin() {
         const ordersByPhone = new Map()
         for (const p of profilesRes.data ?? []) {
           const k = key9(p.phone)
-          if (k && p.full_name && !byPhone.has(k)) byPhone.set(k, p.full_name)
+          if (k && p.full_name && !byPhone.has(k)) byPhone.set(k, { name: p.full_name, phone: p.phone })
         }
         for (const o of ordersRes.data ?? []) {
           const k = key9(o.customer_phone)
           if (!k) continue
-          if (o.customer_name && !byPhone.has(k)) byPhone.set(k, o.customer_name)
+          if (o.customer_name && !byPhone.has(k)) byPhone.set(k, { name: o.customer_name, phone: o.customer_phone })
           const arr = ordersByPhone.get(k) ?? []
           arr.push(o)
           ordersByPhone.set(k, arr)
@@ -288,8 +288,12 @@ export default function WhatsAppAdmin() {
 
   // ---------- dados derivados ----------
   const chatName = useCallback((c) => {
-    const local = contacts?.byPhone?.get(key9(c.phone))
-    return local || c.name || maskPhone(waLocal(c.phone))
+    const local = contacts?.byPhone?.get(key9(c.phone))?.name
+    if (local || c.name) return local || c.name
+    // @lid é o endereço interno do WhatsApp (número real escondido por
+    // privacidade) — máscara de DDD aqui viraria número falso
+    if (String(c.jid ?? '').endsWith('@lid')) return 'Contato WhatsApp'
+    return maskPhone(waLocal(c.phone))
   }, [contacts])
 
   const visibleChats = useMemo(() => {
@@ -319,8 +323,8 @@ export default function WhatsAppAdmin() {
     if (!contacts) return []
     const f = newSearch.trim().toLowerCase()
     return [...contacts.byPhone.entries()]
-      .map(([k, name]) => ({ phone: k, name }))
-      .filter(({ name, phone }) => !f || name.toLowerCase().includes(f) || phone.includes(f))
+      .map(([k, v]) => ({ key: k, name: v.name, phone: v.phone, incomplete: onlyDigits(v.phone).length < 10 }))
+      .filter(({ name, phone }) => !f || name.toLowerCase().includes(f) || onlyDigits(phone).includes(onlyDigits(f)))
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
       .slice(0, 8)
   }, [contacts, newSearch])
@@ -498,7 +502,9 @@ export default function WhatsAppAdmin() {
                       <p className="truncate text-sm font-bold text-gray-800">
                         {activeChat ? chatName(activeChat) : 'Nova conversa'}
                       </p>
-                      <p className="truncate text-xs text-gray-500">{maskPhone(waLocal(activeJidPhone))}</p>
+                      <p className="truncate text-xs text-gray-500">
+                        {activeJid.endsWith('@lid') ? 'WhatsApp (endereço interno)' : maskPhone(waLocal(activeJidPhone))}
+                      </p>
                     </div>
                     <button
                       type="button"
@@ -618,8 +624,9 @@ export default function WhatsAppAdmin() {
 
             {qr?.pairingCode && (
               <p className="mt-3 text-sm text-gray-600">
-                Sem câmera? Digite o código:
-                <span className="ml-2 select-all rounded-lg bg-gray-100 px-2 py-1 font-mono text-lg font-bold tracking-widest text-primary ring-1 ring-gray-200">
+                Sem câmera? No celular, escolha "Conectar com número de telefone"
+                e digite o código:
+                <span className="mt-1 block break-all rounded-lg bg-gray-100 px-2 py-1.5 text-center font-mono text-xl font-bold tracking-widest text-primary ring-1 ring-gray-200">
                   {qr.pairingCode}
                 </span>
               </p>
@@ -696,20 +703,35 @@ export default function WhatsAppAdmin() {
                     />
                   </div>
                   <ul className="divide-y divide-gray-50">
-                    {contactsList.map(({ phone, name }) => (
-                      <li key={phone}>
-                        <button
-                          type="button"
-                          className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition hover:bg-gray-50"
-                          onClick={() => {
-                            setNewOpen(false)
-                            openChat(toJid(waNumber(phone)))
-                          }}
-                        >
-                          <Avatar name={name} seed={phone} />
-                          <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800">{name}</span>
-                          <span className="shrink-0 text-xs text-gray-400">{maskPhone(waLocal(phone))}</span>
-                        </button>
+                    {contactsList.map(({ key, phone, name, incomplete }) => (
+                      <li key={key}>
+                        {incomplete ? (
+                          // telefone sem DDD no cadastro: conversa NÃO abre (o
+                          // destino seria inválido) — corrija no painel de Clientes
+                          <div
+                            className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left opacity-75"
+                            title="Telefone sem DDD no cadastro — corrija no painel de Clientes para conversar"
+                          >
+                            <Avatar name={name} seed={phone} />
+                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800">{name}</span>
+                            <span className="shrink-0 rounded-lg bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                              sem DDD
+                            </span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition hover:bg-gray-50"
+                            onClick={() => {
+                              setNewOpen(false)
+                              openChat(toJid(waNumber(phone)))
+                            }}
+                          >
+                            <Avatar name={name} seed={phone} />
+                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800">{name}</span>
+                            <span className="shrink-0 text-xs text-gray-400">{maskPhone(waLocal(phone))}</span>
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>

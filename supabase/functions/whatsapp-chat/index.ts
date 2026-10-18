@@ -5,11 +5,16 @@
 //
 // Ações (POST JSON { action, ...params }):
 //   status   → { configured, state }  estado da conexão (open/close/connecting)
-//   connect  → { base64, pairingCode } QR code + código para parear o celular
+//   connect  → { base64, pairingCode } QR + código para parear o celular
 //   chats    → { chats } lista de conversas (e sincroniza o selo de não lidas)
 //   messages → { messages } histórico de uma conversa  { chat }
 //   send     → { ok } envia texto       { chat, text }
 //   read     → { ok } marca como lida   { chat, id? }
+//
+// Formatos conferidos com a Evolution API v2.3.7 (findChats devolve array
+// direto; findMessages espera o jid NO CORPO e responde messages.records;
+// leitura é markMessageAsRead com o id da mensagem). Conversas @lid (o novo
+// endereço interno do WhatsApp) são conversas 1:1 válidas — entram na lista.
 //
 // Segurança: verify_jwt = true (config.toml) garante JWT válido no gateway;
 // aqui dentro confirmamos que o dono do JWT é admin (defesa em profundidade).
@@ -45,12 +50,10 @@ function jwtSub(req: Request): string | null {
   }
 }
 
-const onlyDigits = (v: unknown) => String(v ?? '').replace(/\D/g, '')
-
-// JID válido = conversa 1:1 com número (sem grupos/@newsletter/@broadcast)
+// conversas 1:1: número real (@s.whatsapp.net) ou endereço interno (@lid)
 function personJid(jid: unknown): string | null {
   const j = String(jid ?? '')
-  return j.endsWith('@s.whatsapp.net') ? j : null
+  return j.endsWith('@s.whatsapp.net') || j.endsWith('@lid') ? j : null
 }
 
 // Baileys guarda o texto em campos diferentes por tipo de mensagem —
@@ -93,6 +96,12 @@ async function evoFetch(url: string, key: string, instance: string, path: string
   })
 }
 
+// o primeiro candidato que for DE FATO array vence — nunca confiar em chave só
+function firstArray(...candidates: unknown[]): any[] {
+  for (const c of candidates) if (Array.isArray(c)) return c
+  return []
+}
+
 // ---------- handler ----------
 
 Deno.serve(async (req) => {
@@ -116,7 +125,6 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}))
   const action = String(body.action ?? '')
   if (!configured) {
-    // painel mostra o passo a passo de configuração
     if (action === 'status') return json({ configured: false })
     return json({ error: 'WhatsApp não configurado (EVOLUTION_API_URL/KEY/INSTANCE no Supabase)' }, 400)
   }
@@ -136,38 +144,44 @@ Deno.serve(async (req) => {
     if (action === 'connect') {
       const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/instance/connect/${inst}`)
       const d = await r.json().catch(() => ({}))
+      // ATENÇÃO: d.code é a string CRUA do QR (gigante) — só o pairingCode
+      // (8 dígitos) é o "código sem câmera". Nunca mostrar d.code no painel.
+      const pc = d?.pairingCode
       return json({
         configured: true,
-        base64: d?.base64 ?? null,                     // data:image/png;base64,...
-        pairingCode: d?.pairingCode ?? d?.code ?? null, // código de 8 dígitos p/ digitar
+        base64: d?.base64 ?? null,
+        pairingCode: typeof pc === 'string' && pc ? pc : null,
         state: d?.instance?.state ?? d?.state ?? null,
       })
     }
 
-    // ---------- LISTA de conversas ----------
+    // ---------- LISTA de conversas (2.3.7: array direto na raiz) ----------
     if (action === 'chats') {
       const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/chat/findChats/${inst}`, {
         method: 'POST', body: JSON.stringify({}),
       })
       const d = await r.json().catch(() => ({}))
-      const raw: any[] = d?.chats ?? d?.response ?? (Array.isArray(d) ? d : [])
+      const raw = firstArray(d, d?.chats, d?.response)
 
       const chats = raw
         .map((c) => {
-          const jid = personJid(c?.id?.remoteJid ?? c?.id ?? c?.remoteJid ?? c?.jid)
-          if (!jid) return null
-          const last = c?.lastMessage ?? c?.last_message ?? null
+          const jid = personJid(c?.remoteJid)
+          if (!jid) return null // grupos/@newsletter ficam fora
+          const last = c?.lastMessage ?? null
           const lastKey = last?.key ?? {}
-          const text = (extractText(last?.message) ?? String(last?.text ?? '')) || null
-          const at = toMs(last?.messageTimestamp ?? last?.messageTimestamp?.low ?? c?.conversationTimestamp)
-          const name = typeof c?.name === 'string' && c.name.trim() ? c.name : null
+          const text = extractText(last?.message)
+          const ts = toMs(last?.messageTimestamp)
+            ?? (c?.updatedAt ? Date.parse(String(c.updatedAt)) : null)
+          // pushName é o nome do CONTATO ("Você" marca mensagens nossas)
+          const push = typeof c?.pushName === 'string' && c.pushName.trim() && c.pushName !== 'Você' ? c.pushName : null
+          const name = push ?? (typeof c?.name === 'string' && c.name.trim() ? c.name : null)
           return {
             jid,
-            phone: jid.replace('@s.whatsapp.net', ''),
+            phone: jid.replace(/@s\.whatsapp\.net|@lid$/, ''),
             name,
             lastText: text ?? (lastKey.fromMe ? 'Mensagem enviada' : null),
-            lastAt: at,
-            fromMe: Boolean(lastKey.fromMe ?? last?.fromMe),
+            lastAt: Number.isFinite(ts) ? ts : null,
+            fromMe: Boolean(lastKey.fromMe),
             unread: Math.max(0, Number(c?.unreadCount ?? 0) || 0),
           }
         })
@@ -206,13 +220,14 @@ Deno.serve(async (req) => {
       const chat = personJid(body.chat)
       if (!chat) return json({ error: 'Conversa inválida' }, 400)
       const count = Math.min(Math.max(Number(body.count ?? 50) || 50, 10), 100)
-      const r = await evoFetch(
-        EV_URL, EV_KEY, EV_INSTANCE,
-        `/chat/findMessages/${inst}/${encodeURIComponent(chat)}?count=${count}`,
-        { method: 'POST', body: JSON.stringify({}) },
-      )
+      // 2.3.7: POST /chat/findMessages/{instance} com o jid NO CORPO
+      const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/chat/findMessages/${inst}`, {
+        method: 'POST',
+        body: JSON.stringify({ where: { key: { remoteJid: chat } }, limit: count }),
+      })
       const d = await r.json().catch(() => ({}))
-      const raw: any[] = d?.response ?? d?.messages?.messages ?? d?.messages ?? (Array.isArray(d) ? d : [])
+      // resposta: { messages: { records: [...] } } — mas aceitamos formatos antigos
+      const raw = firstArray(d?.messages?.records, d?.response, d?.messages?.messages, d?.messages, d)
 
       const messages = raw
         .map((m) => {
@@ -231,27 +246,25 @@ Deno.serve(async (req) => {
       return json({ configured: true, messages })
     }
 
-    // ---------- ENVIAR texto ----------
+    // ---------- ENVIAR texto (jid completo — cobre número e @lid) ----------
     if (action === 'send') {
       const chat = personJid(body.chat)
       const text = String(body.text ?? '').trim()
       if (!chat || !text) return json({ error: 'Mensagem vazia ou conversa inválida' }, 400)
       if (text.length > 4000) return json({ error: 'Mensagem muito longa (máx. 4000 caracteres)' }, 400)
-      const number = chat.replace('@s.whatsapp.net', '')
       const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/message/sendText/${inst}`, {
         method: 'POST',
-        body: JSON.stringify({ number, text, delay: 0 }),
+        body: JSON.stringify({ number: chat, text, delay: 0 }),
       })
       if (!r.ok) {
         const t = await r.text().catch(() => '')
         return json({ error: 'A Evolution recusou o envio (' + r.status + ')' + (t ? ': ' + t.slice(0, 200) : '') }, 502)
       }
-      // cache do selo: minha mensagem zera as não lidas deste chat
       try {
         await supabase.rpc('wa_mark_read', { p_jid: chat })
         await supabase.from('whatsapp_chats').upsert({
           remote_jid: chat,
-          phone: number,
+          phone: chat.replace(/@s\.whatsapp\.net|@lid$/, ''),
           last_message: text,
           last_message_at: new Date().toISOString(),
           last_from_me: true,
@@ -264,16 +277,15 @@ Deno.serve(async (req) => {
       return json({ configured: true, ok: true })
     }
 
-    // ---------- MARCAR como lida ----------
+    // ---------- MARCAR como lida (2.3.7: markMessageAsRead) ----------
     if (action === 'read') {
       const chat = personJid(body.chat)
       if (!chat) return json({ error: 'Conversa inválida' }, 400)
       const id = String(body.id ?? '')
       if (id) {
-        // best-effort: a Evolution aceita as keys das mensagens recebidas
-        await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/chat/markChatAsRead/${inst}`, {
+        await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/chat/markMessageAsRead/${inst}`, {
           method: 'POST',
-          body: JSON.stringify({ readMessages: [{ key: { remoteJid: chat, fromMe: false, id } }] }),
+          body: JSON.stringify({ id, fromMe: false, remoteJid: chat }),
         }).catch(() => null)
       }
       try { await supabase.rpc('wa_mark_read', { p_jid: chat }) } catch { /* migration opcional */ }

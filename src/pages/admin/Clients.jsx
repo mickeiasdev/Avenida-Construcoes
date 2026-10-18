@@ -128,10 +128,13 @@ export default function ClientsAdmin() {
                     {c.phone && (
                       <button
                         type="button"
-                        className="ml-2 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 align-middle text-green-600 ring-1 ring-green-200 transition hover:bg-green-100"
+                        className="ml-2 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 align-middle text-green-600 ring-1 ring-green-200 transition hover:bg-green-100 disabled:opacity-40 disabled:hover:bg-green-50"
                         onClick={() => navigate('/admin/whatsapp?to=' + onlyDigits(c.phone))}
+                        disabled={onlyDigits(c.phone).length < 10}
                         aria-label={'Conversar com ' + (c.full_name || 'cliente') + ' pelo WhatsApp'}
-                        title="Abrir conversa no WhatsApp do painel"
+                        title={onlyDigits(c.phone).length < 10
+                          ? 'Telefone sem DDD no cadastro — corrija o contato para conversar'
+                          : 'Abrir conversa no WhatsApp do painel'}
                       >
                         <MessageCircle className="h-4 w-4" />
                       </button>
