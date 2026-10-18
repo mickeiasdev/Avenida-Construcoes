@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  AlertCircle, ArrowLeft, Check, ClipboardList, Loader2, MessageCircle,
+  AlertCircle, ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, Loader2, MessageCircle,
   PlusCircle, QrCode, RefreshCw, Search, Send, Smartphone, X,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { waCall, toJid } from '../../lib/whatsappChat'
-import { formatBRL, formatDateTime, maskPhone, onlyDigits, ORDER_CLS, ORDER_SHORT, waLocal, waNumber } from '../../lib/utils'
+import { formatBRL, formatDateTime, maskPhone, onlyDigits, ORDER_CLS, ORDER_NEXT_ACTION, ORDER_PIPELINE, ORDER_SHORT, waLocal, waNumber } from '../../lib/utils'
+import { PAYMENT_LABELS } from '../../lib/storeOrder'
 import { useStore } from '../../context/StoreContext'
 import { useModalA11y } from '../../lib/useModalA11y'
 
@@ -94,6 +95,7 @@ export default function WhatsAppAdmin() {
   const inputRef = useRef(null)
   const lastInIdRef = useRef('')
   const deepDoneRef = useRef(false)
+  const adminKnownRef = useRef(new Set()) // conversas abertas pelo admin nesta sessão
   const isTouch = useMemo(
     () => typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches,
     [],
@@ -215,6 +217,9 @@ export default function WhatsAppAdmin() {
     setDraft(presetDraft)
     setMsgsLoading(true)
     lastInIdRef.current = ''
+    // conversa aberta pelo admin entra na lista (marca "conhecida" no banco)
+    waCall('startChat', { chat: jid }).catch(() => null)
+    adminKnownRef.current.add(jid)
     await loadMessages(jid, false)
     setMsgsLoading(false)
   }
@@ -287,19 +292,24 @@ export default function WhatsAppAdmin() {
   }, [messages])
 
   // ---------- dados derivados ----------
+  // nome exibido: o cadastro da loja manda (pedidos/clientes); o proxy já
+  // entrega "name" resolvido — o cruzamento local é reforço
   const chatName = useCallback((c) => {
     const local = contacts?.byPhone?.get(key9(c.phone))?.name
-    if (local || c.name) return local || c.name
-    // @lid é o endereço interno do WhatsApp (número real escondido por
-    // privacidade) — máscara de DDD aqui viraria número falso
-    if (String(c.jid ?? '').endsWith('@lid')) return 'Contato WhatsApp'
-    return maskPhone(waLocal(c.phone))
+    return local || c.name || 'Cliente'
   }, [contacts])
 
+  // A lista é DINÂMICA e restrita: só conversas de números que a loja
+  // conhece (cliente de pedido, cadastro, ou conversa aberta pelo admin).
+  // Spam/desconhecidos não aparecem no painel.
   const visibleChats = useMemo(() => {
     const f = search.toLowerCase()
     const fd = onlyDigits(search)
     return (chats ?? []).filter((c) => {
+      const known = c.known
+        || contacts?.byPhone?.has(key9(c.phone))
+        || adminKnownRef.current.has(c.jid)
+      if (!known) return false
       if (!f) return true
       return (
         chatName(c).toLowerCase().includes(f) ||
@@ -307,7 +317,7 @@ export default function WhatsAppAdmin() {
         (fd.length >= 2 && c.phone.includes(fd))
       )
     })
-  }, [chats, search, chatName])
+  }, [chats, search, chatName, contacts])
 
   const activeChat = useMemo(
     () => (chats ?? []).find((c) => c.jid === activeJid) ?? null,
@@ -317,6 +327,61 @@ export default function WhatsAppAdmin() {
     () => contacts?.ordersByPhone?.get(key9(activeJidPhone)) ?? [],
     [contacts, activeJidPhone],
   )
+
+  // ---------- pedidos do contato: detalhes + ações diretas ----------
+  const [contactOrders, setContactOrders] = useState([])
+  const [detailId, setDetailId] = useState(null)      // pedido expandido
+  const [detailItems, setDetailItems] = useState([])  // itens do expandido
+  const [detailBusy, setDetailBusy] = useState(false)
+
+  const loadContactOrders = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('orders')
+        .select('id, customer_name, customer_phone, status, total, created_at, delivery_address, delivery_method, payment_method')
+        .order('created_at', { ascending: false })
+        .limit(300)
+      const k = key9(activeJidPhone)
+      setContactOrders((data ?? []).filter((o) => key9(o.customer_phone) === k))
+    } catch { /* modal mostra o que tiver */ }
+  }, [activeJidPhone])
+
+  useEffect(() => {
+    if (ordersOpen) { loadContactOrders(); setDetailId(null); setDetailItems([]) }
+  }, [ordersOpen, loadContactOrders])
+
+  // expandir/fechar os detalhes de um pedido (itens carregam na hora)
+  async function toggleDetail(id) {
+    if (detailId === id) { setDetailId(null); setDetailItems([]); return }
+    setDetailId(id)
+    setDetailItems(null) // null = carregando
+    const { data } = await supabase.from('order_items').select('*').eq('order_id', id)
+    if (detailId === id) setDetailItems(data ?? [])
+  }
+
+  // avançar status direto daqui + aviso automático no WhatsApp
+  async function advanceOrder(o) {
+    const idx = ORDER_PIPELINE.indexOf(o.status)
+    const next = ORDER_PIPELINE[Math.min(idx + 1, ORDER_PIPELINE.length - 1)]
+    setDetailBusy(true)
+    const { error } = await supabase.from('orders').update({ status: next }).eq('id', o.id)
+    if (error) { window.alert('Não foi possível atualizar: ' + error.message); setDetailBusy(false); return }
+    try {
+      const res = await waCall('notifyOrder', { orderId: o.id, status: next })
+      if (!res.ok) {
+        const motivos = {
+          'sem-telefone': 'o pedido não tem telefone do cliente',
+          'telefone-invalido': 'o telefone está incompleto (sem DDD?)',
+          'evolution-recusou': 'o número não existe no WhatsApp',
+        }
+        window.alert('Status atualizado ✔\nAviso no WhatsApp NÃO enviado: ' + (motivos[res.reason] ?? res.reason ?? 'motivo desconhecido') + '.')
+      }
+    } catch (e) {
+      window.alert('Status atualizado ✔\nAviso no WhatsApp indisponível (' + (e?.message ?? 'erro') + ').')
+    }
+    await loadContactOrders()
+    setDetailBusy(false)
+  }
   const quick = useMemo(() => quickReplies(settings), [settings])
 
   const contactsList = useMemo(() => {
@@ -754,7 +819,7 @@ export default function WhatsAppAdmin() {
             <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
               <div>
                 <h2 className="text-lg font-bold text-gray-800">Pedidos de {activeChat ? chatName(activeChat) : maskPhone(waLocal(activeJidPhone))}</h2>
-                <p className="text-xs text-gray-500">{activeOrders.length} pedido{activeOrders.length === 1 ? '' : 's'} neste número</p>
+                <p className="text-xs text-gray-500">{contactOrders.length} pedido{contactOrders.length === 1 ? '' : 's'} neste número</p>
               </div>
               <button type="button" onClick={() => setOrdersOpen(false)} aria-label="Fechar" className="rounded-lg p-1 text-gray-500 hover:bg-gray-100">
                 <X className="h-5 w-5" />
@@ -762,27 +827,86 @@ export default function WhatsAppAdmin() {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-              {activeOrders.length === 0 ? (
+              {contactOrders.length === 0 ? (
                 <p className="py-8 text-center text-sm text-gray-500">
                   Nenhum pedido da loja para este número.<br />
                   São só conversas de WhatsApp por aqui.
                 </p>
               ) : (
                 <ul className="space-y-2">
-                  {activeOrders.map((o) => (
-                    <li key={o.id} className="rounded-xl bg-gray-50 p-3 ring-1 ring-gray-100">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-gray-800">Pedido nº {o.id.slice(0, 8)}</p>
-                        <span className={'rounded-lg px-2.5 py-0.5 text-[11px] font-bold ' + (ORDER_CLS[o.status] ?? ORDER_CLS.pending)}>
-                          {ORDER_SHORT[o.status] ?? o.status}
-                        </span>
-                      </div>
-                      <p className="mt-1 flex flex-wrap justify-between gap-2 text-xs text-gray-500">
-                        <span>{formatDateTime(o.created_at)}</span>
-                        <span className="font-bold text-gray-700">{formatBRL(o.total)}</span>
-                      </p>
-                    </li>
-                  ))}
+                  {contactOrders.map((o) => {
+                    const done = o.status === 'delivered' || o.status === 'cancelled'
+                    const nextAction = done ? null : ORDER_NEXT_ACTION[o.status]
+                    return (
+                      <li key={o.id} className="rounded-xl bg-gray-50 p-3 ring-1 ring-gray-100">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-gray-800">Pedido nº {o.id.slice(0, 8)}</p>
+                          <span className={'rounded-lg px-2.5 py-0.5 text-[11px] font-bold ' + (ORDER_CLS[o.status] ?? ORDER_CLS.pending)}>
+                            {ORDER_SHORT[o.status] ?? o.status}
+                          </span>
+                        </div>
+                        <p className="mt-1 flex flex-wrap justify-between gap-2 text-xs text-gray-500">
+                          <span>{formatDateTime(o.created_at)}</span>
+                          <span className="font-bold text-gray-700">{formatBRL(o.total)}</span>
+                        </p>
+
+                        <button
+                          type="button"
+                          className="mt-1.5 flex items-center gap-1 text-xs font-bold text-primary transition hover:underline"
+                          onClick={() => toggleDetail(o.id)}
+                        >
+                          {detailId === o.id ? <><ChevronUp className="h-3.5 w-3.5" /> Ocultar detalhes</> : <><ChevronDown className="h-3.5 w-3.5" /> Exibir detalhes</>}
+                        </button>
+
+                        {detailId === o.id && (
+                          <div className="mt-2 rounded-lg bg-white p-3 ring-1 ring-gray-100">
+                            {detailItems === null ? (
+                              <div className="flex justify-center py-3">
+                                <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                              </div>
+                            ) : (
+                              <div className="space-y-2 text-sm">
+                                <div className="space-y-1 text-xs text-gray-600">
+                                  {(detailItems ?? []).map((it) => (
+                                    <div key={it.id} className="flex justify-between gap-2">
+                                      <span className="min-w-0 flex-1 truncate">
+                                        {it.quantity}× {it.product_name}
+                                        {it.fulfillment === 'retirada' ? ' · retirada' : ''}
+                                      </span>
+                                      <span className="shrink-0 text-gray-400">{formatBRL(Number(it.unit_price) * Number(it.quantity))}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="flex justify-between border-t border-gray-100 pt-2 text-xs">
+                                  <span className="text-gray-500">
+                                    {o.delivery_method === 'retirada' ? 'Retirada no balcão' : (o.delivery_address || 'Entrega')}
+                                  </span>
+                                  <span className="text-gray-500">{PAYMENT_LABELS[o.payment_method] ?? '—'}</span>
+                                </div>
+                                <div className="flex items-center justify-between border-t border-gray-100 pt-2">
+                                  <span className="text-sm font-bold text-gray-800">Total</span>
+                                  <span className="font-bold text-primary">{formatBRL(o.total)}</span>
+                                </div>
+                                {nextAction && (
+                                  <div className="border-t border-gray-100 pt-2.5">
+                                    <button
+                                      type="button"
+                                      className="btn-primary w-full py-2 text-xs"
+                                      onClick={() => advanceOrder(o)}
+                                      disabled={detailBusy}
+                                    >
+                                      {detailBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                      {nextAction} (avisa o cliente)
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </div>

@@ -6,6 +6,7 @@ import { useConfirmDialog } from '../../components/ConfirmDialog'
 import { supabase } from '../../lib/supabaseClient'
 import { DELIVERY_LABELS, fulfillmentTotals, PAYMENT_LABELS } from '../../lib/storeOrder'
 import { maskCpf } from '../../lib/checkout'
+import { waCall } from '../../lib/whatsappChat'
 import { formatBRL, formatDateTime, onlyDigits, ORDER_CLS, ORDER_LABELS, ORDER_NEXT_ACTION, ORDER_PIPELINE, ORDER_SHORT } from '../../lib/utils'
 import { useStore } from '../../context/StoreContext'
 
@@ -61,6 +62,22 @@ export default function OrdersAdmin() {
     setBusyId(null)
     if (error) { window.alert('Não foi possível avançar o pedido: ' + error.message); return }
     load()
+    // Aviso automático no WhatsApp (best-effort: nunca trava o pedido).
+    // Sem telefone/número inválido → só um alerta informativo.
+    try {
+      const res = await waCall('notifyOrder', { orderId: o.id, status: next })
+      if (!res.ok) {
+        const motivos = {
+          'sem-telefone': 'o pedido não tem telefone do cliente',
+          'telefone-invalido': 'o telefone está incompleto (sem DDD?)',
+          'evolution-recusou': 'o número não existe no WhatsApp',
+          'status-sem-aviso': 'esta etapa não tem mensagem automática',
+        }
+        window.alert('Pedido avançado ✔\nAviso no WhatsApp NÃO enviado: ' + (motivos[res.reason] ?? res.reason ?? 'motivo desconhecido') + '.')
+      }
+    } catch (e) {
+      window.alert('Pedido avançado ✔\nAviso no WhatsApp indisponível agora (' + (e?.message ?? 'erro') + ').')
+    }
   }
 
   async function cancelOrder(o) {

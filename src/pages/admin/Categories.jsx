@@ -7,18 +7,13 @@ import { useConfirmDialog } from '../../components/ConfirmDialog'
 
 const PAGE = 20
 
-// CRUD de categorias no MESMO layout dos Pedidos: busca, abas, cards com
-// ações no rodapé e scroll infinito (a lista lê por páginas de 20 conforme
-// o fim aparece na tela — lojas com muitas categorias não travam o carregue).
-// A contagem de produtos chega junto de cada página (leve, head-only).
-// A exclusão é bloqueada quando há produtos na categoria (validação aqui +
-// ON DELETE RESTRICT no banco) e pede confirmação em popup, como o resto.
-const TABS = [
-  { k: 'all', l: 'Todas' },
-  { k: 'with', l: 'Com produtos' },
-  { k: 'empty', l: 'Sem produtos' },
-]
-
+// CRUD de categorias no MESMO layout de Clientes/Cupons/Produtos:
+// header com contagem, busca + ação na mesma linha e TABELA em card
+// (linhas com ações à direita). Scroll infinito por baixo da tabela —
+// lojas com muitas categorias paginam de 20 em 20 conforme rola.
+// A contagem de produtos chega junto de cada página (head-only, leve).
+// Exclusão bloqueada com produtos na categoria (aqui + ON DELETE RESTRICT
+// no banco) e pede confirmação em popup, como todo o painel.
 export default function Categories() {
   const { createCategory, updateCategory, deleteCategory } = useStore()
   const confirm = useConfirmDialog()
@@ -26,20 +21,17 @@ export default function Categories() {
   const [rows, setRows] = useState(null)      // null = primeira carga
   const [total, setTotal] = useState(0)
   const [search, setSearch] = useState('')
-  const [tab, setTab] = useState('all')
-  const [loadingMore, setLoadingMore] = useState(false)
   const [counts, setCounts] = useState({})    // id -> nº de produtos (lazy)
   const [newOpen, setNewOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [editing, setEditing] = useState(null) // { id, name }
   const [busy, setBusy] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [msg, setMsg] = useState(null)
 
   const sentinelRef = useRef(null)
   const visibleIdsRef = useRef([])
 
-  // contagem de produtos por categoria (só das categorias na tela — head only,
-  // nada de carregar a tabela inteira de produtos)
   const loadCounts = useCallback(async (ids) => {
     const pending = (ids ?? []).filter((id) => counts[id] === undefined)
     if (!pending.length) return
@@ -76,7 +68,7 @@ export default function Categories() {
     setLoadingMore(false)
   }, [search, loadCounts])
 
-  // primeira carga + recarrega quando a busca muda (debounce de 300ms)
+  // primeira carga + busca com debounce
   useEffect(() => {
     setRows(null)
     setTotal(0)
@@ -95,10 +87,9 @@ export default function Categories() {
     return () => { supabase.removeChannel(channel) }
   }, [load, loadCounts])
 
-  // o que já está na tela (para o listener de contagem)
   useEffect(() => { visibleIdsRef.current = (rows ?? []).map((c) => c.id) }, [rows])
 
-  // ---------- scroll infinito: ao ver o fim, busca a próxima página ----------
+  // scroll infinito: a sentinela logo abaixo da tabela puxa a próxima página
   const canLoadMore = (rows?.length ?? 0) < total
   useEffect(() => {
     const el = sentinelRef.current
@@ -110,8 +101,6 @@ export default function Categories() {
     }, { rootMargin: '240px' })
     io.observe(el)
     return () => io.disconnect()
-    // re-observar a cada página: o sentinela só existe na tela enquanto
-    // ainda há o que carregar
   }, [canLoadMore, loadingMore, load, rows])
 
   // ---------- ações ----------
@@ -157,42 +146,21 @@ export default function Categories() {
     setBusy(false)
   }
 
-  // ---------- filtro local por aba (contagem de produtos) ----------
-  const visible = (rows ?? []).filter((c) => {
-    const n = counts[c.id] ?? 0
-    if (tab === 'with') return n > 0
-    if (tab === 'empty') return n === 0
-    return true
-  })
-
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-800">Categorias</h1>
-        <p className="text-sm text-gray-500">
-          {rows === null ? 'Carregando…' : total + ' no total' + (search ? ' · busca "' + search + '"' : '')}
-        </p>
-      </div>
-
-      {/* barra de busca + ação na mesma linha — mesmo desenho dos Pedidos
-          (busca com ícone + botão ao lado, na mesma altura) */}
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <div className="relative flex-1 sm:max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-          <input
-            className="input pl-10"
-            placeholder="Buscar categoria…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Buscar categoria"
-          />
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Categorias</h1>
+          <p className="text-sm text-gray-500">
+            {rows === null ? 'Carregando…' : total + ' no total' + (search ? ' · busca "' + search + '"' : '')}
+          </p>
         </div>
-        <button type="button" className="btn-primary shrink-0" onClick={() => setNewOpen((v) => !v)}>
+        <button type="button" className="btn-primary" onClick={() => setNewOpen((v) => !v)}>
           <Plus className="h-4 w-4" /> Nova categoria
         </button>
       </div>
 
-      {/* form de criação */}
+      {/* form de criação (abre na mesma linha de estilo dos outros cadastros) */}
       {newOpen && (
         <form onSubmit={handleCreate} className="card flex flex-col gap-2 !p-3.5 sm:flex-row">
           <div className="relative flex-1">
@@ -221,112 +189,122 @@ export default function Categories() {
         </div>
       )}
 
-      {/* abas (mesmo desenho dos Pedidos) */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {TABS.map((t) => (
-          <button
-            key={t.k}
-            type="button"
-            onClick={() => setTab(t.k)}
-            className={'rounded-full px-3.5 py-1.5 text-xs font-bold transition ' +
-              (tab === t.k
-                ? 'bg-secondary text-white'
-                : 'bg-white text-gray-500 ring-1 ring-gray-200 hover:text-gray-700')}
-          >
-            {t.l}
-          </button>
-        ))}
+      {/* busca — mesmo desenho de Clientes/Cupons/Produtos */}
+      <div className="relative max-w-sm">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+        <input
+          className="input pl-10"
+          placeholder="Buscar categoria…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Buscar categoria"
+        />
       </div>
 
-      {/* lista */}
       {rows === null ? (
         <div className="flex justify-center py-16">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-primary" />
         </div>
-      ) : visible.length === 0 ? (
+      ) : rows.length === 0 ? (
         <div className="card flex flex-col items-center gap-2 py-16 text-center text-gray-500">
           <Tags className="h-8 w-8 text-gray-300" />
           <p className="font-medium">{search ? 'Nenhuma categoria encontrada.' : 'Nenhuma categoria cadastrada.'}</p>
           <p className="text-sm">Crie a primeira com o botão "Nova categoria".</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {visible.map((c) => {
-            const n = counts[c.id] ?? 0
-            const isEditing = editing?.id === c.id
-            return (
-              <div key={c.id} className="card space-y-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  {isEditing ? (
-                    <input
-                      className="input flex-1"
-                      value={editing.name}
-                      onChange={(e) => setEditing({ id: c.id, name: e.target.value })}
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleUpdate(c.id) }}
-                      autoFocus
-                      aria-label="Novo nome da categoria"
-                    />
-                  ) : (
-                    <div className="min-w-0">
-                      <p className="flex items-center gap-2 font-semibold text-gray-800">
-                        <Tags className="h-4 w-4 shrink-0 text-primary" />
-                        <span className="truncate" title={c.name}>{c.name}</span>
-                      </p>
-                      <p className="mt-0.5 text-xs text-gray-500">criada em {formatDate(c.created_at)}</p>
-                    </div>
-                  )}
-                  <span className={'shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-bold ' +
-                    (n > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500')}>
-                    {n > 0 ? n + ' produto' + (n > 1 ? 's' : '') : 'sem produtos'}
-                  </span>
-                </div>
+        <>
+          {/* tabela no mesmo padrão de Clientes/Cupons */}
+          <div className="card overflow-x-auto p-0">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                  <th className="px-4 py-3">Categoria</th>
+                  <th className="px-4 py-3">Produtos</th>
+                  <th className="px-4 py-3">Criada em</th>
+                  <th className="px-4 py-3 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((c) => {
+                  const n = counts[c.id] ?? 0
+                  const isEditing = editing?.id === c.id
+                  return (
+                    <tr key={c.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
+                      {isEditing ? (
+                        <td className="px-4 py-3" colSpan={4}>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <input
+                              className="input flex-1 sm:max-w-xs"
+                              value={editing.name}
+                              onChange={(e) => setEditing({ id: c.id, name: e.target.value })}
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleUpdate(c.id) }}
+                              autoFocus
+                              aria-label="Novo nome da categoria"
+                            />
+                            <button type="button" className="btn-primary px-4 py-1.5 text-xs" onClick={() => handleUpdate(c.id)} disabled={busy}>
+                              Salvar
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
+                              onClick={() => setEditing(null)}
+                            >
+                              <X className="h-3.5 w-3.5" /> Cancelar
+                            </button>
+                          </div>
+                        </td>
+                      ) : (
+                        <>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-gray-800">{c.name}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={'rounded-lg px-2.5 py-0.5 text-[11px] font-bold ' +
+                              (n > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500')}>
+                              {n}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-gray-500">{formatDate(c.created_at)}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex justify-end gap-1">
+                              <button
+                                type="button"
+                                className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-primary"
+                                onClick={() => setEditing({ id: c.id, name: c.name })}
+                                aria-label={'Editar categoria ' + c.name}
+                                title="Editar"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-lg p-2 text-gray-500 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                                onClick={() => handleDelete(c)}
+                                disabled={busy}
+                                aria-label={'Excluir categoria ' + c.name}
+                                title="Excluir"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
 
-                <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-2.5">
-                  {isEditing ? (
-                    <>
-                      <button type="button" className="btn-primary px-4 py-1.5 text-xs" onClick={() => handleUpdate(c.id)} disabled={busy}>
-                        Salvar
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-2 rounded-lg px-4 py-1.5 text-xs font-medium text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
-                        onClick={() => setEditing(null)}
-                      >
-                        <X className="h-3.5 w-3.5" /> Cancelar
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
-                        onClick={() => setEditing({ id: c.id, name: c.name })}
-                      >
-                        <Pencil className="h-3.5 w-3.5" /> Editar
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-red-500 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                        onClick={() => handleDelete(c)}
-                        disabled={busy}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" /> Excluir
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-
-          {/* sentinela do scroll infinito + spinner da próxima página */}
+          {/* scroll infinito: sentinela + spinner da próxima página */}
           {canLoadMore && <div ref={sentinelRef} className="h-1" aria-hidden="true" />}
           {loadingMore && (
             <div className="flex justify-center py-3">
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-primary" />
             </div>
           )}
-        </div>
+        </>
       )}
 
       {confirm.dialog}

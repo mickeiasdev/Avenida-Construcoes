@@ -163,6 +163,28 @@ Deno.serve(async (req) => {
       const d = await r.json().catch(() => ({}))
       const raw = firstArray(d, d?.chats, d?.response)
 
+      // Números que a LOJA conhece (pedidos + clientes): o nome do cadastro
+      // é salvo na conversa (known=true). Números desconhecidos não são
+      // listados no painel — só entram se o admin abrir a conversa.
+      const knownByDigits = new Map()
+      try {
+        const [ordersRes, profilesRes] = await Promise.all([
+          supabase.from('orders').select('customer_name, customer_phone').order('created_at', { ascending: false }).limit(2000),
+          supabase.from('profiles').select('full_name, phone').not('phone', 'is', null).limit(1000),
+        ])
+        const addKnown = (phone: unknown, name: unknown) => {
+          const digits = String(phone ?? '').replace(/\D/g, '')
+          if (digits.length < 10 || !knownByDigits.has(digits)) {
+            const key = digits.length >= 9 ? digits.slice(-9) : digits
+            if (!knownByDigits.has(key)) knownByDigits.set(key, String(name ?? '').trim())
+          }
+        }
+        for (const o of ordersRes.data ?? []) addKnown(o.customer_phone, o.customer_name)
+        for (const p of profilesRes.data ?? []) addKnown(p.phone, p.full_name)
+      } catch (e) {
+        console.warn('[whatsapp-chat] base de clientes indisponível:', (e as Error)?.message)
+      }
+
       const chats = raw
         .map((c) => {
           const jid = personJid(c?.remoteJid)
@@ -172,13 +194,17 @@ Deno.serve(async (req) => {
           const text = extractText(last?.message)
           const ts = toMs(last?.messageTimestamp)
             ?? (c?.updatedAt ? Date.parse(String(c.updatedAt)) : null)
-          // pushName é o nome do CONTATO ("Você" marca mensagens nossas)
+          const phone = jid.replace(/@s\.whatsapp\.net|@lid$/, '')
+          // nome do CADASTRO da loja manda; pushName é só fallback visual
+          const storeName = jid.endsWith('@s.whatsapp.net')
+            ? knownByDigits.get(phone.length >= 9 ? phone.slice(-9) : phone) ?? null
+            : null
           const push = typeof c?.pushName === 'string' && c.pushName.trim() && c.pushName !== 'Você' ? c.pushName : null
-          const name = push ?? (typeof c?.name === 'string' && c.name.trim() ? c.name : null)
           return {
             jid,
-            phone: jid.replace(/@s\.whatsapp\.net|@lid$/, ''),
-            name,
+            phone,
+            known: Boolean(storeName),
+            name: storeName ?? (typeof c?.name === 'string' && c.name.trim() ? c.name : push),
             lastText: text ?? (lastKey.fromMe ? 'Mensagem enviada' : null),
             lastAt: Number.isFinite(ts) ? ts : null,
             fromMe: Boolean(lastKey.fromMe),
@@ -195,24 +221,82 @@ Deno.serve(async (req) => {
             const row: Record<string, unknown> = {
               remote_jid: c.jid,
               phone: c.phone,
+              known: c.known,
               last_message: c.lastText,
               last_message_at: c.lastAt ? new Date(c.lastAt).toISOString() : null,
               last_from_me: c.fromMe,
               unread_count: c.unread,
               updated_at: new Date().toISOString(),
             }
-            if (c.name) row.name = c.name // não sobrescreve nome já conhecido
+            if (c.known && c.name) row.name = c.name
             return row
           })
           await supabase.from('whatsapp_chats').upsert(rows, { onConflict: 'remote_jid' })
+          // limpa apenas os DESCONHECIDOS que saíram da Evolution —
+          // conversas abertas pelo admin (known) ficam de pé
           const jids = (chats as any[]).map((c) => c.jid).join(',')
-          await supabase.from('whatsapp_chats').delete().not('remote_jid', 'in', `(${jids})`)
+          await supabase.from('whatsapp_chats').delete().eq('known', false).not('remote_jid', 'in', `(${jids})`)
         }
       } catch (e) {
         console.warn('[whatsapp-chat] sync da tabela falhou (migration-19 rodou?):', (e as Error)?.message)
       }
 
       return json({ configured: true, chats })
+    }
+
+    // ---------- ABRIR conversa (marca o número como conhecido) ----------
+    if (action === 'startChat') {
+      const chat = personJid(body.chat)
+      if (!chat) return json({ error: 'Conversa inválida' }, 400)
+      try {
+        await supabase.from('whatsapp_chats').upsert({
+          remote_jid: chat,
+          phone: chat.replace(/@s\.whatsapp\.net|@lid$/, ''),
+          known: true,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'remote_jid' })
+      } catch { /* migration opcional */ }
+      return json({ configured: true, ok: true })
+    }
+
+    // ---------- AVISO AUTOMÁTICO ao atualizar o pedido ----------
+    // Mesmos textos das notificações automáticas (whatsapp-notify). Se o
+    // telefone não existe no pedido, devolve reason e o painel só ALERTA.
+    if (action === 'notifyOrder') {
+      const { data: order } = await supabase
+        .from('orders')
+        .select('id, status, total, customer_name, customer_phone')
+        .eq('id', String(body.orderId ?? ''))
+        .maybeSingle()
+      if (!order) return json({ ok: false, reason: 'pedido-nao-encontrado' }, 404)
+      const digits = String(order.customer_phone ?? '').replace(/\D/g, '')
+      if (!digits) return json({ ok: false, reason: 'sem-telefone' })
+      const phone = digits.length <= 11 ? '55' + digits : digits
+      if (phone.length < 12) return json({ ok: false, reason: 'telefone-invalido' })
+
+      const { data: store } = await supabase.from('store_settings').select('store_name').eq('id', 1).maybeSingle()
+      const storeName = store?.store_name ?? 'loja'
+      const short = String(order.id).slice(0, 8)
+      const etapa: Record<string, string> = {
+        pending: 'Pedido recebido — confirmamos e já vamos dar andamento.',
+        confirmed: 'Pedido confirmado — já está em preparo.',
+        preparing: 'Estamos separando seus itens neste momento.',
+        shipping: 'Saiu para entrega! 🚚',
+        delivered: 'Entrega concluída. ✅ Obrigado pela preferência!',
+      }
+      const status = String(body.status ?? order.status ?? '')
+      if (!etapa[status]) return json({ ok: false, reason: 'status-sem-aviso' })
+      const text =
+        'Olá, ' + (order.customer_name ?? 'cliente') + '! Aqui é da ' + storeName + '.\n\n' +
+        'Atualização do seu pedido nº ' + short + ': *' + etapa[status] + '*\n\n' +
+        'Qualquer dúvida é só responder por aqui.'
+      const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/message/sendText/${inst}`, {
+        method: 'POST',
+        body: JSON.stringify({ number: phone + '@s.whatsapp.net', text, delay: 0 }),
+      })
+      if (!r.ok) return json({ ok: false, reason: 'evolution-recusou' }, 502)
+      try { await supabase.rpc('wa_mark_read', { p_jid: phone + '@s.whatsapp.net' }) } catch { /* opcional */ }
+      return json({ ok: true, sent: true })
     }
 
     // ---------- HISTÓRICO de uma conversa ----------
