@@ -23,6 +23,11 @@ export default function StoreLayout() {
   const [drawer, setDrawer] = useState(false)
   const accountRef = useRef(null)
 
+  // PERFIL INCOMPLETO: conta criada sem telefone ou endereço → ponto
+  // pulsante no ícone da conta (lá em cima) e no item "Meu perfil" do
+  // dropdown, chamando pra completar o cadastro. Some sozinho ao preencher.
+  const profileIncomplete = Boolean(user) && Boolean(profile) && (!profile.phone || !profile.zip)
+
   // Dropdown da conta dinâmico como menu de verdade: fecha ao clicar FORA,
   // no ESC e ao escolher qualquer item (link/botão interno) — o <details>
   // nativo sozinho só fecha clicando de novo no próprio nome.
@@ -104,7 +109,15 @@ export default function StoreLayout() {
 
           <details ref={accountRef} className="relative hidden shrink-0 md:block">
             <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-1.5 transition hover:bg-white/10" aria-label="Conta">
-              <User className="h-5 w-5" />
+              <span className="relative">
+                <User className="h-5 w-5" />
+                {profileIncomplete && (
+                  <span className="absolute -right-1 -top-1 flex h-2.5 w-2.5" aria-hidden="true">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-secondary" />
+                  </span>
+                )}
+              </span>
               <span className="hidden max-w-32 truncate text-sm lg:inline">
                 {user ? (profile?.full_name || user.email) : 'Entrar'}
               </span>
@@ -112,8 +125,27 @@ export default function StoreLayout() {
             <div className="absolute right-0 z-30 mt-2 w-52 rounded-xl bg-white p-2 text-sm text-gray-700 shadow-lg ring-1 ring-black/5">
               {user ? (
                 <>
-                  <div className="border-b border-gray-100 px-3 py-2 text-xs text-gray-500">{user.email}</div>
-                  <Link to="/perfil" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100"><User className="h-4 w-4" /> Meu perfil</Link>
+                  <div className="border-b border-gray-100 px-3 py-2 text-xs text-gray-500">
+                    {user.email}
+                    {profileIncomplete && (
+                      <span className="mt-1 block font-semibold text-amber-600">Complete seu cadastro 📝</span>
+                    )}
+                  </div>
+                  <Link to="/perfil" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100">
+                    <span className="relative">
+                      <User className="h-4 w-4" />
+                      {profileIncomplete && (
+                        <span className="absolute -right-1 -top-1 flex h-2 w-2" aria-hidden="true">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white" />
+                        </span>
+                      )}
+                    </span>
+                    Meu perfil
+                    {profileIncomplete && (
+                      <span className="ml-auto text-[10px] font-bold uppercase tracking-wide text-amber-600">faltam dados</span>
+                    )}
+                  </Link>
                   <Link to="/pedidos" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100"><Package className="h-4 w-4" /> Meus pedidos</Link>
                   {isAdmin && (
                     <Link to="/admin" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100"><SettingsIcon className="h-4 w-4" /> Dashboard admin</Link>

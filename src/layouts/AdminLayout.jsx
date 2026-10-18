@@ -11,10 +11,15 @@ import { setTabUnread } from '../lib/tabTitle'
 // reais vêm do pipeline de status do projeto — nada de chutar strings.
 const PENDING_STATUSES = ORDER_PIPELINE.filter((s) => s !== 'delivered')
 
-// Selo do menu: some sozinho quando a contagem zera.
+// Selo do menu: some sozinho quando a contagem zera — e enquanto existe,
+// PULSA (chamando atenção pra pedidos pendentes e mensagens não lidas).
 function PendingBadge({ count }) {
   if (!count) return null
-  return <span className="badge-count ml-auto" aria-hidden="true">{count > 99 ? '99+' : count}</span>
+  return (
+    <span className="badge-count ml-auto animate-pulse" aria-hidden="true">
+      {count > 99 ? '99+' : count}
+    </span>
+  )
 }
 
 const ITEMS = [
