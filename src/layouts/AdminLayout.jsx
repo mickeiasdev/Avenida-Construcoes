@@ -1,10 +1,11 @@
-import { Suspense, useCallback, useEffect, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Percent, Users, Menu, X, PlusCircle, MessageCircle, Home } from 'lucide-react';import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { ORDER_PIPELINE } from '../lib/utils'
 import { useModalA11y } from '../lib/useModalA11y'
+import { setTabUnread } from '../lib/tabTitle'
 
 // Pendente = ainda não finalizado (delivered) nem cancelado. Os valores
 // reais vêm do pipeline de status do projeto — nada de chutar strings.
@@ -37,6 +38,7 @@ const ITEMS = [
 export default function AdminLayout() {
   const { signOut, profile } = useAuth()
   const { settings } = useStore()
+  const navigate = useNavigate()
   const [drawer, setDrawer] = useState(false)
   useModalA11y(drawer, () => setDrawer(false))
   const [pendingCount, setPendingCount] = useState(0)
@@ -70,16 +72,52 @@ export default function AdminLayout() {
   const [waUnread, setWaUnread] = useState(0)
   const loadWaUnread = useCallback(async () => {
     const { data } = await supabase.from('whatsapp_chats').select('unread_count')
-    setWaUnread((data ?? []).reduce((acc, r) => acc + (Number(r.unread_count) || 0), 0))
+    const total = (data ?? []).reduce((acc, r) => acc + (Number(r.unread_count) || 0), 0)
+    setWaUnread(total)
+    // selo no TÍTULO da aba do navegador: "(3) Painel Admin - Loja"
+    setTabUnread(total)
+  }, [])
+
+  // ---------- toasts do WhatsApp: novo contato x nova mensagem ----------
+  // O webhook da Evolution grava na tabela; aqui traduzimos o evento:
+  //   INSERT              → contato novo mandou mensagem direto pelo WhatsApp
+  //   UPDATE (unread ↑)   → nova mensagem de cliente (a nossa não conta)
+  // Suprimido quando o admin já está NA página do WhatsApp com o chat à
+  // vista — não faz sentido tocar "nova mensagem" do que ele está lendo.
+  const [waToast, setWaToast] = useState(null)
+  const toastTimer = useRef(null)
+
+  const onWaChange = useCallback((payload) => {
+    const row = payload?.new
+    if (!row) return
+    // admin já está com o WhatsApp aberto na tela: o toast seria ruído
+    if (window.location.pathname.startsWith('/admin/whatsapp')) return
+    const isNewContact = payload?.eventType === 'INSERT'
+    const unreadBefore = Number(payload?.old?.unread_count ?? 0)
+    const unreadAfter = Number(row.unread_count ?? 0)
+    const fromMe = Boolean(row.last_from_me)
+    if (!isNewContact && (fromMe || unreadAfter <= unreadBefore)) return
+    const name = String(row.name ?? '').trim() || String(row.phone ?? 'número desconhecido')
+    setWaToast({
+      key: row.remote_jid + '-' + Date.now(),
+      kind: isNewContact || unreadBefore === 0 ? 'novo' : 'mensagem',
+      name: isNewContact ? name : name,
+      jid: row.remote_jid,
+    })
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setWaToast(null), 6000)
   }, [])
 
   useEffect(() => {
     const channel = supabase
       .channel('admin-wa-unread')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_chats' }, loadWaUnread)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_chats' }, (payload) => {
+        onWaChange(payload)
+        loadWaUnread()
+      })
       .subscribe((status) => { if (status === 'SUBSCRIBED') loadWaUnread() })
     return () => { supabase.removeChannel(channel) }
-  }, [loadWaUnread])
+  }, [loadWaUnread, onWaChange])
 
   const brand = (
     <div className="flex min-w-0 items-center gap-2">
@@ -176,6 +214,43 @@ export default function AdminLayout() {
           </Suspense>
         </main>
       </div>
+
+      {/* ============ TOAST DO WHATSAPP (novo contato / nova mensagem) ============ */}
+      {waToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="toast-in fixed bottom-4 right-4 z-[80] w-72 rounded-xl bg-white p-4 shadow-2xl ring-1 ring-gray-100"
+        >
+          <div className="flex items-start gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green-100 text-green-600">
+              <MessageCircle className="h-4 w-4" />
+            </span>
+            <button
+              type="button"
+              className="min-w-0 flex-1 text-left"
+              onClick={() => {
+                setWaToast(null)
+                navigate('/admin/whatsapp')
+              }}
+            >
+              <p className="font-bold text-gray-800">
+                {waToast.kind === 'novo' ? 'Novo contato no WhatsApp!' : 'Nova mensagem!'}
+              </p>
+              <p className="truncate text-sm text-gray-500">{waToast.name}</p>
+              <p className="mt-0.5 text-xs font-bold text-primary">Abrir conversa →</p>
+            </button>
+            <button
+              type="button"
+              className="rounded-lg p-1 text-gray-500 hover:bg-gray-100"
+              onClick={() => setWaToast(null)}
+              aria-label="Fechar aviso"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ============ DRAWER MOBILE ============ */}
       {drawer && (

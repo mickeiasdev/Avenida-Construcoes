@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
+import { applyTabBadge } from '../lib/tabTitle'
 
 export default function PageTitle() {
   const { pathname } = useLocation()
@@ -40,7 +41,9 @@ export default function PageTitle() {
     } else if (pathname === '/admin') {
       title = 'Painel Admin - ' + storeName
     }
-    document.title = title
+    // selo de não lidas do WhatsApp na frente ("(2) Pedidos Admin - …"):
+    // o AdminLayout mantém a contagem viva (Realtime) via setTabUnread
+    document.title = applyTabBadge(title)
   }, [pathname, storeName])
 
   return null
