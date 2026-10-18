@@ -24,6 +24,55 @@ import { QUICK_THEMES, PRODUCT_TEMPLATES, COUPON_TEMPLATES, OFFERS_TEMPLATES, ap
 const key9 = (phone) => onlyDigits(phone).slice(-9)
 
 const AV_COLORS = ['bg-emerald-500', 'bg-teal-500', 'bg-blue-500', 'bg-indigo-500', 'bg-violet-500', 'bg-amber-500', 'bg-rose-500']
+
+// Foto de perfil do contato no WhatsApp — se já veio no findChats usa direto;
+// senão busca UMA vez via action "avatar" (cache por jid). Sem foto → inicial.
+const avatarUrlCache = new Map()
+function ChatAvatar({ name, seed, jid, url, size = 'h-10 w-10' }) {
+  const cached = avatarUrlCache.get(jid)
+  const [photo, setPhoto] = useState(url || cached || null)
+  const [tried, setTried] = useState(Boolean(url || cached))
+
+  useEffect(() => {
+    if (url && !cached) {
+      avatarUrlCache.set(jid, url)
+      setPhoto(url)
+      setTried(true)
+    }
+  }, [url, jid])
+
+  useEffect(() => {
+    if (tried || !jid) return
+    setTried(true)
+    waCall('avatar', { chat: jid })
+      .then((d) => {
+        const u = d?.url ?? null
+        avatarUrlCache.set(jid, u)
+        setPhoto(u)
+      })
+      .catch(() => {})
+  }, [tried, jid])
+
+  const h = [...String(seed ?? '')].reduce((a, c) => a + c.charCodeAt(0), 0)
+  if (photo) {
+    return (
+      <img
+        src={photo}
+        alt=""
+        className={size + ' shrink-0 rounded-full object-cover ring-1 ring-gray-200'}
+        onError={() => setPhoto(null)}
+      />
+    )
+  }
+  return (
+    <div className={'flex ' + size + ' shrink-0 items-center justify-center rounded-full font-bold text-white ' + AV_COLORS[h % AV_COLORS.length]}
+      aria-hidden="true">
+      {(name || '?').trim().charAt(0).toUpperCase()}
+    </div>
+  )
+}
+
+// fallback: avatar simples por inicial (modal de nova conversa, sem jid ainda)
 function Avatar({ name, seed }) {
   const h = [...String(seed ?? '')].reduce((a, c) => a + c.charCodeAt(0), 0)
   return (
@@ -1045,7 +1094,7 @@ export default function WhatsAppAdmin() {
                       className={'flex w-full items-center gap-3 border-b border-gray-50 px-3 py-3 text-left transition '
                         + (activeJid === c.jid ? 'bg-primary/5' : 'hover:bg-gray-50')}
                     >
-                      <Avatar name={chatName(c)} seed={c.jid} />
+                      <ChatAvatar name={chatName(c)} seed={c.jid} jid={c.jid} url={c.avatar} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate text-sm font-semibold text-gray-800">{chatName(c)}</span>
@@ -1090,7 +1139,12 @@ export default function WhatsAppAdmin() {
                     >
                       <ArrowLeft className="h-5 w-5" />
                     </button>
-                    <Avatar name={chatName(activeChat ?? { jid: activeJid, phone: activeJidPhone })} seed={activeJid} />
+                    <ChatAvatar
+                      name={chatName(activeChat ?? { jid: activeJid, phone: activeJidPhone })}
+                      seed={activeJid}
+                      jid={activeJid}
+                      url={activeChat?.avatar}
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold text-gray-800">
                         {activeChat ? chatName(activeChat) : 'Nova conversa'}

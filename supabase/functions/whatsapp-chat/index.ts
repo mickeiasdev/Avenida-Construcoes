@@ -228,6 +228,8 @@ Deno.serve(async (req) => {
             name: displayName,
             // exibição no painel sempre com prefixo quando não é cadastro
             label: displayName ? 'Cliente - ' + displayName : null,
+            // foto de perfil que a Evolution já tem no findChats (pode ser null)
+            avatar: typeof c?.profilePicUrl === 'string' && c.profilePicUrl.trim() ? c.profilePicUrl : null,
             lastText: text ?? (lastKey.fromMe ? 'Mensagem enviada' : null),
             lastAt: Number.isFinite(ts) ? ts : null,
             fromMe: Boolean(lastKey.fromMe),
