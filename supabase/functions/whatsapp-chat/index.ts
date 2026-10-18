@@ -623,6 +623,19 @@ Deno.serve(async (req) => {
       return json({ configured: true, ok: true })
     }
 
+    // ---------- FOTO DE PERFIL de um contato (fetchProfilePicture) ----------
+    if (action === 'avatar') {
+      const chat = personJid(body.chat)
+      if (!chat) return json({ error: 'Conversa inválida' }, 400)
+      const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/chat/fetchProfilePicture/${inst}`, {
+        method: 'POST',
+        body: JSON.stringify({ number: chat }),
+      })
+      if (!r.ok) return json({ url: null })
+      const d = await r.json().catch(() => null)
+      return json({ url: d?.profileImageUrl ?? d?.pictureUrl ?? d?.url ?? null })
+    }
+
     // ---------- BAIXAR MÍDIA de uma mensagem (áudio pra ouvir, imagem p/ ver) ----------
     if (action === 'media') {
       const chat = personJid(body.chat)
