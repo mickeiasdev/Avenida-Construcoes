@@ -45,6 +45,7 @@ export default function Settings() {
       // No formulário mostramos só DDD + número; o DDI 55 entra no save.
       whatsapp: maskPhone(waLocal(settings.whatsapp)),
       cnpj: settings.cnpj ? maskCnpj(settings.cnpj) : '',
+      layout: settings.layout ?? 'loja',
       primary_color: settings.primary_color ?? '#f97316',
       secondary_color: settings.secondary_color ?? '#1e293b',
       font_scale: settings.font_scale ?? 100,
@@ -141,6 +142,36 @@ export default function Settings() {
           <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_slogan_descricao">Slogan / descrição</label>
           <input id="f_slogan_descricao" className="input" value={form.about} onChange={(e) => set('about', e.target.value)} />
         </div>
+        <div>
+          <p className="mb-1 text-sm font-medium text-gray-700">Layout da vitrine</p>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Layout da vitrine">
+            <button
+              type="button"
+              onClick={() => set('layout', 'loja')}
+              className={'flex flex-col items-start gap-1.5 rounded-xl border-2 p-3 text-left transition ' +
+                (form.layout !== 'cardapio'
+                  ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
+                  : 'border-gray-200 hover:border-gray-300')}
+            >
+              <span className="text-lg">🛍️</span>
+              <span className="text-sm font-bold text-gray-800">Loja / E-commerce</span>
+              <span className="text-xs text-gray-500">Grid de produtos com banner, categorias e carrinho</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => set('layout', 'cardapio')}
+              className={'flex flex-col items-start gap-1.5 rounded-xl border-2 p-3 text-left transition ' +
+                (form.layout === 'cardapio'
+                  ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
+                  : 'border-gray-200 hover:border-gray-300')}
+            >
+              <span className="text-lg">🍽️</span>
+              <span className="text-sm font-bold text-gray-800">Cardápio</span>
+              <span className="text-xs text-gray-500">Menu estilo restaurante com lista por categoria</span>
+            </button>
+          </div>
+        </div>
+
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_cnpj_da_loja_">CNPJ da loja (para o cupom e a nota de venda)</label>
           <input

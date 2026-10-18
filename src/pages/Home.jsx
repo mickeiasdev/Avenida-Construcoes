@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useStore } from '../context/StoreContext'
 import { getOpenStatus, formatBusinessHoursText } from '../lib/utils'
 import { ProductCard } from '../components/ProductCard'
+import { MenuProductRow } from '../components/MenuProductRow'
 
 const PAGE_SIZE = 6
 const BEST_LIMIT = 12
@@ -193,6 +194,22 @@ export default function Home() {
     setSearchParams(params, { preventScrollReset: true })
   }
 
+  const isMenu = settings?.layout === 'cardapio'
+
+  // agrupar produtos por categoria para o cardápio
+  const productsByCategory = useMemo(() => {
+    if (!isMenu || !categories.length) return null
+    const map = new Map()
+    for (const c of categories) {
+      const items = products.filter((p) => {
+        const cats = p.categories ? [p.categories] : []
+        return cats.some((c2) => c2.slug === c.slug) || (p.category_id && c.id === p.category_id)
+      })
+      if (items.length > 0) map.set(c, items)
+    }
+    return map
+  }, [isMenu, categories, products])
+
   // rótulos do modo atual (título + botão do dropdown)
   const currentLabel = isSearch
     ? 'Resultados da busca'
@@ -280,6 +297,21 @@ export default function Home() {
           <SearchX className="h-8 w-8 text-gray-300" />
           <p className="font-medium">Nenhum produto encontrado</p>
           <p className="text-sm">Tente outra busca ou escolha outro filtro no Explorar.</p>
+        </div>
+      ) : isMenu && productsByCategory ? (
+        /* ===== LAYOUT CARDÁPIO: produtos agrupados por categoria ===== */
+        <div className="space-y-6">
+          {[...productsByCategory.entries()].map(([cat, items]) => (
+            <section key={cat.id} id={'cat-' + cat.slug} className="scroll-mt-24">
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-gray-500">
+                {cat.name}
+                <span className="text-xs font-normal normal-case text-gray-400">({items.length})</span>
+              </h3>
+              <div className="space-y-2">
+                {items.map((p) => <MenuProductRow key={p.id} product={p} />)}
+              </div>
+            </section>
+          ))}
         </div>
       ) : (
         <>

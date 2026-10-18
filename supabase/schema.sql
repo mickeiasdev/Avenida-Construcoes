@@ -41,6 +41,8 @@ create table if not exists public.store_settings (
   quick_replies jsonb not null default '[]',
   -- CNPJ da loja (só dígitos) — cabeçalho do cupom/nota de venda
   cnpj text,
+  -- layout da vitrine: 'loja' (e-commerce) ou 'cardapio' (menu de restaurante)
+  layout text not null default 'loja' check (layout in ('loja','cardapio')),
   updated_at timestamptz not null default now()
 );
 
