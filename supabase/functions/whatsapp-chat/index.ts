@@ -359,21 +359,38 @@ Deno.serve(async (req) => {
       const storeName = store?.store_name ?? 'loja'
       const short = String(order.id).slice(0, 8)
       const etapa: Record<string, string> = {
-        pending: 'Pedido recebido — confirmamos e já vamos dar andamento.',
-        confirmed: 'Pedido confirmado — já está em preparo.',
-        preparing: 'Estamos separando seus itens neste momento.',
+        pending: 'Pedido recebido — confirmamos e já vamos dar andamento',
+        confirmed: 'Pedido confirmado — já está em preparo',
+        preparing: 'Estamos separando seus itens neste momento',
         shipping: 'Saiu para entrega! 🚚',
         delivered: 'Entrega concluída. ✅ Obrigado pela preferência!',
       }
       const status = String(body.status ?? order.status ?? '')
       if (!etapa[status]) return json({ ok: false, reason: 'status-sem-aviso' })
-      const text =
-        'Olá, ' + (order.customer_name ?? 'cliente') + '! Aqui é da ' + storeName + '.\n\n' +
-        'Atualização do seu pedido nº ' + short + ': *' + etapa[status] + '*\n\n' +
-        'Qualquer dúvida é só responder por aqui.'
+      // ANTI-BAN: redação sorteada entre 10 variações + delay humano de
+      // "digitação" — nada de mensagem idêntica em sequência.
+      const variants: string[] = [
+        'Olá, {nome}! Aqui é da {loja} 👋\n\nAtualização do seu pedido nº {n}: *{etapa}*\n\nQualquer dúvida é só responder por aqui.',
+        'Oi, {nome}! Passando da {loja} pra avisar 😊\n\nSeu pedido nº {n}: *{etapa}*\n\nSe precisar de algo, estamos por aqui!',
+        'Fala, {nome}! Equipe {loja} falando 🙌\n\nNovidade do pedido nº {n}: *{etapa}*\n\nAbraço — qualquer coisa chama!',
+        'Olá, {nome}, tudo bem? 😃\n\nDa {loja}: o pedido nº {n} agora está assim: *{etapa}*\n\nDúvidas? Responde aqui.',
+        'Olá, {nome}! Aviso rápido da {loja}:\n\nPedido nº {n} — *{etapa}*\n\nTamo junto!',
+        'Oi, {nome}! 👋 Aqui é a {loja}.\n\nO pedido nº {n} teve novidade: *{etapa}*\n\nQualquer coisa, é só chamar!',
+        '{nome}, olha só quem apareceu 😄 — a {loja}, com notícia do pedido nº {n}:\n\n*{etapa}*\n\nPrecisando, estamos aqui!',
+        'Olá, {nome}!\n\nA {loja} avisando que o pedido nº {n} está: *{etapa}*\n\nObrigado pela confiança!',
+        'Ei, {nome}! 🚀 Atualização da {loja}:\n\nPedido nº {n} → *{etapa}*\n\nDeu tudo certo? Qualquer coisa responde!',
+        'Oi, {nome}, tudo certo por aí? 😊\n\nSeu pedido nº {n} na {loja}: *{etapa}*\n\nEstamos à disposição!',
+      ]
+      const pick = variants[Math.floor(Math.random() * variants.length)]
+      const text = pick
+        .replace(/\{nome\}/g, String(order.customer_name ?? 'cliente'))
+        .replace(/\{loja\}/g, storeName)
+        .replace(/\{n\}/g, short)
+        .replace(/\{etapa\}/g, etapa[status])
+      const typingDelay = Math.floor(Math.random() * 1400) + 600 // 0,6–2s
       const r = await evoFetch(EV_URL, EV_KEY, EV_INSTANCE, `/message/sendText/${inst}`, {
         method: 'POST',
-        body: JSON.stringify({ number: phone + '@s.whatsapp.net', text, delay: 0 }),
+        body: JSON.stringify({ number: phone + '@s.whatsapp.net', text, delay: typingDelay }),
       })
       // recusas da Evolution são RESPOSTA DE NEGÓCIO (200 + reason), não erro
       // de sistema: com status 5xx o front caia no catch genérico com jargão

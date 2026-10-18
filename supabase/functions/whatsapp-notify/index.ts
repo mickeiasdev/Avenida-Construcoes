@@ -45,6 +45,56 @@ const brPhone = (v: unknown) => {
 }
 const money = (n: unknown) => 'R$ ' + Number(n ?? 0).toFixed(2).replace('.', ',')
 
+// ---------- ANTI-BAN: redações variadas ----------
+// O WhatsApp sinaliza contas que disparam mensagens IDÊNTICAS em
+// repetição. Cada envio sorteia entre variações do mesmo tema e ganha
+// um delay aleatório de "digitação" (nada de texto palavra-por-palavra
+// igual em sequência).
+const pickVariant = (list: string[]) => list[Math.floor(Math.random() * list.length)]
+const applyVars = (tpl: string, vars: Record<string, string>) =>
+  tpl.replace(/\{(\w+)\}/g, (m, k) => vars[k] ?? m)
+const typingDelay = () => Math.floor(Math.random() * 1400) + 600
+
+const PAID_CLIENT = [
+  'Olá, {nome}! ✅ Recebemos o pagamento do seu pedido nº {n} na {loja}.\n\nJá estamos preparando tudo! Qualquer dúvida, responde aqui.',
+  'Oi, {nome}! Pagamento confirmado! 🎉\n\nO pedido nº {n} da {loja} já está em preparo. Obrigado! 😊',
+  '{nome}, tudo certo por aqui! 💚\n\nO pagamento do pedido nº {n} caiu — a {loja} já tá preparando.',
+  'Olá! Pagamento do pedido nº {n} confirmado ✅\n\nValeu pela confiança, {nome}! A {loja} avisa cada passo por aqui.',
+  'Oi, {nome}! 🙌 Boa notícia: o pagamento do pedido nº {n} foi aprovado!\n\nA {loja} começa a preparar agora!',
+  '{nome}, recebemos! ✅ O pedido nº {n} está pago e a {loja} já separa tudo.\n\nObrigado pela preferência! 😊',
+  'Tudo certo, {nome}! 💚\n\nPagamento do nº {n} confirmado — a equipe da {loja} tá em ação.',
+  'Olá, {nome}! Obrigado por comprar com a {loja} 🙏\n\nO pagamento do pedido nº {n} foi confirmado.',
+  'Boa, {nome}! 🎉 Pagamento do pedido nº {n} ok!\n\nA {loja} avisa quando sair pra entrega.',
+  'Oi, {nome}! 😊 Confirmando: o pagamento do pedido nº {n} chegou!\n\nA {loja} cuida do resto.',
+]
+const PAID_STORE = [
+  '🧾 *Pedido PAGO no site!*\nPedido nº {n} · {valor}\nCliente: {cliente} · {fone}\nDê andamento em /admin/pedidos.',
+  '💰 Caiu o pagamento! Pedido nº {n} ({valor}).\nCliente: {cliente} · {fone}\nConfere lá nos pedidos!',
+  '🚨 Pix confirmado:\n\nPedido nº {n} — {valor}\nCliente: {cliente} ({fone})\nBora preparar!',
+  '✅ Beleza: pedido nº {n} pago ({valor}).\nCliente: {cliente} · {fone}\nJá pode separar!',
+  '🎉 Pedido do site pago!\n\nNº {n} · {valor}\nCliente: {cliente} · {fone}\nDê andamento em /admin/pedidos.',
+]
+const NEW_ORDER_STORE = [
+  '🛒 *Novo pedido no site*\nPedido nº {n} · {valor}\nCliente: {cliente} · {fone}\n{entrega}',
+  '📢 Pedido novo chegando no site!\n\nNº {n} — {valor}\nCliente: {cliente} ({fone})\n{entrega}',
+  '🆕 Venda pelo site:\n\nPedido {n} · {valor}\nCliente: {cliente}\nTel: {fone}\n{entrega}',
+  '📦 Olha o site trabalhando:\n\nPedido nº {n} ({valor})\nCliente: {cliente}\n{fone}\n{entrega}',
+  '⚡ Novo pedido pra separar:\n\nNº {n} — {valor}\nCliente: {cliente} · {fone}\n{entrega}',
+  '🛍️ Tem pedido novo no site!\n\nPedido {n} · {valor}\nCliente: {cliente} · {fone}\n{entrega}',
+]
+const STATUS_CLIENT = [
+  'Olá, {nome}! Aqui é da {loja} 👋\n\nAtualização do seu pedido nº {n}: *{etapa}*\n\nQualquer dúvida é só responder por aqui.',
+  'Oi, {nome}! Passando da {loja} pra avisar 😊\n\nSeu pedido nº {n}: *{etapa}*\n\nSe precisar de algo, estamos por aqui!',
+  'Fala, {nome}! Equipe {loja} falando 🙌\n\nNovidade do pedido nº {n}: *{etapa}*\n\nAbraço — qualquer coisa chama!',
+  'Olá, {nome}, tudo bem? 😃\n\nDa {loja}: o pedido nº {n} agora está assim: *{etapa}*\n\nDúvidas? Responde aqui.',
+  'Olá, {nome}! Aviso rápido da {loja}:\n\nPedido nº {n} — *{etapa}*\n\nTamo junto!',
+  'Oi, {nome}! 👋 Aqui é a {loja}.\n\nO pedido nº {n} teve novidade: *{etapa}*\n\nQualquer coisa, é só chamar!',
+  '{nome}, olha só quem apareceu 😄 — a {loja}, com notícia do pedido nº {n}:\n\n*{etapa}*\n\nPrecisando, estamos aqui!',
+  'Olá, {nome}!\n\nA {loja} avisando que o pedido nº {n} está: *{etapa}*\n\nObrigado pela confiança!',
+  'Ei, {nome}! 🚀 Atualização da {loja}:\n\nPedido nº {n} → *{etapa}*\n\nDeu tudo certo? Qualquer coisa responde!',
+  'Oi, {nome}, tudo certo por aí? 😊\n\nSeu pedido nº {n} na {loja}: *{etapa}*\n\nEstamos à disposição!',
+]
+
 // rótulos de etapa (espelho de ORDER_LABELS do app; função vive isolada)
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Pedido recebido',
@@ -58,7 +108,7 @@ async function sendEvo(url: string, key: string, instance: string, number: strin
   const r = await fetch(url.replace(/\/$/, '') + '/message/sendText/' + encodeURIComponent(instance), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', apikey: key },
-    body: JSON.stringify({ number, text }),
+    body: JSON.stringify({ number, text, delay: typingDelay() }),
   })
   if (!r.ok) {
     const t = await r.text().catch(() => '')
@@ -119,14 +169,16 @@ Deno.serve(async (req) => {
 
   // ---------- pedido PAGO (pagamento webhook): avisa LOJA + CLIENTE ----------
   if (topic === 'order_paid') {
-    if (await deliver(storePhone,
-      '🧾 *Pedido PAGO no site!*\n' +
-      'Pedido #' + orderShort + ' · ' + money(record.total) + '\n' +
-      'Cliente: ' + cliente + (record.customer_phone ? ' · ' + record.customer_phone : '') + '\n' +
-      entrega + '\nDê andamento em /admin/pedidos.')) sent.push('loja')
-    if (await deliver(clientePhone,
-      '✅ Pagamento confirmado!\nSeu pedido nº ' + orderShort + ' na ' + storeName +
-      ' foi pago e já está em preparo.\nQualquer dúvida, responda por aqui.')) sent.push('cliente')
+    const vars = {
+      n: orderShort,
+      valor: money(record.total),
+      cliente,
+      fone: record.customer_phone || '—',
+      nome: cliente,
+      loja: storeName,
+    }
+    if (await deliver(storePhone, applyVars(pickVariant(PAID_STORE), vars))) sent.push('loja')
+    if (await deliver(clientePhone, applyVars(pickVariant(PAID_CLIENT), vars))) sent.push('cliente')
   }
 
   // ---------- pedido NOVO (DB webhook INSERT): avisa a LOJA ----------
@@ -134,11 +186,13 @@ Deno.serve(async (req) => {
     const aviso = record.payment_method === 'mercado_pago'
       ? '(aguardando pagamento do Pix — quando confirmar chega outro aviso)'
       : '(pagamento: ' + pagamento + ')'
-    if (await deliver(storePhone,
-      '🛒 *Novo pedido no site*\n' +
-      'Pedido #' + orderShort + ' · ' + money(record.total) + ' ' + aviso + '\n' +
-      'Cliente: ' + cliente + (record.customer_phone ? ' · ' + record.customer_phone : '') + '\n' +
-      entrega)) sent.push('loja')
+    if (await deliver(storePhone, applyVars(pickVariant(NEW_ORDER_STORE), {
+      n: orderShort,
+      valor: money(record.total) + ' ' + aviso,
+      cliente,
+      fone: record.customer_phone || '—',
+      entrega,
+    }))) sent.push('loja')
   }
 
   // ---------- mudança de STATUS (DB webhook UPDATE): avisa o CLIENTE ----------
@@ -146,10 +200,14 @@ Deno.serve(async (req) => {
     const oldStatus = String(body.old_record?.status ?? '')
     const newStatus = String(record.status ?? '')
     if (newStatus !== oldStatus && STATUS_LABEL[newStatus] && clientePhone && newStatus !== 'cancelled') {
-      const ok = await deliver(clientePhone,
-        'Olá, ' + cliente + '! Aqui é da ' + storeName + '.\n\n' +
-        'Atualização do seu pedido nº ' + orderShort + ': *' + STATUS_LABEL[newStatus] + '*' +
-        (newStatus === 'delivered' ? '\nObrigado pela preferência! ⭐' : '\nQualquer dúvida é só responder por este WhatsApp.'), false)
+      const etapa = STATUS_LABEL[newStatus] +
+        (newStatus === 'delivered' ? ' — obrigado pela preferência! ⭐' : '')
+      const ok = await deliver(clientePhone, applyVars(pickVariant(STATUS_CLIENT), {
+        nome: cliente,
+        loja: storeName,
+        n: orderShort,
+        etapa,
+      }), false)
       if (ok) sent.push('cliente:' + newStatus)
     }
   }

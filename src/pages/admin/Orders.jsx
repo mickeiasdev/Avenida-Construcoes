@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Banknote, Ban, Check, ChevronRight, ClipboardList, CreditCard, Download, Eraser, Loader2, MapPin, MessageCircle, Phone, PlusCircle, QrCode, RotateCcw, Search, Store, Trash2, Truck, User } from 'lucide-react'
 import { downloadCsv } from '../../lib/csv'
 import { useConfirmDialog } from '../../components/ConfirmDialog'
+import { STATUS_CLIENT_TEMPLATES, applyTemplate, pickVariant } from '../../lib/waTemplates'
 import { supabase } from '../../lib/supabaseClient'
 import { DELIVERY_LABELS, fulfillmentTotals, PAYMENT_LABELS } from '../../lib/storeOrder'
 import { maskCpf } from '../../lib/checkout'
@@ -120,16 +121,16 @@ export default function OrdersAdmin() {
     const digits = onlyDigits(o.customer_phone ?? '')
     if (!digits) return
     const intl = digits.length <= 11 ? '55' + digits : digits // Brasil
-    const etapa = ORDER_LABELS[o.status] ?? o.status
-    const texto =
-      'Olá, ' + (o.customer_name ?? 'cliente') + '! Aqui é da ' + (settings.store_name ?? 'loja') + '.\n\n' +
-      'Atualização do seu pedido nº ' + String(o.id).slice(0, 8) + ': *' + etapa + '*' +
-      (o.status === 'pending' ? ' — confirmamos o recebimento e já vamos dar andamento.' : '') +
-      (o.status === 'confirmed' ? ' — seu pedido foi confirmado e já está em preparo.' : '') +
-      (o.status === 'preparing' ? ' — estamos separando seus itens neste momento.' : '') +
-      (o.status === 'shipping' ? ' — saiu para entrega! 🚚' : '') +
-      (o.status === 'delivered' ? ' — entrega concluída. ✅ Obrigado pela preferência!' : '') +
-      '\n\nQualquer dúvida é só responder por aqui.'
+    const etapa =
+      (ORDER_LABELS[o.status] ?? o.status) +
+      (o.status === 'shipping' ? '! 🚚' : o.status === 'delivered' ? '. ✅ Obrigado pela preferência!' : '!')
+    // redação sorteada entre 10 variações (anti-ban) + dados do pedido
+    const texto = applyTemplate(pickVariant(STATUS_CLIENT_TEMPLATES), {
+      nome: o.customer_name ?? 'cliente',
+      loja: settings.store_name ?? 'loja',
+      n: String(o.id).slice(0, 8),
+      etapa,
+    })
     navigate('/admin/whatsapp?to=' + intl + '&text=' + encodeURIComponent(texto))
   }
 

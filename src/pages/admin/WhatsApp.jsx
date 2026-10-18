@@ -11,6 +11,7 @@ import { PAYMENT_LABELS } from '../../lib/storeOrder'
 import { useStore } from '../../context/StoreContext'
 import { useModalA11y } from '../../lib/useModalA11y'
 import { useConfirmDialog } from '../../components/ConfirmDialog'
+import { QUICK_THEMES, applyTemplate, pickVariant } from '../../lib/waTemplates'
 
 // ============ WhatsApp da loja, dentro do painel ============
 // Mesma sessão da Evolution API (pareada por QR — igual ao WhatsApp Web):
@@ -51,17 +52,28 @@ const STATE_INFO = {
   close: { label: 'Desconectado', pill: 'bg-red-100 text-red-700', dot: 'bg-red-500' },
 }
 
-// Respostas rápidas — mesmos avisos que o sistema já manda sozinho
-// (whatsapp-notify), prontos para um toque do atendente.
+// Respostas rápidas automáticas — 10 REDAÇÕES por tema (anti-ban):
+// cada clique sorteia uma variação, que o atendente pode editar antes
+// de enviar. Os textos usam os dados atuais da loja.
 function quickReplies(settings) {
-  const loja = settings?.store_name || 'nossa loja'
-  return [
-    { label: '✅ Pedido confirmado', text: 'Olá! Aqui é da ' + loja + '. Seu pedido foi *confirmado* e já está em preparo. Qualquer dúvida é só responder por aqui. 😉' },
-    { label: '📦 Separando itens', text: 'Olá! Estamos *separando os itens* do seu pedido agora. Avisamos quando sair para entrega! 📦' },
-    { label: '🚚 Saiu p/ entrega', text: 'Boas notícias: seu pedido *saiu para entrega*! 🚚' },
-    { label: '🎉 Pedido entregue', text: 'Seu pedido foi *entregue*. Obrigado pela preferência! ⭐ Qualquer coisa, é só chamar por aqui.' },
-    { label: '📍 Endereço e horário', text: (settings?.address ? settings.address + '\n' : '') + 'Funcionamento: ' + (settings?.business_hours || 'veja na loja') },
-  ].filter((q) => q.text.trim())
+  const vars = {
+    loja: settings?.store_name || 'nossa loja',
+    endereco: settings?.address ?? '',
+    horario: settings?.business_hours || 'veja na loja',
+  }
+  const themes = [
+    { label: '✅ Pedido confirmado', list: QUICK_THEMES.confirmed },
+    { label: '📦 Separando itens', list: QUICK_THEMES.preparing },
+    { label: '🚚 Saiu p/ entrega', list: QUICK_THEMES.shipping },
+    { label: '🎉 Pedido entregue', list: QUICK_THEMES.delivered },
+    { label: '📍 Endereço e horário', list: QUICK_THEMES.address },
+  ]
+  return themes
+    .map((t) => ({
+      label: t.label,
+      variants: t.list.map((text) => applyTemplate(text, vars)).filter(Boolean),
+    }))
+    .filter((t) => t.variants.length > 0)
 }
 
 export default function WhatsAppAdmin() {
@@ -510,7 +522,7 @@ export default function WhatsAppAdmin() {
     const mine = Array.isArray(settings?.quick_replies)
       ? settings.quick_replies
           .filter((q) => q && String(q.label ?? '').trim() && String(q.text ?? '').trim())
-          .map((q) => ({ label: String(q.label), text: String(q.text) }))
+          .map((q) => ({ label: String(q.label), variants: [String(q.text)] }))
       : []
     return [...mine, ...quickReplies(settings)]
   }, [settings])
@@ -794,10 +806,17 @@ export default function WhatsAppAdmin() {
                                 type="button"
                                 role="menuitem"
                                 className="flex w-full flex-col items-start gap-0.5 rounded-xl px-3 py-2 text-left transition hover:bg-primary/10"
-                                onClick={() => { setDraft(q.text); setQuickOpen(false); inputRef.current?.focus() }}
+                                onClick={() => { setDraft(pickVariant(q.variants)); setQuickOpen(false); inputRef.current?.focus() }}
                               >
-                                <span className="text-sm font-bold text-primary">{q.label}</span>
-                                <span className="line-clamp-2 text-xs leading-snug text-gray-500">{q.text}</span>
+                                <span className="flex items-center gap-2 text-sm font-bold text-primary">
+                                  {q.label}
+                                  {q.variants.length > 1 && (
+                                    <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-bold text-gray-500">
+                                      {q.variants.length} variações
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="line-clamp-2 text-xs leading-snug text-gray-500">{q.variants[0]}</span>
                               </button>
                             ))}
                             <div className="my-1 h-px bg-gray-100" role="presentation" />
@@ -1138,11 +1157,12 @@ export default function WhatsAppAdmin() {
                 <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Da loja · automáticas</p>
                 <p className="mt-1 text-xs text-gray-500">
                   Estas usam os dados das configurações (nome, endereço, horário) e se atualizam sozinhas — não são editáveis aqui.
+                  Cada tema tem <strong>10 redações</strong>: a cada clique o chat sorteia uma, evitando mensagens idênticas em sequência (proteção anti-ban).
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {quickReplies(settings).map((q) => (
                     <span key={q.label} className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
-                      {q.label}
+                      {q.label} <span className="font-bold text-gray-400">· {q.variants.length} variações</span>
                     </span>
                   ))}
                 </div>
