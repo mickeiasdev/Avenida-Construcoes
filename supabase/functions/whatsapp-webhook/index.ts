@@ -59,7 +59,9 @@ Deno.serve(async (req) => {
   if (incoming !== SECRET) return json({ error: 'Unauthorized' }, 401)
 
   const body = await req.json().catch(() => ({}))
-  const event = String(body?.event ?? '')
+  // Evolution 2.1 envia "messages.upsert"; 2.3 envia "MESSAGES_UPSERT" —
+  // normalizamos (caixa + separador) e aceitamos os dois.
+  const event = String(body?.event ?? '').toLowerCase().replace(/_/g, '.')
 
   // só o que interessa: mensagem nova (do cliente OU enviada pelo celular
   // do lojista — o painel precisa refletir as duas).

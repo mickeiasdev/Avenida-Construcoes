@@ -38,6 +38,9 @@ skills-lock.json
 # Supabase CLI — estado local (project-ref, versões): nunca versionar
 supabase/.temp/
 
+# Servidor WhatsApp local (provisório): Evolution API + túnel + .env local
+tools/
+
 # Tooling local de agente (skills do assistente): não faz parte da loja
 .agents/
 skills-lock.json
