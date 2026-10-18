@@ -89,10 +89,13 @@ async function evoFetch(url: string, key: string, instance: string, path: string
   const base = url.replace(/\/+$/, '')
   const clean = path.startsWith('/') ? path : '/' + path
   const full = base + clean
+  // mídia (upload de imagem/arquivo/áudio) precisa de MUITO mais tempo:
+  // vai túnel → Evolution → upload pro WhatsApp. 45s cobre o pior caso.
+  const isMedia = path.includes('sendMedia') || path.includes('sendVoice') || path.includes('sendWhatsAppAudio')
   return fetch(full, {
     ...init,
     headers: { 'Content-Type': 'application/json', apikey: key, ...(init.headers ?? {}) },
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(isMedia ? 45_000 : 20_000),
   })
 }
 
