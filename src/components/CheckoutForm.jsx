@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react'
 import { HardHat } from 'lucide-react'
 import { maskCep, maskPhone, onlyDigits } from '../lib/utils'
-import { FIELDS, fieldError, maskCpf } from '../lib/checkout'
+import { FIELDS, RETIRADA_REQUIRED, fieldError, maskCpf } from '../lib/checkout'
 
 // Formulário de dados de entrega compartilhado entre o Carrinho (wizard)
 // e a finalização direta da tela do produto.
@@ -14,6 +14,68 @@ const INPUT_MODE = { phone: 'tel', cpf: 'numeric', zip: 'numeric', number: 'nume
 // `fields` deixa o PDV do admin reaproveitar só o bloco de endereço
 // (nome/telefone ficam em campos próprios do painel de venda). O bloco de
 // "em nome de outra pessoa" só existe quando o campo full_name está na tela.
+// Campos de RETIRADA no balcão (nome + telefone + CPF) com o MESMO nível
+// de cuidado do formulário de entrega: máscaras de telefone/CPF e erro em
+// tempo real por campo (isFullName/isPhoneBR/isCpf). O array "missing"
+// destaca o que faltou na tentativa de avançar; onCpfComplete dispara a
+// checagem de "este CPF já tem conta" ao completar os 11 dígitos.
+export function CheckoutRetiradaFields({ form, set, missing, onCpfComplete }) {
+  const [touched, setTouched] = useState({})
+
+  function showError(key) {
+    return (touched[key] || missing?.includes(key))
+      ? fieldError(key, form?.[key], RETIRADA_REQUIRED)
+      : ''
+  }
+
+  const ITEMS = [
+    { key: 'full_name', label: 'Seu nome *', mode: undefined, maxLength: undefined, placeholder: 'Ex.: Maria Silva', cls: 'col-span-2' },
+    { key: 'phone', label: 'Telefone / WhatsApp *', mode: 'tel', maxLength: 15, placeholder: '(11) 99999-9999', cls: 'col-span-2 sm:col-span-1' },
+    { key: 'cpf', label: 'CPF *', mode: 'numeric', maxLength: 14, placeholder: '000.000.000-00', cls: 'col-span-2 sm:col-span-1' },
+  ]
+
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {ITEMS.map(({ key, label, mode, maxLength, placeholder, cls }) => {
+        const err = showError(key)
+        return (
+          <div key={key} className={cls}>
+            <label
+              htmlFor={'f_' + key}
+              className={'mb-1 block text-xs font-medium ' + (err ? 'text-red-500' : 'text-gray-600')}
+            >
+              {label}
+            </label>
+            <input
+              aria-invalid={!!err}
+              aria-describedby={err ? 'e_' + key : undefined}
+              id={'f_' + key}
+              className={'input ' + (err ? 'border-red-400 ring-2 ring-red-100' : '')}
+              inputMode={mode}
+              maxLength={maxLength}
+              placeholder={placeholder}
+              value={form?.[key] ?? ''}
+              onChange={(e) => {
+                if (key === 'phone') { set(key, maskPhone(e.target.value)); return }
+                if (key === 'cpf') { set(key, maskCpf(e.target.value)); return }
+                set(key, e.target.value)
+              }}
+              onBlur={() => {
+                setTouched((t) => ({ ...t, [key]: true }))
+                if (key === 'cpf' && onCpfComplete && onlyDigits(form?.cpf).length === 11) {
+                  onCpfComplete(form.cpf)
+                }
+              }}
+              autoComplete="off"
+            />
+            {err && <p role="alert" id={'e_' + key} className="mt-1 text-xs font-medium text-red-600">{err}</p>}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function CheckoutForm({ form, set, missing, fields = FIELDS, onCpfComplete }) {
   const [touched, setTouched] = useState({})
   const [cepLoading, setCepLoading] = useState(false)

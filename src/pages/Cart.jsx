@@ -4,7 +4,7 @@ import { AlertCircle, ArrowLeft, ArrowRight, Banknote, Check, CreditCard, Loader
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { formatBRL } from '../lib/utils'
-import { CheckoutForm } from '../components/CheckoutForm'
+import { CheckoutForm, CheckoutRetiradaFields } from '../components/CheckoutForm'
 import { profileToForm, missingFields, requiredFieldsFor, fieldLabel, formatAddress, maskCpf } from '../lib/checkout'
 import { readFunctionError } from '../lib/functionError'
 import { GuestCheckoutModal } from '../components/GuestCheckoutModal'
@@ -419,31 +419,14 @@ export default function Cart() {
                 onCpfComplete={async (v) => { const nm = await cpfAccount.check(v); if (nm) cpfAccount.open() }} />)
             : (
               // retirada: identificação completa (nome + telefone + CPF)
+              // com máscaras e erro por campo — mesmo cuidado da entrega
               form && (
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { key: 'full_name', label: 'Seu nome *', cls: 'col-span-2' },
-                    { key: 'phone', label: 'Telefone / WhatsApp *', cls: 'col-span-2 sm:col-span-1' },
-                    { key: 'cpf', label: 'CPF *', cls: 'col-span-2 sm:col-span-1' },
-                  ].map(({ key, label, cls }) => (
-                    <div key={key} className={cls}>
-                      <label htmlFor={'f_' + key} className="mb-1 block text-xs font-medium text-gray-600">{label}</label>
-                      <input
-                        id={'f_' + key}
-                        className="input"
-                        inputMode={key === 'phone' ? 'tel' : key === 'cpf' ? 'numeric' : undefined}
-                        maxLength={key === 'phone' ? 15 : key === 'cpf' ? 14 : undefined}
-                        placeholder={key === 'cpf' ? '000.000.000-00' : undefined}
-                        value={form[key]}
-                        onChange={(e) => set(key, key === 'phone' ? e.target.value : key === 'cpf' ? maskCpf(e.target.value) : e.target.value)}
-                        onBlur={key === 'cpf'
-                          ? async () => { const nm = await cpfAccount.check(form.cpf); if (nm) cpfAccount.open() }
-                          : undefined}
-                        autoComplete="off"
-                      />
-                    </div>
-                  ))}
-                </div>
+                <CheckoutRetiradaFields
+                  form={form}
+                  set={set}
+                  missing={missing}
+                  onCpfComplete={async (v) => { const nm = await cpfAccount.check(v); if (nm) cpfAccount.open() }}
+                />
               )
             )}
 

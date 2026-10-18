@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { formatBRL, effectivePrice } from '../lib/utils'
-import { CheckoutForm } from '../components/CheckoutForm'
+import { CheckoutForm, CheckoutRetiradaFields } from '../components/CheckoutForm'
 import { profileToForm, missingFields, requiredFieldsFor, fieldLabel, maskCpf } from '../lib/checkout'
 import { FavoriteButton } from '../components/FavoriteButton'
 import { GuestCheckoutModal } from '../components/GuestCheckoutModal'
@@ -482,24 +482,12 @@ export default function ProductPage() {
               ? <CheckoutForm form={buyForm} set={setBuyField} missing={buyMissing}
                   onCpfComplete={async (v) => { const nm = await cpfAccount.check(v); if (nm) cpfAccount.open() }} />
               : (
-                <div className="space-y-3">
-                  <div>
-                    <label htmlFor="f_full_name" className="mb-1 block text-xs font-medium text-gray-600">Seu nome *</label>
-                    <input id="f_full_name" className="input" value={buyForm.full_name}
-                      onChange={(e) => setBuyField('full_name', e.target.value)} autoComplete="off" />
-                  </div>
-                  <div>
-                    <label htmlFor="f_phone" className="mb-1 block text-xs font-medium text-gray-600">Telefone / WhatsApp *</label>
-                    <input id="f_phone" className="input" inputMode="tel" maxLength={15} value={buyForm.phone}
-                      onChange={(e) => setBuyField('phone', e.target.value)} autoComplete="off" />
-                  </div>
-                  <div>
-                    <label htmlFor="f_cpf" className="mb-1 block text-xs font-medium text-gray-600">CPF *</label>
-                    <input id="f_cpf" className="input" inputMode="numeric" maxLength={14} placeholder="000.000.000-00" value={buyForm.cpf}
-                      onChange={(e) => setBuyField('cpf', maskCpf(e.target.value))} autoComplete="off"
-                      onBlur={async () => { const nm = await cpfAccount.check(buyForm.cpf); if (nm) cpfAccount.open() }} />
-                  </div>
-                </div>
+                <CheckoutRetiradaFields
+                  form={buyForm}
+                  set={setBuyField}
+                  missing={buyMissing}
+                  onCpfComplete={async (v) => { const nm = await cpfAccount.check(v); if (nm) cpfAccount.open() }}
+                />
               ))}
 
             {buyError && (
