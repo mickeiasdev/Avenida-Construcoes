@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Pencil, Plus, Tags, Trash2, X } from 'lucide-react'
+import { Pencil, Plus, Search, Tags, Trash2, X } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useStore } from '../../context/StoreContext'
 import { formatDate } from '../../lib/utils'
@@ -167,19 +167,32 @@ export default function Categories() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Categorias</h1>
-          <p className="text-sm text-gray-500">
-            {rows === null ? 'Carregando…' : total + ' no total' + (search ? ' · busca "' + search + '"' : '')}
-          </p>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-800">Categorias</h1>
+        <p className="text-sm text-gray-500">
+          {rows === null ? 'Carregando…' : total + ' no total' + (search ? ' · busca "' + search + '"' : '')}
+        </p>
+      </div>
+
+      {/* barra de busca + ação na mesma linha — mesmo desenho dos Pedidos
+          (busca com ícone + botão ao lado, na mesma altura) */}
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="relative flex-1 sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+          <input
+            className="input pl-10"
+            placeholder="Buscar categoria…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Buscar categoria"
+          />
         </div>
-        <button type="button" className="btn-primary" onClick={() => setNewOpen((v) => !v)}>
+        <button type="button" className="btn-primary shrink-0" onClick={() => setNewOpen((v) => !v)}>
           <Plus className="h-4 w-4" /> Nova categoria
         </button>
       </div>
 
-      {/* form de criação (mesma linha de busca dos Pedidos) */}
+      {/* form de criação */}
       {newOpen && (
         <form onSubmit={handleCreate} className="card flex flex-col gap-2 !p-3.5 sm:flex-row">
           <div className="relative flex-1">
