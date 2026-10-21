@@ -11,8 +11,8 @@ const DEFAULT_SETTINGS = {
   store_name: 'Avenida Construção',
   logo_url: null,
   banner_url: '', // vazio até o banco responder — um default externo "piscava" na vitrine; sem banner a Home mostra só o degradê da marca
-  primary_color: '#475569',
-  secondary_color: '#1e293b',
+  primary_color: '#9ca3af',  // cinza claro — padrão neutro (lojista troca no painel)
+  secondary_color: '#18181b', // cinza quase preto
   // vazio de propósito: o app esconde os atalhos de WhatsApp até o admin
   // configurar o número real em /admin/configuracoes (evita link wa.me/ vazio)
   whatsapp: '',
@@ -43,7 +43,7 @@ export function StoreProvider({ children }) {
   const [loading, setLoading] = useState(true)
   // Cor em cache = já sabemos a cor da loja: pinta na hora. Sem cache (primeira
   // visita neste navegador) seguramos o primeiro paint até a cor chegar, senão o
-  // roxo padrão do template piscaria antes de virar a cor configurada.
+  // cinza padrão do template piscaria antes de virar a cor configurada.
   const [themeReady, setThemeReady] = useState(() => readCachedBrand() !== null)
 
   async function loadSettings() {

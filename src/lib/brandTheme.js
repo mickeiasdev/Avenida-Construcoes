@@ -1,8 +1,9 @@
 // Cor da marca + tamanho da fonte: cache local + aplicação no <html>.
 //
-// Por que existe: o CSS nasce com a cor padrão do template (roxo) e a cor que o
-// lojista escolheu só chega depois que o StoreContext busca store_settings do
-// Supabase. Sem este cache a loja piscava roxo e só então ia para a cor certa.
+// Por que existe: o CSS nasce com a cor padrão do template (cinza neutro) e a
+// cor que o lojista escolheu só chega depois que o StoreContext busca
+// store_settings do Supabase. Sem este cache a loja piscava no cinza padrão
+// e só então ia para a cor certa.
 // Aqui guardamos a última cor/escala conhecidas para o script inline do
 // index.html pintar a página já correta, antes do primeiro paint e antes do
 // React montar. A fonte usa o mesmo truque: escala a base rem do <html>.

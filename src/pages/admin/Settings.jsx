@@ -46,8 +46,8 @@ export default function Settings() {
       whatsapp: maskPhone(waLocal(settings.whatsapp)),
       cnpj: settings.cnpj ? maskCnpj(settings.cnpj) : '',
       layout: settings.layout ?? 'loja',
-      primary_color: settings.primary_color ?? '#f97316',
-      secondary_color: settings.secondary_color ?? '#1e293b',
+      primary_color: settings.primary_color ?? '#9ca3af',
+      secondary_color: settings.secondary_color ?? '#18181b',
       font_scale: settings.font_scale ?? 100,
       daily_goal: settings.daily_goal != null ? String(settings.daily_goal) : '', // meta do dia (migration-30)
       logo_url: settings.logo_url ?? '',
@@ -88,7 +88,7 @@ export default function Settings() {
   async function handleSave(e) {
     e.preventDefault()
     if (!HEX.test(form.primary_color) || !HEX.test(form.secondary_color)) {
-      setMsg({ type: 'err', text: 'As cores devem estar em hexadecimal válido (ex.: #f97316).' })
+      setMsg({ type: 'err', text: 'As cores devem estar em hexadecimal válido (ex.: #9ca3af).' })
       return
     }
     // configurar a loja muda a vitrine INTEIRA em tempo real — confirma
@@ -537,7 +537,7 @@ function ColorPicker({ label, value, onChange }) {
           className="input font-mono uppercase"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="#f97316"
+          placeholder="#9ca3af"
         />
       </div>
     </div>

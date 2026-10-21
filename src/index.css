@@ -13,15 +13,17 @@
      --brand-primary / --brand-secondary são gravadas em runtime
      pelo StoreContext a partir da tabela store_settings.
      NUNCA use cor fixa de marca: o lojista troca a primária.
+     PADRÃO DO TEMPLATE (sem banco ainda): cinza claro + cinza quase
+     preto — neutro de propósito, não assume identidade de loja nenhuma.
    ============================================================ */
 @theme inline {
-  --color-primary: var(--brand-primary, #475569);
-  --color-secondary: var(--brand-secondary, #1e293b);
+  --color-primary: var(--brand-primary, #9ca3af);
+  --color-secondary: var(--brand-secondary, #18181b);
 }
 
 :root {
-  --brand-primary: #475569;
-  --brand-secondary: #1e293b;
+  --brand-primary: #9ca3af;   /* cinza claro — padrão neutro do template */
+  --brand-secondary: #18181b; /* cinza quase preto */
 
   /* neutros do template: a cor de marca de verdade vem do banco (--brand-primary) */
   --surface-soft: #f3f4f6;

@@ -11,7 +11,7 @@ describe('brandTheme', () => {
   beforeEach(() => {
     localStorage.clear()
     document.documentElement.removeAttribute('style')
-    document.head.innerHTML = '<meta name="theme-color" content="#475569" />'
+    document.head.innerHTML = '<meta name="theme-color" content="#9ca3af" />'
   })
 
   it('grava a cor aplicada em cache e a lê de volta', () => {
