@@ -7,6 +7,11 @@
 -- produtos sem calculadora agora gravam a unidade padrão 'm²' (inofensiva,
 -- a calculadora só aparece quando coverage_value > 0).
 --
+-- v3: corrige o erro "payment_status violates not-null constraint" — a coluna
+-- é NOT NULL com check (migration-13); dinheiro/cartão agora gravam 'pending'
+-- (pagamento na entrega ainda não recebido) e o pedido cancelado com Pix
+-- grava 'cancelled'.
+--
 -- O que cria:
 --  • 8 categorias novas (Cimentos e Argamassas já existem);
 --  • 100 produtos com foto, organizados por categoria, TODOS com preço
@@ -383,7 +388,7 @@ insert into public.order_items (order_id, product_id, product_name, quantity, un
     and not exists (select 1 from public.order_items oi where oi.order_id = '5d03c2ef-d6c8-4ac3-8e3f-9e4b56c246a1' and oi.product_name = 'Rejunte cinza 5kg');
 -- pedido 3: Antônio Bezerra Lima (delivered, dinheiro)
 insert into public.orders (id, status, delivery_method, origin, payment_method, payment_status, is_guest, customer_name, customer_phone, customer_cpf, delivery_address, total, discount, created_at)
-  select '6ecc1694-bf04-43d6-8637-2414cfe62569', 'delivered', 'entrega', 'site', 'dinheiro', null, true, 'Antônio Bezerra Lima', '5585916510094', null, 'Rua São Francisco, 88 - Caponga, Cascavel/CE', 2.10, 0, '2026-10-06 11:19:00-03'
+  select '6ecc1694-bf04-43d6-8637-2414cfe62569', 'delivered', 'entrega', 'site', 'dinheiro', 'pending', true, 'Antônio Bezerra Lima', '5585916510094', null, 'Rua São Francisco, 88 - Caponga, Cascavel/CE', 2.10, 0, '2026-10-06 11:19:00-03'
   where not exists (select 1 from public.orders where customer_name = 'Antônio Bezerra Lima' and total = 2.10);
 insert into public.order_items (order_id, product_id, product_name, quantity, unit_price, fulfillment)
   select '6ecc1694-bf04-43d6-8637-2414cfe62569', (select id from public.products where name = 'Tijolo baiano 8 furos'), 'Tijolo baiano 8 furos', 200, 0.01, 'entrega'
@@ -407,7 +412,7 @@ insert into public.order_items (order_id, product_id, product_name, quantity, un
     and not exists (select 1 from public.order_items oi where oi.order_id = '0fef486e-2128-44d3-8c77-2b7c497d9464' and oi.product_name = 'Rolo de lã 23cm');
 -- pedido 5: José Carlos Almeida (delivered, cartao)
 insert into public.orders (id, status, delivery_method, origin, payment_method, payment_status, is_guest, customer_name, customer_phone, customer_cpf, delivery_address, total, discount, created_at)
-  select '77fe0a61-7b65-4103-b80d-2955fd9c28e1', 'delivered', 'entrega', 'site', 'cartao', null, true, 'José Carlos Almeida', '5585933688783', '82064160769', 'Rua do Sítio, 22 - Coqueiro, Cascavel/CE', 0.18, 0, '2026-10-09 10:52:00-03'
+  select '77fe0a61-7b65-4103-b80d-2955fd9c28e1', 'delivered', 'entrega', 'site', 'cartao', 'pending', true, 'José Carlos Almeida', '5585933688783', '82064160769', 'Rua do Sítio, 22 - Coqueiro, Cascavel/CE', 0.18, 0, '2026-10-09 10:52:00-03'
   where not exists (select 1 from public.orders where customer_name = 'José Carlos Almeida' and total = 0.18);
 insert into public.order_items (order_id, product_id, product_name, quantity, unit_price, fulfillment)
   select '77fe0a61-7b65-4103-b80d-2955fd9c28e1', (select id from public.products where name = 'Brita 1 saco 20kg'), 'Brita 1 saco 20kg', 12, 0.01, 'entrega'
@@ -447,7 +452,7 @@ insert into public.order_items (order_id, product_id, product_name, quantity, un
     and not exists (select 1 from public.order_items oi where oi.order_id = 'be866e4d-5632-4893-a2a8-cc193ebd0352' and oi.product_name = 'Nível de bolha 60cm');
 -- pedido 8: Raimunda Sousa (delivered, dinheiro)
 insert into public.orders (id, status, delivery_method, origin, payment_method, payment_status, is_guest, customer_name, customer_phone, customer_cpf, delivery_address, total, discount, created_at)
-  select '1179b00d-babf-42aa-a9c0-f5752382452c', 'delivered', 'entrega', 'site', 'dinheiro', null, true, 'Raimunda Sousa', '5585920851972', '34271240769', 'Vila Nova, 77 - Caponga, Cascavel/CE', 0.05, 0, '2026-10-13 13:05:00-03'
+  select '1179b00d-babf-42aa-a9c0-f5752382452c', 'delivered', 'entrega', 'site', 'dinheiro', 'pending', true, 'Raimunda Sousa', '5585920851972', '34271240769', 'Vila Nova, 77 - Caponga, Cascavel/CE', 0.05, 0, '2026-10-13 13:05:00-03'
   where not exists (select 1 from public.orders where customer_name = 'Raimunda Sousa' and total = 0.05);
 insert into public.order_items (order_id, product_id, product_name, quantity, unit_price, fulfillment)
   select '1179b00d-babf-42aa-a9c0-f5752382452c', (select id from public.products where name = 'Tinta acrílica 3,6L'), 'Tinta acrílica 3,6L', 3, 0.01, 'entrega'
@@ -539,7 +544,7 @@ insert into public.order_items (order_id, product_id, product_name, quantity, un
     and not exists (select 1 from public.order_items oi where oi.order_id = 'bb4f24a7-dac5-4ed1-a320-efcee78a5311' and oi.product_name = 'Brita 2 saco 20kg');
 -- pedido 15: Márcio José Andrade (shipping, dinheiro)
 insert into public.orders (id, status, delivery_method, origin, payment_method, payment_status, is_guest, customer_name, customer_phone, customer_cpf, delivery_address, total, discount, created_at)
-  select '27f566aa-3aba-4e6e-b3f3-5da95c745938', 'shipping', 'entrega', 'site', 'dinheiro', null, true, 'Márcio José Andrade', '5585993379175', null, 'Rua Bela Vista, 40 - Caponga, Cascavel/CE', 1.32, 0, '2026-10-20 15:26:00-03'
+  select '27f566aa-3aba-4e6e-b3f3-5da95c745938', 'shipping', 'entrega', 'site', 'dinheiro', 'pending', true, 'Márcio José Andrade', '5585993379175', null, 'Rua Bela Vista, 40 - Caponga, Cascavel/CE', 1.32, 0, '2026-10-20 15:26:00-03'
   where not exists (select 1 from public.orders where customer_name = 'Márcio José Andrade' and total = 1.32);
 insert into public.order_items (order_id, product_id, product_name, quantity, unit_price, fulfillment)
   select '27f566aa-3aba-4e6e-b3f3-5da95c745938', (select id from public.products where name = 'Bloco de concreto 14x19x39'), 'Bloco de concreto 14x19x39', 120, 0.01, 'entrega'
@@ -575,7 +580,7 @@ insert into public.order_items (order_id, product_id, product_name, quantity, un
     and not exists (select 1 from public.order_items oi where oi.order_id = '162d512e-5313-48cc-ac69-b1e7e6812250' and oi.product_name = 'Fio flexível 1,5mm rolo 100m');
 -- pedido 18: Juliana Maria Cardoso (preparing, cartao)
 insert into public.orders (id, status, delivery_method, origin, payment_method, payment_status, is_guest, customer_name, customer_phone, customer_cpf, delivery_address, total, discount, created_at)
-  select 'c42d7ab1-55a3-4392-8fbc-8e7e7da38dd4', 'preparing', 'retirada', 'site', 'cartao', null, true, 'Juliana Maria Cardoso', '5585909678580', null, null, 0.04, 0, '2026-10-21 10:07:00-03'
+  select 'c42d7ab1-55a3-4392-8fbc-8e7e7da38dd4', 'preparing', 'retirada', 'site', 'cartao', 'pending', true, 'Juliana Maria Cardoso', '5585909678580', null, null, 0.04, 0, '2026-10-21 10:07:00-03'
   where not exists (select 1 from public.orders where customer_name = 'Juliana Maria Cardoso' and total = 0.04);
 insert into public.order_items (order_id, product_id, product_name, quantity, unit_price, fulfillment)
   select 'c42d7ab1-55a3-4392-8fbc-8e7e7da38dd4', (select id from public.products where name = 'Misturador monocomando'), 'Misturador monocomando', 1, 0.01, 'retirada'
@@ -623,7 +628,7 @@ insert into public.order_items (order_id, product_id, product_name, quantity, un
     and not exists (select 1 from public.order_items oi where oi.order_id = 'b6751fa6-c492-4a7b-8e64-9138a23ec37e' and oi.product_name = 'Disjuntor 25A');
 -- pedido 21: Geraldo Pereira Neto (pending, dinheiro)
 insert into public.orders (id, status, delivery_method, origin, payment_method, payment_status, is_guest, customer_name, customer_phone, customer_cpf, delivery_address, total, discount, created_at)
-  select 'd15e2297-cb45-44aa-a636-9e98d77ba771', 'pending', 'entrega', 'site', 'dinheiro', null, true, 'Geraldo Pereira Neto', '5585946910569', '99992188338', 'Rua dos Tapuias, 65 - Caponga, Cascavel/CE', 0.48, 0, '2026-10-21 13:45:00-03'
+  select 'd15e2297-cb45-44aa-a636-9e98d77ba771', 'pending', 'entrega', 'site', 'dinheiro', 'pending', true, 'Geraldo Pereira Neto', '5585946910569', '99992188338', 'Rua dos Tapuias, 65 - Caponga, Cascavel/CE', 0.48, 0, '2026-10-21 13:45:00-03'
   where not exists (select 1 from public.orders where customer_name = 'Geraldo Pereira Neto' and total = 0.48);
 insert into public.order_items (order_id, product_id, product_name, quantity, unit_price, fulfillment)
   select 'd15e2297-cb45-44aa-a636-9e98d77ba771', (select id from public.products where name = 'Meio-fio 15x30'), 'Meio-fio 15x30', 40, 0.01, 'entrega'
@@ -635,7 +640,7 @@ insert into public.order_items (order_id, product_id, product_name, quantity, un
     and not exists (select 1 from public.order_items oi where oi.order_id = 'd15e2297-cb45-44aa-a636-9e98d77ba771' and oi.product_name = 'Pó de pedra saco 20kg');
 -- pedido 22: Vanessa Araújo (cancelled, pix)
 insert into public.orders (id, status, delivery_method, origin, payment_method, payment_status, is_guest, customer_name, customer_phone, customer_cpf, delivery_address, total, discount, created_at)
-  select '9f40522a-5cab-4810-af2f-846d33979977', 'cancelled', 'entrega', 'site', 'pix', null, true, 'Vanessa Araújo', '5585909406301', '50308158306', 'Rua das Palmeiras, 77 - Centro, Cascavel/CE', 0.02, 0, '2026-10-15 18:25:00-03'
+  select '9f40522a-5cab-4810-af2f-846d33979977', 'cancelled', 'entrega', 'site', 'pix', 'cancelled', true, 'Vanessa Araújo', '5585909406301', '50308158306', 'Rua das Palmeiras, 77 - Centro, Cascavel/CE', 0.02, 0, '2026-10-15 18:25:00-03'
   where not exists (select 1 from public.orders where customer_name = 'Vanessa Araújo' and total = 0.02);
 insert into public.order_items (order_id, product_id, product_name, quantity, unit_price, fulfillment)
   select '9f40522a-5cab-4810-af2f-846d33979977', (select id from public.products where name = 'Vaso sanitário com caixa acoplada'), 'Vaso sanitário com caixa acoplada', 1, 0.01, 'entrega'
@@ -647,7 +652,7 @@ insert into public.order_items (order_id, product_id, product_name, quantity, un
     and not exists (select 1 from public.order_items oi where oi.order_id = '9f40522a-5cab-4810-af2f-846d33979977' and oi.product_name = 'Ralo linear inox 60cm');
 -- pedido 23: Igor Monteiro (cancelled, dinheiro)
 insert into public.orders (id, status, delivery_method, origin, payment_method, payment_status, is_guest, customer_name, customer_phone, customer_cpf, delivery_address, total, discount, created_at)
-  select '4edbdc32-cadc-4684-83cd-bd3b23c7635a', 'cancelled', 'retirada', 'site', 'dinheiro', null, true, 'Igor Monteiro', '5585973079893', '75328360639', null, 0.07, 0, '2026-10-17 19:07:00-03'
+  select '4edbdc32-cadc-4684-83cd-bd3b23c7635a', 'cancelled', 'retirada', 'site', 'dinheiro', 'pending', true, 'Igor Monteiro', '5585973079893', '75328360639', null, 0.07, 0, '2026-10-17 19:07:00-03'
   where not exists (select 1 from public.orders where customer_name = 'Igor Monteiro' and total = 0.07);
 insert into public.order_items (order_id, product_id, product_name, quantity, unit_price, fulfillment)
   select '4edbdc32-cadc-4684-83cd-bd3b23c7635a', (select id from public.products where name = 'MDF 15mm 2,75x1,85m'), 'MDF 15mm 2,75x1,85m', 3, 0.01, 'retirada'
@@ -659,7 +664,7 @@ insert into public.order_items (order_id, product_id, product_name, quantity, un
     and not exists (select 1 from public.order_items oi where oi.order_id = '4edbdc32-cadc-4684-83cd-bd3b23c7635a' and oi.product_name = 'Compensado 6mm 2,2x1,1m');
 -- pedido 24: Débora Prado (cancelled, cartao)
 insert into public.orders (id, status, delivery_method, origin, payment_method, payment_status, is_guest, customer_name, customer_phone, customer_cpf, delivery_address, total, discount, created_at)
-  select '547ea6b9-8746-4d11-b6e7-28f30ee8fcda', 'cancelled', 'entrega', 'site', 'cartao', null, true, 'Débora Prado', '5585953023267', null, 'Rua Serrote, 15 - Coqueiro, Cascavel/CE', 0.50, 0, '2026-10-01 17:39:00-03'
+  select '547ea6b9-8746-4d11-b6e7-28f30ee8fcda', 'cancelled', 'entrega', 'site', 'cartao', 'pending', true, 'Débora Prado', '5585953023267', null, 'Rua Serrote, 15 - Coqueiro, Cascavel/CE', 0.50, 0, '2026-10-01 17:39:00-03'
   where not exists (select 1 from public.orders where customer_name = 'Débora Prado' and total = 0.50);
 insert into public.order_items (order_id, product_id, product_name, quantity, unit_price, fulfillment)
   select '547ea6b9-8746-4d11-b6e7-28f30ee8fcda', (select id from public.products where name = 'Telha romana cimentícia'), 'Telha romana cimentícia', 50, 0.01, 'entrega'
