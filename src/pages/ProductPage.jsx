@@ -4,7 +4,7 @@ import { ArrowLeft, Banknote, Check, ChevronLeft, ChevronRight, CreditCard, Load
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
-import { formatBRL, effectivePrice } from '../lib/utils'
+import { formatBRL, effectivePrice, hasActivePromo, promoPercent } from '../lib/utils'
 import { CheckoutForm, CheckoutRetiradaFields } from '../components/CheckoutForm'
 import { profileToForm, missingFields, requiredFieldsFor, fieldLabel, maskCpf } from '../lib/checkout'
 import { FavoriteButton } from '../components/FavoriteButton'
@@ -262,6 +262,11 @@ export default function ProductPage() {
   }
 
   const out = !product.active || product.stock === 0
+  // promoção ATIVA tem prioridade sobre o desconto percentual — mesmas regras
+  // do card da vitrine, senão a página mostrava preço menor sem explicação
+  const promo = hasActivePromo(product)
+  const promoOff = promo ? promoPercent(product) : 0
+  const hasDeal = promo || Number(product.discount_percent) > 0
   const stockLabel = product.stock == null
     ? 'Em estoque'
     : product.stock === 0 ? 'Fora de estoque' : 'Em estoque: ' + product.stock + ' unidade(s)'
@@ -349,14 +354,14 @@ export default function ProductPage() {
           )}
           <h1 className="text-2xl font-bold text-gray-800">{product.name}</h1>
           <p className="text-sm leading-relaxed text-gray-600">{product.description}</p>
-          <div className="flex items-baseline gap-2">
-            {Number(product.discount_percent) > 0 && (
-              <>
-                <span className="rounded-md bg-red-100 px-2 py-0.5 text-xs font-extrabold text-red-600">
-                  -{product.discount_percent}%
-                </span>
-                <span className="text-sm font-medium text-gray-400 line-through">{formatBRL(product.price)}</span>
-              </>
+          <div className="flex flex-wrap items-baseline gap-2">
+            {hasDeal && (
+              <span className="rounded-md bg-red-500 px-2 py-0.5 text-xs font-extrabold text-white shadow-sm">
+                {promo ? 'OFERTA' + (promoOff > 0 ? ' -' + promoOff + '%' : '') : '-' + product.discount_percent + '% OFF'}
+              </span>
+            )}
+            {hasDeal && (
+              <span className="text-sm font-medium text-gray-400 line-through">{formatBRL(product.price)}</span>
             )}
             <p className="text-3xl font-extrabold tracking-tight text-primary">{formatBRL(effectivePrice(product))}</p>
           </div>
@@ -544,7 +549,7 @@ export default function ProductPage() {
                   </ul>
 
                   {/* Dados completos são obrigatórios: não existe "preencher depois" */}
-                  <div className="flex flex-col gap-2 mb-5">
+                  <div className="flex flex-col gap-2">
                     <button
                       type="button"
                       className="btn-primary w-full"

@@ -277,7 +277,13 @@ export default function Cart() {
             <div key={i.product_id} className="card space-y-2.5">
               <div className="flex items-start gap-3">
                 <Link to={'/produto/' + i.product_id} className="shrink-0">
-                  <img src={i.image_url} alt="" className="h-16 w-16 rounded-lg object-cover" />
+                  {i.image_url ? (
+                    <img src={i.image_url} alt="" className="h-16 w-16 rounded-lg object-cover" />
+                  ) : (
+                    <span className="flex h-16 w-16 items-center justify-center rounded-lg bg-gray-100 text-gray-300">
+                      <Package className="h-6 w-6" />
+                    </span>
+                  )}
                 </Link>
                 <div className="min-w-0 flex-1">
                   <Link to={'/produto/' + i.product_id} className="line-clamp-2 font-medium text-gray-800 hover:text-primary">
@@ -564,7 +570,7 @@ export default function Cart() {
             </ul>
 
             {/* Dados completos são obrigatórios: não existe "preencher depois" */}
-            <div className="flex flex-col gap-2 mb-5">
+            <div className="flex flex-col gap-2">
               <button type="button" className="btn-primary w-full" onClick={preencherAgora}>
                 Atualizar dados agora
               </button>

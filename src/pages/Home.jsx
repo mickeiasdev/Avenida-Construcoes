@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Flame, Loader2, Package, SearchX, Tag } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { useStore } from '../context/StoreContext'
@@ -237,7 +237,7 @@ export default function Home() {
                 {openStatus.label}
               </span>
             </div>
-            <p className="mt-2 text-xs text-white/60">{formatBusinessHoursText(settings) || settings.business_hours}</p>
+            <p className="mt-2 text-xs text-white/80">{formatBusinessHoursText(settings) || settings.business_hours}</p>
           </header>
 
           {/* MAIS VENDIDOS: cards grandes estilo vitrine, carrossel horizontal */}
@@ -259,6 +259,9 @@ export default function Home() {
               ))}
             </div>
           </section>
+
+          {/* categorias no mobile: chips roláveis (desktop tem a nav do header) */}
+          <CategoryChips categories={categories} current={catSlug} onSelect={selectFilter} />
         </>
       )}
 
@@ -282,11 +285,16 @@ export default function Home() {
           </h1>
           <p className="max-w-md text-sm text-white/90 sm:text-base md:text-lg">{settings.about}</p>
           <div className="mt-2 flex flex-wrap items-center gap-3">
-            <a href="#produtos" className="btn-primary shadow-lg">Ver ofertas</a>
-            <span className="text-xs font-medium text-white/70">{formatBusinessHoursText(settings) || settings.business_hours}</span>
+            <Link to="/?cat=ofertas" className="btn-primary shadow-lg">Ver ofertas</Link>
+            <span className="text-xs font-medium text-white/85">{formatBusinessHoursText(settings) || settings.business_hours}</span>
           </div>
         </div>
       </section>
+      )}
+
+      {/* categorias no mobile: chips roláveis (desktop tem a nav do header) */}
+      {!isMenu && (
+        <CategoryChips categories={categories} current={catSlug} onSelect={selectFilter} />
       )}
 
       {/* EXPLORAR — dropdown (padrão: Mais vendidos) — apenas layout loja */}
@@ -367,6 +375,16 @@ export default function Home() {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
             {products.map((p) => <ProductCard key={p.id} product={p} />)}
           </div>
+          {/* modo padrão (mais vendidos) para no limite do ranking: saída
+              direta para o catálogo completo, sem caçar no dropdown Explorar */}
+          {isBest && products.length > 0 && (
+            <div className="flex justify-center pt-1">
+              <button type="button" className="btn-soft" onClick={() => selectFilter('todas')}>
+                Ver todos os produtos
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
           {hasMore && (
             <div className="flex justify-center">
               <button type="button" className="btn-primary" onClick={loadMore} disabled={loadingMore}>
@@ -467,6 +485,39 @@ function MenuItem({ icon: Icon, label, desc, active, onClick }) {
       {desc && <span className="shrink-0 text-[11px] text-gray-400">{desc}</span>}
       {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
     </button>
+  )
+}
+
+// Chips de categoria (MOBILE): a descoberta mais rápida da vitrine —
+// sem abrir o drawer. No desktop a nav do header (aparece ao rolar) e o
+// dropdown Explorar já cobrem, então só renderiza abaixo de md.
+function CategoryChips({ categories, current, onSelect }) {
+  const base = 'flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-semibold ring-1 transition active:scale-95 '
+  const chip = (active) =>
+    base + (active
+      ? 'bg-primary text-white ring-primary shadow-sm'
+      : 'bg-white text-gray-600 ring-gray-200 hover:ring-primary/40')
+  return (
+    <div
+      className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:hidden"
+      role="navigation"
+      aria-label="Explorar por categoria"
+    >
+      <button type="button" className={chip(current === '')} onClick={() => onSelect('')}>
+        <Flame className="h-3.5 w-3.5" /> Mais vendidos
+      </button>
+      <button type="button" className={chip(current === 'todas')} onClick={() => onSelect('todas')}>
+        Todos
+      </button>
+      {categories.map((c) => (
+        <button type="button" key={c.id} className={chip(current === c.slug)} onClick={() => onSelect(c.slug)}>
+          {c.name}
+        </button>
+      ))}
+      <button type="button" className={chip(current === 'ofertas')} onClick={() => onSelect('ofertas')}>
+        <Tag className="h-3.5 w-3.5" /> Ofertas
+      </button>
+    </div>
   )
 }
 

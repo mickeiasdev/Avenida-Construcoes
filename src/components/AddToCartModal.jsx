@@ -51,7 +51,7 @@ export function AddToCartModal() {
           </span>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row mb-5">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <button
             type="button"
             className="flex-1 rounded-lg bg-white px-4 py-2.5 font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-50"
