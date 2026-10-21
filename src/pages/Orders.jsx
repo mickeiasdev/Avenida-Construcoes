@@ -26,7 +26,7 @@ export default function Orders() {
   const [actionError, setActionError] = useState(null)
   const [mpModal, setMpModal] = useState(null) // { order, mpPix }
   const [mpLoading, setMpLoading] = useState(false)
-  const { getOrderPaymentStatus, checkMpOrderAgain, clearCart } = useCart()
+  const { getOrderPaymentStatus, checkMpOrderAgain, clearCart, showNotice } = useCart()
   useModalA11y(!!mpModal, () => setMpModal(null))
 
   useEffect(() => {
@@ -93,10 +93,11 @@ export default function Orders() {
       if (added > 0) {
         navigate('/carrinho')
         if (missing.length > 0) {
-          window.alert('Itens adicionados à sacola!\\nAviso: ' + missing.length + ' produto(s) do pedido não está(ão) mais disponível(is): ' + missing.slice(0, 3).join(', ') + (missing.length > 3 ? '…' : ''))
+          // toast do layout: sobrevive à navegação (o alert nativo quebrava o padrão visual)
+          showNotice(added + ' produto(s) do pedido voltaram para a sacola. Indisponível(is): ' + missing.slice(0, 3).join(', ') + (missing.length > 3 ? '…' : ''))
         }
       } else {
-        window.alert('Nenhum item deste pedido está disponível na loja agora.')
+        showNotice('Nenhum item deste pedido está disponível na loja agora.')
       }
     } catch (e) {
       setBusyId(null)

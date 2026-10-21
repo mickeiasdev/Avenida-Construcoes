@@ -64,6 +64,7 @@ export function CartProvider({ children }) {
   })
   const [lastAdded, setLastAdded] = useState(null) // modal (só na primeira vez)
   const [addedToast, setAddedToast] = useState(null) // aviso do 2º item em diante
+  const [notice, setNotice] = useState(null) // aviso geral (ex.: itens indisponíveis ao refazer compra)
   const [coupon, setCoupon] = useState(null) // { code, kind, value, min_total } ou null
 
   useEffect(() => {
@@ -120,6 +121,11 @@ export function CartProvider({ children }) {
   function dismissLastAdded() { setLastAdded(null) }
 
   const dismissAddedToast = useCallback(() => setAddedToast(null), [])
+
+  // Aviso geral da loja (sobrevive à navegação: o CartToast vive no layout).
+  // key = Date.now() para repetir a mesma mensagem duas vezes seguidas.
+  const showNotice = useCallback((text) => setNotice({ text, key: Date.now() }), [])
+  const dismissNotice = useCallback(() => setNotice(null), [])
 
   function updateQuantity(productId, quantity) {
     if (quantity <= 0) { removeItem(productId); return }
@@ -379,7 +385,7 @@ export function CartProvider({ children }) {
 
   return (
     <CartContext.Provider
-      value={{ items, count, total, lastAdded, dismissLastAdded, addedToast, dismissAddedToast, addItem, updateQuantity, removeItem, clearCart, checkout, coupon, applyCoupon, removeCoupon, discountValue, refreshPrices, getOrderPaymentStatus, checkMpOrderAgain }}
+      value={{ items, count, total, lastAdded, dismissLastAdded, addedToast, dismissAddedToast, notice, showNotice, dismissNotice, addItem, updateQuantity, removeItem, clearCart, checkout, coupon, applyCoupon, removeCoupon, discountValue, refreshPrices, getOrderPaymentStatus, checkMpOrderAgain }}
     >
       {children}
     </CartContext.Provider>

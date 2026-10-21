@@ -7,6 +7,7 @@ import { useCart } from '../context/CartContext'
 import { useStore } from '../context/StoreContext'
 import { SearchBar } from '../components/SearchBar'
 import { AddToCartModal } from '../components/AddToCartModal'
+import { CartToast } from '../components/CartToast'
 import { useModalA11y } from '../lib/useModalA11y'
 
 const NAV_THRESHOLD = 240
@@ -156,6 +157,7 @@ export default function StoreLayout() {
                       <span className="ml-auto text-[10px] font-bold uppercase tracking-wide text-amber-600">faltam dados</span>
                     )}
                   </Link>
+                  <Link to="/favoritos" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100"><Heart className="h-4 w-4" /> Meus favoritos</Link>
                   <Link to="/pedidos" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100"><Package className="h-4 w-4" /> Meus pedidos</Link>
                   {isAdmin && (
                     <Link to="/admin" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100"><SettingsIcon className="h-4 w-4" /> Dashboard admin</Link>
@@ -167,6 +169,7 @@ export default function StoreLayout() {
                   <Link to="/" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100">
                     <HomeIcon className="h-4 w-4" /> Início
                   </Link>
+                  <Link to="/favoritos" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100"><Heart className="h-4 w-4" /> Meus favoritos</Link>
                   <Link to="/login" className="flex items-center gap-2 rounded-lg px-3 py-2 font-medium hover:bg-gray-100"><User className="h-4 w-4" /> Entrar / Criar conta</Link>
                 </>
               )}
@@ -304,8 +307,9 @@ export default function StoreLayout() {
         </button>
       </nav>
 
-      {/* MODAL "ADICIONADO AO CARRINHO" */}
+      {/* MODAL "ADICIONADO AO CARRINHO" + aviso discreto dos itens seguintes */}
       <AddToCartModal />
+      <CartToast />
     </div>
   )
 }
