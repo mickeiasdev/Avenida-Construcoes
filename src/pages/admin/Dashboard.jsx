@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ClipboardList, Package, TrendingUp, Truck, Users, Loader2 } from 'lucide-react'
+import { ClipboardList, Package, TrendingUp, Truck, Users, Loader2, AlertTriangle, Target } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useStore } from '../../context/StoreContext'
 import { sweepOrphanImages } from '../../lib/storageCleanup'
@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [topProducts, setTopProducts] = useState([])
   const [salesByDay, setSalesByDay] = useState([])
   const [topSold, setTopSold] = useState([])
+  const [lowStock, setLowStock] = useState([]) // produtos no mínimo (migration-30)
   const [loadError, setLoadError] = useState(null)
 
   // --------------------------------------------------------------
@@ -37,7 +38,7 @@ export default function Dashboard() {
     async function load() {
       setLoading(true)
 
-      const [ordersRes, clientsRes, productsRes, topRes, itemsRes, statsRes] = await Promise.all([
+      const [ordersRes, clientsRes, productsRes, topRes, itemsRes, statsRes, stockRes] = await Promise.all([
         // order() é indispensável aqui: sem ele, "Pedidos recentes" exibia linhas
         // em ordem indefinida (na prática, os pedidos mais antigos)
         supabase.from('orders').select('id, total, status, created_at, customer_name')
@@ -49,11 +50,23 @@ export default function Dashboard() {
         // agregação no banco (migration-14). Sem ela o cálculo local vale, mas fica
         // sujeito ao teto de 1000 linhas e aos agregados desabilitados do PostgREST.
         supabase.rpc('store_dashboard_stats'),
+        // estoque no mínimo (migration-30): comparação entre colunas não existe
+        // no PostgREST, então busca e filtra aqui — lojas pequenas cabem fácil
+        supabase.from('products')
+          .select('id, name, stock, min_stock')
+          .eq('active', true)
+          .not('stock', 'is', null)
+          .not('min_stock', 'is', null)
+          .limit(500),
       ])
 
       // falha de rede não pode virar R$ 0,00 silencioso
       const failed = [ordersRes, clientsRes, productsRes, topRes, itemsRes].find((r) => r.error)
       setLoadError(failed ? (failed.error?.message ?? 'Falha ao carregar os dados do painel.') : null)
+
+      setLowStock((stockRes.data ?? [])
+        .filter((p) => Number(p.stock) <= Number(p.min_stock))
+        .sort((a, b) => Number(a.stock) - Number(b.stock)))
 
       const stats = (!statsRes?.error && statsRes?.data) ? statsRes.data : null
 
@@ -130,6 +143,11 @@ export default function Dashboard() {
 
   const accent = settings.primary_color
 
+  // meta do dia (Settings → migration-30): hoje = último ponto da série de vendas
+  const dailyGoal = Number(settings.daily_goal ?? 0)
+  const todaySales = salesByDay[salesByDay.length - 1]?.vendas ?? 0
+  const goalPct = dailyGoal > 0 ? Math.round((todaySales / dailyGoal) * 100) : 0
+
   const CARDS = [
     { label: 'Vendas (entregues)', value: formatBRL(metrics.totalSales), icon: TrendingUp, hint: `${metrics.deliveredCount} pedidos` },
     { label: 'Pedidos em andamento', value: String(metrics.inProgress), icon: Truck, hint: 'confirmados, separando ou em rota' },
@@ -164,6 +182,59 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      {/* ===== META DO DIA (migration-30) ===== */}
+      {dailyGoal > 0 && (
+        <div className="card space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 font-bold text-gray-800">
+              <Target className="h-5 w-5 text-primary" /> Meta de hoje
+            </h2>
+            <span className="text-sm text-gray-500">
+              <b className="text-gray-800">{formatBRL(todaySales)}</b> de {formatBRL(dailyGoal)}
+            </span>
+          </div>
+          <div className="h-3 overflow-hidden rounded-full bg-gray-100" role="progressbar" aria-valuenow={Math.min(100, goalPct)} aria-valuemin={0} aria-valuemax={100} aria-label={'Progresso da meta diária: ' + goalPct + '%'}>
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: Math.min(100, goalPct) + '%',
+                backgroundImage: 'linear-gradient(90deg, var(--brand-primary), color-mix(in srgb, var(--brand-primary) 65%, #ffffff))',
+              }}
+            />
+          </div>
+          <p className="text-xs font-medium text-gray-500">
+            {goalPct >= 100
+              ? '🎉 Meta batida! ' + formatBRL(todaySales - dailyGoal) + ' acima do previsto.'
+              : 'Faltam ' + formatBRL(dailyGoal - todaySales) + ' — ' + goalPct + '% da meta. Vendas contabilizam pedidos entregues.'}
+          </p>
+        </div>
+      )}
+
+      {/* ===== ESTOQUE NO MÍNIMO (migration-30) ===== */}
+      {lowStock.length > 0 && (
+        <div className="card space-y-3 ring-1 ring-red-100">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 font-bold text-gray-800">
+              <AlertTriangle className="h-5 w-5 text-red-500" /> Estoque no mínimo
+              <span className="badge-count bg-red-500">{lowStock.length}</span>
+            </h2>
+            <Link to="/admin/produtos" className="text-sm font-medium text-primary hover:underline">
+              Repor agora →
+            </Link>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {lowStock.slice(0, 6).map((p) => (
+              <div key={p.id} className="flex items-center gap-3 py-2 text-sm">
+                <span className="min-w-0 flex-1 truncate font-medium text-gray-800">{p.name}</span>
+                <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">
+                  {p.stock} un. · mín. {p.min_stock}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="card">

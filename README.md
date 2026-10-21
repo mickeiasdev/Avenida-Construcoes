@@ -71,6 +71,12 @@ supabase db push --yes
 | [migration-27](supabase/migration-27.sql) | Histórico completo + refazer compra (claim_guest_orders) |
 | [migration-28](supabase/migration-28.sql) | Layout da vitrine (loja x cardápio) |
 | [migration-29](supabase/migration-29.sql) | Corrige upload de imagens (RLS Storage com with check) |
+| [migration-30](supabase/migration-30.sql) | ⭐ Catálogo inteligente: estoque mínimo (alertas), calculadora de material (rendimento por unidade) e meta diária de vendas |
+| [migration-31](supabase/migration-31.sql) | ⭐ Frete por zona de entrega (taxa/prazo no checkout) + cupons avançados (validade, 1ª compra, categoria) + place_order v5 |
+| [migration-32](supabase/migration-32.sql) | ⭐ Listas de compra recorrente ("lista da obra" — salvar a sacola e repetir com 1 toque) |
+| [migration-33](supabase/migration-33.sql) | ⭐ Avaliações de produto com foto (anti-fake: só pedido entregue; moderação no painel) |
+| [migration-34](supabase/migration-34.sql) | ⭐ Banners promocionais da vitrine (carrossel de campanhas na Home) |
+| [migration-35](supabase/migration-35.sql) | ⭐ Carrinho abandonado (snapshots) + notificações push do PWA (push_subscriptions) |
 
 ---
 
@@ -84,7 +90,7 @@ supabase db push --yes
 ## ⚡ Passo 4 — Edge Functions
 
 ```bash
-supabase functions deploy create-mp-order webhook-mercadopago whatsapp-chat whatsapp-webhook whatsapp-notify
+supabase functions deploy create-mp-order webhook-mercadopago whatsapp-chat whatsapp-webhook whatsapp-notify push-order-status wa-sms-hook
 ```
 
 ### Secrets
@@ -102,6 +108,27 @@ supabase secrets set EVOLUTION_INSTANCE=loja
 # Notificações automáticas
 supabase secrets set NOTIFY_SECRET=sua-senha-interna
 ```
+
+### 🔔 Push "seu pedido saiu para entrega" (opcional, migration-35)
+
+1. Gere as chaves: `npx web-push generate-vapid-keys --json`
+2. Pública no `.env` da loja: `VITE_VAPID_PUBLIC_KEY=<publicKey>`
+3. Ambas como secrets (a function usa a PRIVADA):
+   ```bash
+   supabase secrets set VAPID_PUBLIC_KEY=<publicKey> VAPID_PRIVATE_KEY=<privateKey> VAPID_SUBJECT=mailto:contato@sualoja.com
+   ```
+4. Deploy da function `push-order-status`. O cliente ativa em **Meus pedidos → Ativar notificações**.
+
+### 📲 Login por WhatsApp com código OTP (opcional)
+
+O cliente entra só com o telefone — o código chega no WhatsApp da Evolution:
+
+1. Dashboard → **Authentication → Sign In / Providers → Phone**: ative o provedor.
+2. Dashboard → **Authentication → SMS Provider → Custom SMS Hook**, URL:
+   `https://SEU-REF.supabase.co/functions/v1/wa-sms-hook`
+3. Deploy da function `wa-sms-hook` (usa os secrets EVOLUTION_* já configurados).
+
+Sem essa configuração a aba "Entrar com WhatsApp" mostra erro claro — nada mais quebra.
 
 ### Webhooks (cadastro manual)
 

@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Percent, Users, Menu, X, PlusCircle, MessageCircle, Home } from 'lucide-react';import { useAuth } from '../context/AuthContext'
+import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Percent, Users, Menu, X, PlusCircle, MessageCircle, Home, Zap, Star, FileText, Image as ImageIcon } from 'lucide-react';import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { ORDER_PIPELINE } from '../lib/utils'
@@ -30,13 +30,17 @@ const ITEMS = [
   // logo abaixo do Dashboard (com o selo de não lidas).
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, group: 'Operação' },
   { to: '/admin/whatsapp', label: 'WhatsApp', icon: MessageCircle, waBadge: true },
+  { to: '/admin/automacoes', label: 'Automações', icon: Zap },
   { to: '/admin/pedidos', label: 'Pedidos', icon: ClipboardList },
   { to: '/admin/nova-venda', label: 'Nova venda', icon: PlusCircle },
   { to: '/admin/produtos', label: 'Produtos', icon: Package, group: 'Catálogo' },
   { to: '/admin/categorias', label: 'Categorias', icon: Tags },
-  { to: '/admin/cupons', label: 'Cupons', icon: TicketPercent },
   { to: '/admin/promocoes', label: 'Promoções', icon: Percent },
+  { to: '/admin/banners', label: 'Banners', icon: ImageIcon },
+  { to: '/admin/avaliacoes', label: 'Avaliações', icon: Star },
+  { to: '/admin/cupons', label: 'Cupons', icon: TicketPercent },
   { to: '/admin/clientes', label: 'Clientes', icon: Users, group: 'Loja' },
+  { to: '/admin/relatorios', label: 'Relatórios', icon: FileText },
   { to: '/admin/configuracoes', label: 'Configurações', icon: SettingsIcon },
 ]
 

@@ -2,15 +2,29 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, Pencil, Plus, TicketPercent, ToggleLeft, ToggleRight, Trash2, X } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useConfirmDialog } from '../../components/ConfirmDialog'
+import { useStore } from '../../context/StoreContext'
 import { formatBRL, formatDate } from '../../lib/utils'
 import { useModalA11y } from '../../lib/useModalA11y'
 
-const EMPTY = { id: null, code: '', kind: 'percent', value: '', min_total: 0, active: true }
+const EMPTY = {
+  id: null, code: '', kind: 'percent', value: '', min_total: 0, active: true,
+  // regras avançadas (migration-31)
+  valid_from: '', valid_until: '', first_purchase_only: false, category_id: '',
+}
+
+// ISO → valor de input datetime-local (fuso do navegador)
+function toLocalInput(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 16)
+}
 
 // Área de cupons: o admin cria códigos (% ou R$ fixo, com valor mínimo);
 // o cliente digita o código no checkout e o desconto caí no total.
 export default function Coupons() {
   const confirm = useConfirmDialog()
+  const { categories } = useStore()
   const [rows, setRows] = useState(null)
   const [modal, setModal] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -47,6 +61,11 @@ export default function Coupons() {
       value: Number(modal.value),
       min_total: Math.max(0, Number(modal.min_total) || 0),
       active: modal.active,
+      // regras avançadas (migration-31): vazio = sem restrição
+      valid_from: modal.valid_from ? new Date(modal.valid_from).toISOString() : null,
+      valid_until: modal.valid_until ? new Date(modal.valid_until).toISOString() : null,
+      first_purchase_only: Boolean(modal.first_purchase_only),
+      category_id: modal.category_id || null,
     }
     const res = modal.id
       ? await supabase.from('coupons').update(payload).eq('id', modal.id)
@@ -126,6 +145,7 @@ export default function Coupons() {
                 <th className="px-4 py-3">Código</th>
                 <th className="px-4 py-3">Desconto</th>
                 <th className="px-4 py-3">Mínimo</th>
+                <th className="px-4 py-3">Regras</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Criado em</th>
                 <th className="px-4 py-3 text-right">Ações</th>
@@ -140,6 +160,22 @@ export default function Coupons() {
                   </td>
                   <td className="px-4 py-3 text-gray-500">
                     {Number(c.min_total) > 0 ? 'mín. ' + formatBRL(c.min_total) : '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex max-w-40 flex-wrap gap-1">
+                      {c.first_purchase_only && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">1ª compra</span>
+                      )}
+                      {c.category_id && (
+                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">categoria</span>
+                      )}
+                      {c.valid_until && (
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-500">até {formatDate(c.valid_until)}</span>
+                      )}
+                      {!c.first_purchase_only && !c.category_id && !c.valid_from && !c.valid_until && (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <button
@@ -157,7 +193,14 @@ export default function Coupons() {
                       <button
                         type="button"
                         className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                        onClick={() => setModal({ ...c, value: String(c.value), min_total: Number(c.min_total) })}
+                        onClick={() => setModal({ ...c,
+  value: String(c.value),
+  min_total: Number(c.min_total),
+  valid_from: toLocalInput(c.valid_from),
+  valid_until: toLocalInput(c.valid_until),
+  first_purchase_only: Boolean(c.first_purchase_only),
+  category_id: c.category_id ?? '',
+})}
                         aria-label="Editar"
                       >
                         <Pencil className="h-4 w-4" />
@@ -234,6 +277,37 @@ export default function Coupons() {
                 <input id="f_compra_minima_r" className="input" type="number" min="0" step="0.01" value={modal.min_total}
                   onChange={(e) => setModal({ ...modal, min_total: e.target.value })} placeholder="0" />
               </div>
+            </div>
+
+            {/* REGRAS AVANÇADAS (migration-31) */}
+            <div className="space-y-3 rounded-xl bg-gray-50 p-3 ring-1 ring-gray-100">
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Regras (opcional)</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="field-label" htmlFor="f_valido_de">Válido a partir de</label>
+                  <input id="f_valido_de" type="datetime-local" className="input" value={modal.valid_from} onChange={(e) => setModal({ ...modal, valid_from: e.target.value })} />
+                </div>
+                <div>
+                  <label className="field-label" htmlFor="f_valido_ate">Válido até</label>
+                  <input id="f_valido_ate" type="datetime-local" className="input" value={modal.valid_until} onChange={(e) => setModal({ ...modal, valid_until: e.target.value })} />
+                </div>
+              </div>
+              <div>
+                <label className="field-label" htmlFor="f_categoria_do_cupom">Só para a categoria</label>
+                <select id="f_categoria_do_cupom" className="input" value={modal.category_id} onChange={(e) => setModal({ ...modal, category_id: e.target.value })}>
+                  <option value="">Todas as categorias</option>
+                  {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                </select>
+              </div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[var(--brand-primary)]"
+                  checked={Boolean(modal.first_purchase_only)}
+                  onChange={(e) => setModal({ ...modal, first_purchase_only: e.target.checked })}
+                />
+                Vale só para a PRIMEIRA compra do cliente
+              </label>
             </div>
 
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700">

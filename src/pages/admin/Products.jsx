@@ -9,6 +9,8 @@ import { useModalA11y } from '../../lib/useModalA11y'
 const EMPTY = {
   id: null, name: '', description: '', price: '', discount_percent: 0,
   category_id: '', stock: '', image_url: '', images: [], active: true,
+  min_stock: '',                       // alerta de reposição (migration-30)
+  coverage_value: '', coverage_unit: 'm²', // calculadora de material (migration-30)
 }
 
 // CRUD de produtos: categoria opcional, estoque opcional (vazio = sem
@@ -74,6 +76,9 @@ export default function Products() {
       discount_percent: Math.min(95, Math.max(0, Number(modal.discount_percent) || 0)), // 0-95%
       category_id: modal.category_id || null,       // categoria opcional
       stock: modal.stock === '' ? null : Number(modal.stock), // estoque opcional
+      min_stock: modal.min_stock === '' ? null : Math.max(0, Number(modal.min_stock) || 0),
+      coverage_value: modal.coverage_value === '' ? null : Math.max(0.01, Number(String(modal.coverage_value).replace(',', '.')) || 0.01),
+      coverage_unit: modal.coverage_unit || 'm²',
       image_url: modal.image_url || null,
       images: modal.images ?? [],
       active: modal.active,
@@ -144,6 +149,9 @@ export default function Products() {
       price: String(p.price),
       discount_percent: p.discount_percent ?? 0,
       stock: p.stock == null ? '' : String(p.stock),
+      min_stock: p.min_stock == null ? '' : String(p.min_stock),
+      coverage_value: p.coverage_value == null ? '' : String(p.coverage_value),
+      coverage_unit: p.coverage_unit || 'm²',
       images: p.images ?? [],
     })
   }
@@ -216,7 +224,16 @@ export default function Products() {
                   <td className="px-4 py-3 text-gray-600">{p.categories?.name ?? <span className="text-gray-400">—</span>}</td>
                   <td className="px-4 py-3 font-semibold text-gray-800">{formatBRL(p.price)}</td>
                   <td className="px-4 py-3 text-gray-600">
-                    {p.stock == null ? <span className="text-gray-400" title="Sem controle de estoque">—</span> : p.stock}
+                    {p.stock == null ? <span className="text-gray-400" title="Sem controle de estoque">—</span> : (
+                      <span className={'font-semibold ' + (p.min_stock != null && Number(p.stock) <= Number(p.min_stock) ? 'text-red-600' : '')}>
+                        {p.stock}
+                        {p.min_stock != null && Number(p.stock) <= Number(p.min_stock) && (
+                          <span className="ml-1.5 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-600" title={'Estoque no mínimo (' + p.min_stock + ') — repor'}>
+                            repor
+                          </span>
+                        )}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span className={'rounded-full px-2.5 py-1 text-xs font-medium ' +
@@ -306,6 +323,53 @@ export default function Products() {
                   placeholder="Deixe vazio p/ apenas 'Em estoque'"
                 />
               </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Estoque mínimo (alerta)</label>
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  value={modal.min_stock}
+                  onChange={(e) => setModal({ ...modal, min_stock: e.target.value })}
+                  placeholder="Vazio = sem alerta de reposição"
+                />
+              </div>
+            </div>
+
+            {/* CALCULADORA DE MATERIAL — rendimento por unidade (migration-30) */}
+            <div className="rounded-xl bg-gray-50 p-3 ring-1 ring-gray-200">
+              <p className="text-sm font-medium text-gray-700">Calculadora de material (opcional)</p>
+              <p className="mb-2 text-xs text-gray-500">
+                Com o rendimento por unidade, a página do produto calcula "quantos eu preciso?" para o cliente.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">1 unidade cobre</label>
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={modal.coverage_value}
+                    onChange={(e) => setModal({ ...modal, coverage_value: e.target.value })}
+                    placeholder="Ex.: 5"
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Unidade de medida</label>
+                  <select className="input" value={modal.coverage_unit} onChange={(e) => setModal({ ...modal, coverage_unit: e.target.value })}>
+                    <option value="m²">m² (área)</option>
+                    <option value="m">m (linear)</option>
+                    <option value="m³">m³ (volume)</option>
+                  </select>
+                </div>
+              </div>
+              {String(modal.coverage_value) !== '' && Number(String(modal.coverage_value).replace(',', '.')) > 0 && (
+                <p className="mt-2 text-xs text-green-600">
+                  Cliente informa 30 {modal.coverage_unit || 'm²'} → site sugere{' '}
+                  <b>{Math.ceil(30 / Number(String(modal.coverage_value).replace(',', '.')))} un.</b> deste produto
+                </p>
+              )}
             </div>
 
             <div>

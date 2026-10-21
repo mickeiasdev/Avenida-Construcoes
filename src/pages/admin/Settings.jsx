@@ -1,9 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { CheckCircle2, AlertCircle, Clock, ImagePlus, Loader2, Save } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Clock, ImagePlus, Loader2, Plus, Save, Target, Trash2, Truck } from 'lucide-react'
 import { useStore } from '../../context/StoreContext'
 import { useConfirmDialog } from '../../components/ConfirmDialog'
 import { applyFontScale, FONT_BASE_PX } from '../../lib/brandTheme'
-import { uploadImage, deleteImagesByUrls } from '../../lib/supabaseClient'
+import { supabase, uploadImage, deleteImagesByUrls } from '../../lib/supabaseClient'
 import { formatBusinessHoursText, maskCnpj, maskPhone, onlyDigits, waLocal, waNumber } from '../../lib/utils'
 
 const HEX = /^#[0-9a-fA-F]{6}$/
@@ -49,6 +49,7 @@ export default function Settings() {
       primary_color: settings.primary_color ?? '#f97316',
       secondary_color: settings.secondary_color ?? '#1e293b',
       font_scale: settings.font_scale ?? 100,
+      daily_goal: settings.daily_goal != null ? String(settings.daily_goal) : '', // meta do dia (migration-30)
       logo_url: settings.logo_url ?? '',
       banner_url: settings.banner_url ?? '',
     })
@@ -107,6 +108,8 @@ export default function Settings() {
       // CNPJ gravado em dígitos (o cupom/nota formatam na hora de imprimir)
       cnpj: onlyDigits(form.cnpj) || null,
       business_hours: formatBusinessHoursText(form),
+      // meta diária: '' vira 0 (medidor escondido no Dashboard)
+      daily_goal: Number(String(form.daily_goal ?? '').replace(',', '.')) || 0,
     }
     const { error } = await updateSettings(payload)
     if (!error) {
@@ -262,6 +265,29 @@ export default function Settings() {
         </p>
       </section>
 
+      {/* META DE VENDAS DO DIA (migration-30) */}
+      <section className="card space-y-4">
+        <h2 className="flex items-center gap-2 font-bold text-gray-800">
+          <Target className="h-5 w-5 text-primary" /> Meta de vendas do dia
+        </h2>
+        <div className="sm:max-w-xs">
+          <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="f_meta_do_dia">Meta diária (R$)</label>
+          <input
+            id="f_meta_do_dia"
+            className="input"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0 = sem medidor"
+            value={form.daily_goal}
+            onChange={(e) => set('daily_goal', e.target.value)}
+          />
+        </div>
+        <p className="text-xs text-gray-500">
+          O Dashboard mostra o progresso de hoje (vendas entregues) contra a meta — um termômetro simples para o dia da equipe.
+        </p>
+      </section>
+
       {/* CONTATO / ENDEREÇO / HORÁRIOS */}
       <section className="card space-y-4">
         <h2 className="font-bold text-gray-800">Contato, endereço e horários</h2>
@@ -322,6 +348,9 @@ export default function Settings() {
         </p>
       </section>
 
+      {/* ZONAS DE ENTREGA (frete por zona — migration-31) */}
+      <DeliveryZonesSection />
+
       {msg && (
         <div className={'flex items-start gap-2 rounded-lg p-3 text-sm ' +
           (msg.type === 'ok' ? 'bg-green-50 text-green-700 ring-1 ring-green-200' : 'bg-red-50 text-red-700 ring-1 ring-red-200')}>
@@ -340,6 +369,137 @@ export default function Settings() {
       {/* confirmação em popup (salvar configurações da loja) */}
       {confirm.dialog}
     </form>
+  )
+}
+
+// Zonas de entrega (frete por zona — migration-31): CRUD independente do
+// form principal (tabela própria), com ativar/desativar por zona. Todos os
+// botões são type="button" porque vivem DENTRO do <form> das configurações.
+function DeliveryZonesSection() {
+  const { reloadZones } = useStore()
+  const [rows, setRows] = useState(null) // null = carregando
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+  const [novo, setNovo] = useState({ name: '', fee: '', eta: '' })
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    const { data, error } = await supabase.from('delivery_zones').select('*').order('sort')
+    if (error) {
+      setRows([])
+      // tabela ausente = migration-31 ainda não rodou: avisa sem quebrar a página
+      setMsg({ type: 'err', text: 'Zonas indisponíveis — rode a migration-31 no Supabase para habilitar o frete por zona.' })
+      return
+    }
+    setRows(data ?? [])
+  }
+
+  function setLocal(id, key, value) {
+    setRows((rs) => (rs ?? []).map((r) => (r.id === id ? { ...r, [key]: value } : r)))
+  }
+
+  async function saveZone(z) {
+    setBusy(true)
+    const { error } = await supabase.from('delivery_zones').update({
+      name: String(z.name ?? '').trim() || 'Zona',
+      fee: Math.max(0, Number(String(z.fee ?? '').replace(',', '.')) || 0),
+      eta: String(z.eta ?? '').trim() || null,
+      active: z.active,
+    }).eq('id', z.id)
+    setBusy(false)
+    if (error) setMsg({ type: 'err', text: 'Erro ao salvar: ' + error.message })
+    else {
+      setMsg({ type: 'ok', text: 'Zona salva! A vitrine reflete na hora (Realtime).' })
+      reloadZones()
+    }
+  }
+
+  async function removeZone(id) {
+    setBusy(true)
+    const { error } = await supabase.from('delivery_zones').delete().eq('id', id)
+    setBusy(false)
+    if (error) setMsg({ type: 'err', text: 'Erro ao excluir: ' + error.message })
+    else { reloadZones(); await load() }
+  }
+
+  async function addZone() {
+    const name = novo.name.trim()
+    if (!name) { setMsg({ type: 'err', text: 'Dê um nome para a zona (ex.: Caponga).' }); return }
+    setBusy(true)
+    const { error } = await supabase.from('delivery_zones').insert({
+      name,
+      fee: Math.max(0, Number(String(novo.fee).replace(',', '.')) || 0),
+      eta: novo.eta.trim() || null,
+      active: true,
+    })
+    setBusy(false)
+    if (error) setMsg({ type: 'err', text: 'Erro ao criar: ' + error.message })
+    else {
+      setNovo({ name: '', fee: '', eta: '' })
+      setMsg(null)
+      reloadZones()
+      await load()
+    }
+  }
+
+  return (
+    <section className="card space-y-4">
+      <div>
+        <h2 className="flex items-center gap-2 font-bold text-gray-800">
+          <Truck className="h-5 w-5 text-primary" /> Zonas de entrega (frete)
+        </h2>
+        <p className="text-sm text-gray-500">
+          O cliente escolhe a zona no checkout e vê a taxa e o prazo ANTES de finalizar — menos carrinho abandonado.
+        </p>
+      </div>
+
+      {msg && (
+        <div className={'rounded-lg p-3 text-sm ' + (msg.type === 'ok'
+          ? 'bg-green-50 text-green-700 ring-1 ring-green-200'
+          : 'bg-red-50 text-red-700 ring-1 ring-red-200')}>
+          {msg.text}
+        </div>
+      )}
+
+      {/* nova zona */}
+      <div className="grid gap-2 rounded-xl bg-gray-50 p-3 ring-1 ring-gray-100 sm:grid-cols-[1fr_7rem_1fr_auto]">
+        <input className="input" placeholder="Nome (ex.: Caponga)" value={novo.name} onChange={(e) => setNovo({ ...novo, name: e.target.value })} aria-label="Nome da nova zona" />
+        <input className="input" type="number" min="0" step="0.01" placeholder="Taxa R$" value={novo.fee} onChange={(e) => setNovo({ ...novo, fee: e.target.value })} aria-label="Taxa da nova zona" />
+        <input className="input" placeholder="Prazo (ex.: hoje)" value={novo.eta} onChange={(e) => setNovo({ ...novo, eta: e.target.value })} aria-label="Prazo da nova zona" />
+        <button type="button" className="btn-primary" onClick={addZone} disabled={busy}>
+          <Plus className="h-4 w-4" /> Adicionar
+        </button>
+      </div>
+
+      {rows === null ? (
+        <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+      ) : rows.length === 0 ? (
+        <p className="py-4 text-center text-sm text-gray-400">
+          Nenhuma zona cadastrada — a entrega continua "a combinar" (taxa zero no checkout).
+        </p>
+      ) : (
+        <div className="divide-y divide-gray-50">
+          {rows.map((z) => (
+            <div key={z.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_7rem_1fr_auto_auto] sm:items-center">
+              <input className="input" value={String(z.name ?? '')} onChange={(e) => setLocal(z.id, 'name', e.target.value)} aria-label={'Nome da zona ' + z.name} />
+              <input className="input" type="number" min="0" step="0.01" value={z.fee == null ? '' : String(z.fee)} onChange={(e) => setLocal(z.id, 'fee', e.target.value)} aria-label="Taxa da zona" />
+              <input className="input" value={z.eta ?? ''} onChange={(e) => setLocal(z.id, 'eta', e.target.value)} aria-label="Prazo da zona" placeholder="hoje" />
+              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                <input type="checkbox" className="h-4 w-4 accent-primary" checked={Boolean(z.active)} onChange={(e) => setLocal(z.id, 'active', e.target.checked)} />
+                ativa
+              </label>
+              <div className="flex gap-1">
+                <button type="button" className="btn-soft btn-sm" onClick={() => saveZone(z)} disabled={busy}>Salvar</button>
+                <button type="button" className="p-2 text-gray-400 transition hover:text-red-500" onClick={() => removeZone(z.id)} aria-label={'Excluir zona ' + z.name}>
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 

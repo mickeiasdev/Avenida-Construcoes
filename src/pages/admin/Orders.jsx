@@ -63,6 +63,9 @@ export default function OrdersAdmin() {
     setBusyId(null)
     if (error) { window.alert('Não foi possível avançar o pedido: ' + error.message); return }
     load()
+    // PUSH (best-effort — migration-35): "saiu para entrega" no PWA de quem
+    // ativou notificações. Falha em silêncio: o WhatsApp acima já avisa.
+    supabase.functions.invoke('push-order-status', { body: { order_id: o.id } }).catch(() => {})
     // Aviso automático no WhatsApp (best-effort: nunca trava o pedido).
     // Sem telefone/número inválido → só um alerta informativo.
     try {
@@ -102,6 +105,8 @@ export default function OrdersAdmin() {
     setBusyId(null)
     if (error) { window.alert('Não foi possível cancelar o pedido: ' + error.message); return }
     load()
+    // PUSH (best-effort): cancelamento também notifica quem ativou o PWA
+    supabase.functions.invoke('push-order-status', { body: { order_id: o.id } }).catch(() => {})
   }
 
   // marca (ou desmarca) o item como retirado no balcão / entregue

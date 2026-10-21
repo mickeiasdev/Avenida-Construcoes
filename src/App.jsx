@@ -15,6 +15,7 @@ import Profile from './pages/Profile'
 import Orders from './pages/Orders'
 import Cart from './pages/Cart'
 import Favorites from './pages/Favorites'
+import Lists from './pages/Lists'
 import PageTitle from './components/PageTitle'
 // SPA mantém o scroll ao trocar de rota — voltamos sempre ao topo
 function ScrollToTop() {
@@ -58,6 +59,10 @@ const CouponsAdmin = lazyRetry(() => import('./pages/admin/Coupons'))
 const PromotionsAdmin = lazyRetry(() => import('./pages/admin/Promotions'))
 const NewOrderAdmin = lazyRetry(() => import('./pages/admin/NewOrder'))
 const WhatsAppAdmin = lazyRetry(() => import('./pages/admin/WhatsApp'))
+const BannersAdmin = lazyRetry(() => import('./pages/admin/Banners'))
+const ReviewsAdmin = lazyRetry(() => import('./pages/admin/Reviews'))
+const ReportsAdmin = lazyRetry(() => import('./pages/admin/Reports'))
+const AutomationsAdmin = lazyRetry(() => import('./pages/admin/Automations'))
 
 export default function App() {
   return (
@@ -79,6 +84,7 @@ export default function App() {
                 <Route path="/login" element={<Login />} />
                 <Route path="/carrinho" element={<Cart />} />
                 <Route path="/favoritos" element={<Favorites />} />
+                <Route path="/listas" element={<RequireAuth><Lists /></RequireAuth>} />
                 <Route path="/perfil" element={<RequireAuth><Profile /></RequireAuth>} />
                 <Route path="/pedidos" element={<RequireAuth><Orders /></RequireAuth>} />
               </Route>
@@ -94,7 +100,11 @@ export default function App() {
                 <Route path="whatsapp" element={<WhatsAppAdmin />} />
                 <Route path="cupons" element={<CouponsAdmin />} />
                 <Route path="promocoes" element={<PromotionsAdmin />} />
+                <Route path="banners" element={<BannersAdmin />} />
+                <Route path="avaliacoes" element={<ReviewsAdmin />} />
                 <Route path="configuracoes" element={<SettingsAdmin />} />
+                <Route path="relatorios" element={<ReportsAdmin />} />
+                <Route path="automacoes" element={<AutomationsAdmin />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
