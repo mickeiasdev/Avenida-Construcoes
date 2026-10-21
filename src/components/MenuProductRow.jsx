@@ -50,7 +50,9 @@ export function MenuProductRow({ product, onOpen }) {
     if (ok) removeItem(product.id)
   }
 
-  const btnBase = 'flex h-8 w-8 items-center justify-center rounded-full transition active:scale-90 disabled:opacity-40'
+  // área de toque generosa: o "+" sozinho tem 44px (padrão mobile);
+  // os botões do stepper ficam um pouco menores (36px) mas confortáveis
+  const btnBase = 'flex items-center justify-center rounded-full transition active:scale-90 disabled:opacity-40'
 
   return (
     <div
@@ -107,9 +109,9 @@ export function MenuProductRow({ product, onOpen }) {
           onClick={handleAdd}
           disabled={soldOut}
           aria-label={'Adicionar ' + product.name + ' à sacola'}
-          className={btnBase + ' shrink-0 bg-primary text-white shadow-sm hover:brightness-110'}
+          className={btnBase + ' h-11 w-11 shrink-0 bg-primary text-white shadow-md shadow-primary/25 hover:brightness-110'}
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-5 w-5" />
         </button>
       ) : (
         <div
@@ -120,20 +122,20 @@ export function MenuProductRow({ product, onOpen }) {
           <button
             type="button"
             onClick={handleMinus}
-            className={btnBase + ' hover:bg-white/20'}
+            className={btnBase + ' h-9 w-9 hover:bg-white/20'}
             aria-label="Diminuir quantidade"
           >
-            <Minus className="h-3.5 w-3.5" />
+            <Minus className="h-4 w-4" />
           </button>
-          <span className="w-6 text-center text-sm font-bold tabular-nums">{qty}</span>
+          <span className="w-7 text-center text-sm font-bold tabular-nums">{qty}</span>
           <button
             type="button"
             onClick={handleAdd}
             disabled={qty >= maxQty}
-            className={btnBase + ' hover:bg-white/20'}
+            className={btnBase + ' h-9 w-9 hover:bg-white/20'}
             aria-label="Aumentar quantidade"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-4 w-4" />
           </button>
         </div>
       )}
