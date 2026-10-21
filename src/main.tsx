@@ -14,3 +14,12 @@ createRoot(container).render(
     </ErrorBoundary>
   </StrictMode>,
 )
+
+// PWA: registra o service worker — necessário para as notificações
+// push de pedidos (Edge Function push-order-status). Falha em silêncio
+// em navegadores sem suporte; nada do app depende dele.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => { /* sem SW: sem push, tudo o resto normal */ })
+  })
+}

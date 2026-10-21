@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { ShoppingCart, User, LogOut, Package, Settings as SettingsIcon, Home as HomeIcon, Phone, MessageCircle, Menu, X, Heart } from 'lucide-react'
+import { ShoppingCart, User, LogOut, Package, Settings as SettingsIcon, Home as HomeIcon, Phone, MessageCircle, Menu, X, Heart, ClipboardList } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { formatBusinessHoursText, waNumber } from '../lib/utils'
 import { useCart } from '../context/CartContext'
@@ -158,6 +158,7 @@ export default function StoreLayout() {
                     )}
                   </Link>
                   <Link to="/favoritos" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100"><Heart className="h-4 w-4" /> Meus favoritos</Link>
+                  <Link to="/listas" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100"><ClipboardList className="h-4 w-4" /> Minhas listas</Link>
                   <Link to="/pedidos" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100"><Package className="h-4 w-4" /> Meus pedidos</Link>
                   {isAdmin && (
                     <Link to="/admin" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100"><SettingsIcon className="h-4 w-4" /> Dashboard admin</Link>
@@ -229,6 +230,7 @@ export default function StoreLayout() {
               {user ? (
                 <>
                   <DrawerLink to="/perfil" icon={User} label="Meu perfil" />
+                  <DrawerLink to="/listas" icon={ClipboardList} label="Minhas listas" />
                   <DrawerLink to="/pedidos" icon={Package} label="Meus pedidos" />
                   {isAdmin && <DrawerLink to="/admin" icon={SettingsIcon} label="Dashboard admin" />}
                   <button type="button" onClick={signOut} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-red-300 hover:bg-red-500/10">

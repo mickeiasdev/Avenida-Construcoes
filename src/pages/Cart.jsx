@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AlertCircle, ArrowLeft, ArrowRight, Banknote, Check, CreditCard, Loader2, MapPin, MessageCircle, Minus, Package, Pencil, Plus, QrCode, ShoppingBag, Trash2, User } from 'lucide-react'
+import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
-import { formatBRL } from '../lib/utils'
+import { useStore } from '../context/StoreContext'
+import { formatBRL, onlyDigits } from '../lib/utils'
+import { DeliveryZonePicker, zoneFee } from '../components/DeliveryZonePicker'
 import { CheckoutForm, CheckoutRetiradaFields } from '../components/CheckoutForm'
 import { profileToForm, missingFields, requiredFieldsFor, fieldLabel, formatAddress, maskCpf } from '../lib/checkout'
 import { readFunctionError } from '../lib/functionError'
@@ -26,7 +29,8 @@ const STEPS = [
 // CTA fixo no rodapé (acima da bottom nav no mobile), total sempre visível.
 export default function Cart() {
   const { user, profile } = useAuth()
-  const { items, count, total, updateQuantity, removeItem, checkout, coupon, applyCoupon, removeCoupon, discountValue, getOrderPaymentStatus, checkMpOrderAgain, clearCart, refreshPrices } = useCart()
+  const { items, count, total, updateQuantity, removeItem, checkout, coupon, applyCoupon, removeCoupon, discountValue, getOrderPaymentStatus, checkMpOrderAgain, clearCart, refreshPrices, showNotice, patchSnapshotPhone } = useCart()
+  const { zones } = useStore()
   const navigate = useNavigate()
 
   const [step, setStep] = useState(1)
@@ -36,9 +40,16 @@ export default function Cart() {
   const [missing, setMissing] = useState(null)
   const [askGuest, setAskGuest] = useState(false)
   const [deliveryMethod, setDeliveryMethod] = useState('entrega') // 'entrega' | 'retirada'
+  const [deliveryZone, setDeliveryZone] = useState('')  // zona escolhida (migration-31)
   const [paymentMethod, setPaymentMethod] = useState('mercado_pago')       // 'mercado_pago' | 'cartao' | 'dinheiro'
+
+  // taxa relida da lista pública (o servidor confirma no place_order)
+  const fee = deliveryMethod === 'entrega' ? zoneFee(zones, deliveryZone) : 0
+  const grandTotal = Math.max(0, total - discountValue + fee)
   const [couponInput, setCouponInput] = useState('')
   const [couponMsg, setCouponMsg] = useState(null)
+  const [listName, setListName] = useState('')     // salvar sacola como lista (migration-32)
+  const [savingList, setSavingList] = useState(false)
   const [doneOrder, setDoneOrder] = useState(null) // pedido concluído como visitante
   const [mpPendingOrder, setMpPendingOrder] = useState(null) // { id, mpPix, total } do Pix MP
   const [mpRetry, setMpRetry] = useState(null)               // pedido já gravado SÓ faltando o Pix
@@ -47,6 +58,12 @@ export default function Cart() {
   const cpfAccount = useCpfAccount({ loggedIn: !!user })
 
   useEffect(() => { setForm(profileToForm(profile)) }, [profile])
+
+  // telefone digitado no checkout liga o carrinho ao painel de abandonados
+  // (migration-35): a loja pode chamar o cliente de volta pelo WhatsApp.
+  useEffect(() => {
+    if (form?.phone && onlyDigits(form.phone).length >= 10) patchSnapshotPhone(form.phone)
+  }, [form?.phone, patchSnapshotPhone])
 
   // Preço/estoque do localStorage podem estar velhos (o admin muda no painel):
   // revalida no banco uma vez, na entrada do carrinho.
@@ -65,6 +82,32 @@ export default function Cart() {
     setMissing((prev) => (prev ? prev.filter((k) => k !== key) : null))
   }
 
+  // SALVAR SACOLA COMO LISTA DA OBRA (migration-32): repete o pedido
+  // inteiro com 1 toque depois — itens com preço/estoque de hoje.
+  async function saveAsList() {
+    const name = listName.trim()
+    if (!name) { setMsg({ type: 'err', text: 'Dê um nome para a lista (ex.: Obra da rua 10).' }); return }
+    setSavingList(true)
+    try {
+      const { data: list, error: errList } = await supabase
+        .from('shopping_lists')
+        .insert({ user_id: user.id, name })
+        .select('id')
+        .single()
+      if (errList) throw errList
+      const { error: errItems } = await supabase
+        .from('shopping_list_items')
+        .insert(items.map((i) => ({ list_id: list.id, product_id: i.product_id, quantity: i.quantity })))
+      if (errItems) throw errItems
+      setListName('')
+      showNotice('Lista "' + name + '" salva! Repita o pedido a qualquer momento em Minhas listas.')
+    } catch (e) {
+      setMsg({ type: 'err', text: 'Não foi possível salvar a lista: ' + (e?.message ?? e) })
+    } finally {
+      setSavingList(false)
+    }
+  }
+
   function go(nextStep) {
     // só avança para a revisão com os dados do MODO escolhido completos
     // (retirada: nome/telefone/CPF; entrega: também endereço)
@@ -72,6 +115,11 @@ export default function Cart() {
       const miss = missingFields(form, requiredFieldsFor(deliveryMethod))
       if (miss.length > 0) {
         setMissing(miss)
+        return
+      }
+      // loja com zonas cadastradas exige a escolha (a taxa entra no total)
+      if (deliveryMethod === 'entrega' && zones.length > 0 && !deliveryZone) {
+        setMsg({ type: 'err', text: 'Escolha a sua zona de entrega para calcular a taxa.' })
         return
       }
     }
@@ -86,6 +134,11 @@ export default function Cart() {
     if (miss.length > 0) {
       setStep(2)
       setMissing(miss)
+      return
+    }
+    if (deliveryMethod === 'entrega' && zones.length > 0 && !deliveryZone) {
+      setStep(2)
+      setMsg({ type: 'err', text: 'Escolha a sua zona de entrega para calcular a taxa.' })
       return
     }
     // Deslogado? Se o CPF digitado já tem conta, sugere ENTRAR — quem escolhe
@@ -104,7 +157,7 @@ export default function Cart() {
     setBusy(true)
     setMsg(null)
     try {
-      const order = await checkout(form, null, { deliveryMethod, paymentMethod })
+      const order = await checkout(form, null, { deliveryMethod, paymentMethod, deliveryZone })
 
       // PIX: mostra o QR aqui mesmo. Antes o retorno era descartado, a tela de
       // Pix abaixo nunca era alcançada e o cliente ficava sem o código.
@@ -357,6 +410,31 @@ export default function Cart() {
         </div>
       )}
 
+      {/* SALVAR COMO LISTA DA OBRA (migration-32) — só logado */}
+      {step === 1 && user && items.length > 0 && (
+        <div className="card space-y-2 !p-3.5">
+          <label htmlFor="f_lista_da_obra" className="text-xs font-bold uppercase tracking-wider text-gray-400">
+            Salvar sacola como lista da obra
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="f_lista_da_obra"
+              className="input flex-1"
+              placeholder="Nome (ex.: Obra da rua 10)"
+              value={listName}
+              onChange={(e) => setListName(e.target.value)}
+            />
+            <button type="button" className="btn-soft px-4 text-xs" disabled={savingList || !listName.trim()} onClick={saveAsList}>
+              {savingList && <Loader2 className="h-4 w-4 animate-spin" />}
+              Salvar
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-400">
+            Depois repita o pedido inteiro com 1 toque em <Link to="/listas" className="font-semibold text-primary hover:underline">Minhas listas</Link> — itens voltam com preço de hoje.
+          </p>
+        </div>
+      )}
+
       {/* ============ PASSO 2 · ENTREGA E PAGAMENTO ============ */}
       {step === 2 && (
         <div className="card space-y-4">
@@ -418,6 +496,11 @@ export default function Cart() {
             </p>
           </div>
 
+          {/* zonas de entrega (migration-31): taxa e prazo antes de fechar */}
+          {deliveryMethod === 'entrega' && (
+            <DeliveryZonePicker value={deliveryZone} onChange={(v) => { setDeliveryZone(v); setMsg(null) }} />
+          )}
+
           {deliveryMethod === 'entrega'
             ? (form && <CheckoutForm form={form} set={set} missing={missing}
                 onCpfComplete={async (v) => { const nm = await cpfAccount.check(v); if (nm) cpfAccount.open() }} />)
@@ -470,9 +553,15 @@ export default function Cart() {
                   </div>
                 </>
               )}
+              {fee > 0 && (
+                <div className="flex justify-between font-normal text-gray-500">
+                  <span>Entrega · {deliveryZone}</span>
+                  <span>{formatBRL(fee)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
-                <span>Total</span>
-                <span className="text-primary">{formatBRL(total - discountValue)}</span>
+                <span>Total{fee > 0 ? ' com entrega' : ''}</span>
+                <span className="text-primary">{formatBRL(grandTotal)}</span>
               </div>
             </div>
           </div>
@@ -524,8 +613,8 @@ export default function Cart() {
         {step < 3 ? (
           <div className="flex items-center gap-3">
             <div className="shrink-0">
-              <p className="text-[10px] uppercase tracking-wide text-gray-400">Total</p>
-              <p className="text-sm font-bold text-gray-800">{formatBRL(total - discountValue)}</p>
+              <p className="text-[10px] uppercase tracking-wide text-gray-400">{fee > 0 ? 'Total + frete' : 'Total'}</p>
+              <p className="text-sm font-bold text-gray-800">{formatBRL(grandTotal)}</p>
             </div>
             <button type="button" className="btn-primary flex-1" onClick={() => go(step + 1)}>
               {step === 1 ? 'Continuar para entrega' : 'Continuar para revisão'}

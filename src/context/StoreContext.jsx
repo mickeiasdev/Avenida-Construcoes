@@ -38,6 +38,8 @@ function applyTheme(s) {
 export function StoreProvider({ children }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const [categories, setCategories] = useState([])
+  const [zones, setZones] = useState([]) // zonas de entrega (migration-31): taxa/prazo ANTES de finalizar
+  const [banners, setBanners] = useState([]) // banners promocionais (migration-34): carrossel da Home
   const [loading, setLoading] = useState(true)
   // Cor em cache = já sabemos a cor da loja: pinta na hora. Sem cache (primeira
   // visita neste navegador) seguramos o primeiro paint até a cor chegar, senão o
@@ -62,15 +64,39 @@ export function StoreProvider({ children }) {
     setCategories(data ?? [])
   }
 
+  // Zonas/banners: sem a migration a tabela não existe — erro vira lista
+  // vazia e a loja segue funcionando como sempre (frete grátis, hero fixo)
+  async function loadZones() {
+    const { data, error } = await supabase
+      .from('delivery_zones')
+      .select('id, name, fee, eta')
+      .eq('active', true)
+      .order('sort')
+    if (!error) setZones(data ?? [])
+  }
+
+  async function loadBanners() {
+    const { data, error } = await supabase
+      .from('home_banners')
+      .select('id, image_url, title, subtitle, cta_text, cta_url')
+      .eq('active', true)
+      .order('sort')
+    if (!error) setBanners(data ?? [])
+  }
+
   useEffect(() => {
     loadSettings()
     loadCategories()
+    loadZones()
+    loadBanners()
 
     // Realtime: mudanças no banco refletem na vitrine sem refresh
     const channel = supabase
       .channel('store_updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'store_settings' }, loadSettings)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, loadCategories)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_zones' }, loadZones)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'home_banners' }, loadBanners)
       .subscribe()
 
     // trava de segurança: requisição lenta não deixa a loja presa no splash neutro
@@ -118,7 +144,7 @@ export function StoreProvider({ children }) {
 
   return (
     <StoreContext.Provider
-      value={{ settings, categories, loading, updateSettings, createCategory, updateCategory, deleteCategory, reloadCategories: loadCategories }}
+      value={{ settings, categories, zones, banners, loading, updateSettings, createCategory, updateCategory, deleteCategory, reloadCategories: loadCategories, reloadZones: loadZones, reloadBanners: loadBanners }}
     >
       {children}
     </StoreContext.Provider>

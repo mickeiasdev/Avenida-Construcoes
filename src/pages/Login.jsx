@@ -4,6 +4,8 @@ import { Loader2, CheckCircle2, AlertCircle, Mail, KeyRound } from 'lucide-react
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
 import { isEmail, isFullName, isPasswordStrong } from '../lib/validation'
+import { maskPhone, onlyDigits } from '../lib/utils'
+import { MessageCircle } from 'lucide-react'
 
 // Onde retomar depois de entrar/criar conta:
 //  1) location.state.from/redirect (checkout, carrinho ou ProtectedRoute);
@@ -46,11 +48,15 @@ export default function Login() {
   const location = useLocation()
   const { to: redirectTo, inProgress } = useMemo(() => resolveRedirect(location), [location])
 
-  const [method, setMethod] = useState('google')   // 'google' | 'email'
+  const [method, setMethod] = useState('google')   // 'google' | 'email' | 'whatsapp'
   const [emailMode, setEmailMode] = useState('password') // 'password' | 'magic'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
+  // login por WHATSAPP (Supabase OTP + hook de SMS p/ Evolution — ver README)
+  const [phone, setPhone] = useState('')
+  const [otpSent, setOtpSent] = useState(false)
+  const [otpCode, setOtpCode] = useState('')
   const [isSignup, setIsSignup] = useState(location.state?.mode === 'signup')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -111,6 +117,42 @@ export default function Login() {
     }
   }
 
+  // ---------- WHATSAPP (código OTP pelo chat — hook de SMS custom) ----------
+  // Requer configuração única no Supabase (Authentication → SMS Hook
+  // apontando para a function wa-sms-hook). Sem o hook o Supabase tenta
+  // SMS padrão (não configurado) e o erro é mostrado com clareza.
+  async function sendPhoneOtp() {
+    const digits = onlyDigits(phone)
+    if (digits.length < 10) {
+      setMsg({ type: 'err', text: 'Digite seu WhatsApp com DDD: (85) 99999-9999.' })
+      return
+    }
+    setBusy(true); setMsg(null)
+    const { error } = await supabase.auth.signInWithOtp({ phone: '+55' + digits })
+    setBusy(false)
+    if (error) {
+      setMsg({ type: 'err', text: 'Não conseguimos enviar o código: ' + error.message + '. Se o erro citar SMS, o hook de WhatsApp ainda não foi configurado na loja (ver README).' })
+      return
+    }
+    setOtpSent(true)
+    setMsg({ type: 'ok', text: 'Código enviado! Confira o WhatsApp ' + phone + ' (e o spam, se usar WhatsApp Business).' })
+  }
+
+  async function verifyPhoneOtp() {
+    setBusy(true); setMsg(null)
+    const { error } = await supabase.auth.verifyOtp({
+      phone: '+55' + onlyDigits(phone),
+      token: String(otpCode).trim(),
+      type: 'sms',
+    })
+    setBusy(false)
+    if (error) {
+      setMsg({ type: 'err', text: 'Código não confere — confira os 6 dígitos e tente de novo.' })
+      return
+    }
+    goAfterAuth()
+  }
+
   async function handleResetPassword() {
     if (!isEmail(email)) {
       setMsg({ type: 'err', text: 'Digite um e-mail válido para receber o link de redefinição.' })
@@ -137,6 +179,11 @@ export default function Login() {
           className="flex min-h-12 w-full items-center justify-center gap-3 rounded-xl bg-white px-4 py-3 text-sm font-bold text-gray-700 shadow-sm ring-1 ring-gray-200 transition hover:shadow-md hover:ring-primary/40 disabled:opacity-50">
           <GoogleIcon /> Continuar com Google
         </button>
+        <button type="button" onClick={() => { setMethod('whatsapp'); setMsg(null) }} disabled={busy}
+          className={'flex min-h-12 w-full items-center justify-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition disabled:opacity-50 ' +
+            (method === 'whatsapp' ? 'bg-green-600 text-white shadow-md' : 'bg-white text-gray-700 shadow-sm ring-1 ring-gray-200 hover:ring-green-500/40')}>
+          <MessageCircle className="h-4 w-4" /> Entrar com WhatsApp
+        </button>
         <button type="button" onClick={() => { setMethod('email'); setMsg(null) }} disabled={busy}
           className={'flex min-h-12 w-full items-center justify-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition disabled:opacity-50 ' +
             (method === 'email' ? 'bg-primary text-white shadow-md' : 'bg-white text-gray-700 shadow-sm ring-1 ring-gray-200 hover:ring-primary/40')}>
@@ -145,6 +192,57 @@ export default function Login() {
       </div>
 
       {/* INPUTS — só do método escolhido */}
+      {method === 'whatsapp' && (
+        <div className="card space-y-3">
+          <p className="text-xs leading-relaxed text-gray-500">
+            Enviamos um código de 6 dígitos no seu WhatsApp. Sem senha para decorar — é o mesmo número que você já usa com a loja.
+          </p>
+          {!otpSent ? (
+            <>
+              <div>
+                <label htmlFor="l-fone" className="field-label">WhatsApp (DDD + número)</label>
+                <input
+                  id="l-fone"
+                  className="input"
+                  inputMode="tel"
+                  placeholder="(85) 99999-9999"
+                  value={phone}
+                  onChange={(e) => setPhone(maskPhone(e.target.value))}
+                  maxLength={15}
+                />
+              </div>
+              <button type="button" className="btn-primary w-full" disabled={busy || onlyDigits(phone).length < 10} onClick={sendPhoneOtp}>
+                {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+                Receber código por WhatsApp
+              </button>
+            </>
+          ) : (
+            <>
+              <div>
+                <label htmlFor="l-otp" className="field-label">Código recebido (6 dígitos)</label>
+                <input
+                  id="l-otp"
+                  className="input text-center font-mono text-lg tracking-[0.4em]"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="••••••"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  autoFocus
+                />
+              </div>
+              <button type="button" className="btn-primary w-full" disabled={busy || otpCode.length < 6} onClick={verifyPhoneOtp}>
+                {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+                Entrar
+              </button>
+              <button type="button" className="w-full text-center text-xs text-gray-500 hover:text-primary" onClick={() => { setOtpSent(false); setOtpCode(''); setMsg(null) }}>
+                Não chegou? Voltar e conferir o número
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {method === 'email' && (
         <form onSubmit={handleEmail} className="card space-y-3">
           {isSignup && (

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Banknote, Check, ChevronLeft, ChevronRight, CreditCard, Loader2, MessageCircle, Minus, Package, Plus, QrCode, Share2, ShoppingBag, ShoppingCart, X } from 'lucide-react'
+import { ArrowLeft, Banknote, Calculator, Check, ChevronLeft, ChevronRight, CreditCard, Loader2, MessageCircle, Minus, Package, Plus, QrCode, Share2, ShoppingBag, ShoppingCart, Star, X } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
+import { useStore } from '../context/StoreContext'
+import { DeliveryZonePicker, zoneFee } from '../components/DeliveryZonePicker'
 import { formatBRL, effectivePrice, hasActivePromo, promoPercent } from '../lib/utils'
 import { CheckoutForm, CheckoutRetiradaFields } from '../components/CheckoutForm'
 import { profileToForm, missingFields, requiredFieldsFor, fieldLabel, maskCpf } from '../lib/checkout'
@@ -25,6 +27,10 @@ export default function ProductPage() {
   const [qty, setQty] = useState(1)
   const [offers, setOffers] = useState([])
   const offersRef = useRef(null)
+  // calculadora de material (migration-30): área do cliente → unidades
+  const [calcArea, setCalcArea] = useState('')
+  // avaliações aprovadas (migration-33) — prova social do produto
+  const [reviews, setReviews] = useState([])
 
   // rola o carrossel de ofertas (setas no desktop; no mobile é swipe)
   function scrollOffers(dir) {
@@ -47,7 +53,9 @@ export default function ProductPage() {
   useModalA11y(buyOpen && !buyMissing, () => { setBuyOpen(false); setBuyMissing(null) })
   useModalA11y(!!buyMissing, () => setBuyMissing(null))
   const [buyDelivery, setBuyDelivery] = useState('entrega')
+  const [buyZone, setBuyZone] = useState('')   // zona de entrega (migration-31)
   const [buyPayment, setBuyPayment] = useState('mercado_pago')
+  const { zones } = useStore()
   // Visitante com CPF já cadastrado: "entrar na sua conta?" — continuar como
   // visitante segue normal e não pergunta de novo neste checkout.
   const cpfAccount = useCpfAccount({ loggedIn: !!user })
@@ -92,6 +100,11 @@ export default function ProductPage() {
       setBuyMissing(miss)
       return
     }
+    // loja com zonas cadastradas exige a escolha (taxa entra no total)
+    if (buyDelivery === 'entrega' && zones.length > 0 && !buyZone) {
+      setBuyError('Escolha a sua zona de entrega para calcular a taxa.')
+      return
+    }
     // Deslogado? CPF já cadastrado sugere entrar a conta; senão pergunta
     // entrar/criar conta ou seguir como visitante
     if (!user) {
@@ -113,7 +126,7 @@ export default function ProductPage() {
         name: product.name,
         price: effectivePrice(product),
         quantity: qty,
-      }], { deliveryMethod: buyDelivery, paymentMethod: buyPayment })
+      }], { deliveryMethod: buyDelivery, paymentMethod: buyPayment, deliveryZone: buyZone })
       setBuyOpen(false)
       setBuyMissing(null)
 
@@ -201,6 +214,19 @@ export default function ProductPage() {
     return [...new Set(list)]
   }, [product])
 
+  // avaliações: só aprovadas pela moderação (RLS já filtra, filtro extra por clareza)
+  useEffect(() => {
+    if (!product) return
+    supabase
+      .from('product_reviews')
+      .select('id, rating, comment, photo_url, created_at, profiles(full_name)')
+      .eq('product_id', product.id)
+      .eq('approved', true)
+      .order('created_at', { ascending: false })
+      .limit(20)
+      .then(({ data }) => setReviews(data ?? []), () => setReviews([]))
+  }, [product?.id])
+
   if (loading) {
     return <div className="flex justify-center py-24 text-gray-400"><Loader2 className="h-6 w-6 animate-spin" /></div>
   }
@@ -267,6 +293,13 @@ export default function ProductPage() {
   const promo = hasActivePromo(product)
   const promoOff = promo ? promoPercent(product) : 0
   const hasDeal = promo || Number(product.discount_percent) > 0
+  // calculadora: área (aceita vírgula decimal) / rendimento, arredondado p/ CIMA
+  const coverageQty = (() => {
+    const area = Number(String(calcArea).replace(',', '.'))
+    const per = Number(product.coverage_value)
+    if (!Number.isFinite(area) || area <= 0 || !Number.isFinite(per) || per <= 0) return 0
+    return Math.ceil(area / per)
+  })()
   const stockLabel = product.stock == null
     ? 'Em estoque'
     : product.stock === 0 ? 'Fora de estoque' : 'Em estoque: ' + product.stock + ' unidade(s)'
@@ -393,6 +426,55 @@ export default function ProductPage() {
               <MessageCircle className="h-4 w-4" /> Finalizar pedido agora
             </button>
           </div>
+
+          {/* ===== CALCULADORA DE MATERIAL (rendimento da migration-30) ===== */}
+          {Number(product.coverage_value) > 0 && (
+            <div className="rounded-xl bg-primary/5 p-4 ring-1 ring-primary/20">
+              <p className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
+                <Calculator className="h-4 w-4 text-primary" /> Calculadora de material
+              </p>
+              <p className="mb-3 mt-0.5 text-xs text-gray-500">
+                Cada unidade cobre <b>{product.coverage_value} {product.coverage_unit || 'm²'}</b>. Informe o tamanho da sua área e calculamos a quantidade:
+              </p>
+              <div className="flex items-center gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    className="input pr-14"
+                    value={calcArea}
+                    onChange={(e) => setCalcArea(e.target.value)}
+                    placeholder={'Tamanho em ' + (product.coverage_unit || 'm²')}
+                    aria-label="Tamanho da área da obra"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+                    {product.coverage_unit || 'm²'}
+                  </span>
+                </div>
+                <div className="shrink-0 rounded-lg bg-white px-3 py-2.5 text-center ring-1 ring-gray-200">
+                  <p className="text-[10px] uppercase tracking-wide text-gray-400">precisa de</p>
+                  <p className="text-base font-extrabold leading-tight text-primary">{coverageQty} un.</p>
+                </div>
+              </div>
+              {coverageQty > 0 && (
+                <button
+                  type="button"
+                  className="btn-primary mt-3 w-full"
+                  disabled={out || coverageQty > maxQty}
+                  onClick={() => addItem(product, coverageQty)}
+                >
+                  <ShoppingCart className="h-4 w-4" /> Adicionar {coverageQty} à sacola
+                </button>
+              )}
+              {coverageQty > maxQty && (
+                <p className="mt-1.5 text-xs text-amber-600">
+                  Só temos {maxQty} un. em estoque — adicione o que couber e combine o resto com a loja.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -446,7 +528,7 @@ export default function ProductPage() {
                 <button
                   key={o.id}
                   type="button"
-                  onClick={() => { setBuyDelivery(o.id); setBuyMissing(null) }}
+                  onClick={() => { setBuyDelivery(o.id); setBuyMissing(null); setBuyError(null) }}
                   className={'flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold ring-1 transition ' +
                     (buyDelivery === o.id
                       ? 'bg-primary/5 text-primary ring-2 ring-primary'
@@ -457,6 +539,16 @@ export default function ProductPage() {
                 </button>
               ))}
             </div>
+
+            {/* zona de entrega (taxa/prazo) — só quando a loja cadastrou zonas */}
+            {buyDelivery === 'entrega' && (
+              <DeliveryZonePicker value={buyZone} onChange={(v) => { setBuyZone(v); setBuyError(null) }} />
+            )}
+            {buyDelivery === 'entrega' && buyZone && (
+              <p className="text-xs font-medium text-gray-500">
+                Entrega em <b className="text-gray-800">{buyZone}</b>: taxa de <b className="text-gray-800">{formatBRL(zoneFee(zones, buyZone))}</b> no total.
+              </p>
+            )}
 
             {/* pagamento */}
             <div className="grid grid-cols-3 gap-2">
@@ -606,7 +698,49 @@ export default function ProductPage() {
           </div>
         </section>
       )}
+
+      {/* ============ AVALIAÇÕES (migration-33) ============ */}
+      {reviews.length > 0 && <ReviewsSection reviews={reviews} />}
     </div>
+  )
+}
+
+// Avaliações aprovadas do produto: média + lista com foto opcional.
+// Quem avaliou é quem comprou (policy anti-fake da migration-33).
+function ReviewsSection({ reviews }) {
+  const avg = reviews.reduce((s, r) => s + Number(r.rating ?? 0), 0) / reviews.length
+  return (
+    <section className="space-y-4" aria-label="Avaliações de clientes">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-bold text-gray-800">Avaliações de quem comprou</h2>
+        <span className="flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-sm font-bold text-amber-700 ring-1 ring-amber-200">
+          <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+          {avg.toFixed(1).replace('.', ',')}
+          <span className="text-xs font-normal text-amber-600">({reviews.length})</span>
+        </span>
+      </div>
+      <div className="space-y-3">
+        {reviews.map((r) => (
+          <div key={r.id} className="card list-row flex-col items-start gap-3 !p-4 sm:flex-row">
+            {r.photo_url && (
+              <img src={r.photo_url} alt="Foto do cliente" className="h-16 w-16 shrink-0 rounded-lg object-cover ring-1 ring-gray-200" loading="lazy" />
+            )}
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="flex gap-0.5" aria-label={'Nota ' + r.rating + ' de 5'}>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Star key={i} className={'h-3.5 w-3.5 ' + (i <= r.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-200')} />
+                  ))}
+                </span>
+                <span className="text-sm font-semibold text-gray-700">{String(r.profiles?.full_name ?? 'Cliente').split(' ')[0]}</span>
+                <span className="text-xs text-gray-400">· {new Date(r.created_at).toLocaleDateString('pt-BR')}</span>
+              </div>
+              {r.comment && <p className="text-sm leading-relaxed text-gray-600">{r.comment}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 

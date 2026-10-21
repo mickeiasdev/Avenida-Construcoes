@@ -43,7 +43,7 @@ async function fetchRanked(limit) {
 // Modos via URL: (vazio)=mais vendidos · ?cat=todas · ?cat=<slug> ·
 // ?cat=ofertas (promoções no ar, funciona mesmo sem a categoria Ofertas) · ?q=
 export default function Home() {
-  const { settings, categories } = useStore()
+  const { settings, categories, banners } = useStore()
   const openStatus = getOpenStatus(settings)
   const [searchParams, setSearchParams] = useSearchParams()
   const q = searchParams.get('q') ?? ''
@@ -265,8 +265,11 @@ export default function Home() {
         </>
       )}
 
-      {/* HERO — banner gigante com degradê (APENAS layout loja) */}
-      {!isMenu && (
+      {/* HERO — carrossel de banners (migration-34) ou banner fixo (APENAS layout loja) */}
+      {!isMenu && banners.length > 0 && (
+        <HeroCarousel banners={banners} />
+      )}
+      {!isMenu && banners.length === 0 && (
       <section className="relative overflow-hidden rounded-3xl">
         {settings.banner_url && (
           <img src={settings.banner_url} alt="" className="h-56 w-full object-cover sm:h-72 md:h-96" />
@@ -485,6 +488,85 @@ function MenuItem({ icon: Icon, label, desc, active, onClick }) {
       {desc && <span className="shrink-0 text-[11px] text-gray-400">{desc}</span>}
       {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
     </button>
+  )
+}
+
+// Carrossel de BANNERS promocionais (migration-34): campanhas da loja
+// com foto, título e botão. Auto-avança a cada 6s (pausa no toque),
+// swipe no mobile e dots de posição — mesmas regras da galeria.
+function HeroCarousel({ banners }) {
+  const trackRef = useRef(null)
+  const [active, setActive] = useState(0)
+  const pausedRef = useRef(false)
+
+  // auto-play: pausa quando o usuário interage (respeita quem está lendo)
+  useEffect(() => {
+    if (banners.length < 2) return undefined
+    const t = setInterval(() => {
+      if (pausedRef.current) return
+      const el = trackRef.current
+      if (!el) return
+      const next = (Math.round(el.scrollLeft / el.clientWidth) + 1) % banners.length
+      el.scrollTo({ left: next * el.clientWidth, behavior: 'smooth' })
+    }, 6000)
+    return () => clearInterval(t)
+  }, [banners.length])
+
+  function onScroll() {
+    const el = trackRef.current
+    if (!el) return
+    setActive(Math.round(el.scrollLeft / el.clientWidth))
+  }
+
+  function goTo(i) {
+    trackRef.current?.scrollTo({ left: i * trackRef.current.clientWidth, behavior: 'smooth' })
+  }
+
+  return (
+    <section
+      aria-label="Campanhas da loja"
+      className="relative overflow-hidden rounded-3xl"
+      onTouchStart={() => { pausedRef.current = true }}
+      onMouseEnter={() => { pausedRef.current = true }}
+      onMouseLeave={() => { pausedRef.current = false }}
+    >
+      <div
+        ref={trackRef}
+        onScroll={onScroll}
+        className="flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {banners.map((b) => (
+          <div key={b.id} className="relative h-56 w-full shrink-0 snap-center sm:h-72 md:h-80">
+            <img src={b.image_url} alt={b.title ?? 'Campanha da loja'} className="h-full w-full object-cover" loading="lazy" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 p-5 text-white sm:p-8">
+              {b.title && <h2 className="text-xl font-extrabold leading-tight drop-shadow-lg sm:text-3xl">{b.title}</h2>}
+              {b.subtitle && <p className="max-w-md text-sm text-white/85 sm:text-base">{b.subtitle}</p>}
+              {b.cta_text && b.cta_url && (
+                b.cta_url.startsWith('/') ? (
+                  <Link to={b.cta_url} className="btn-primary mt-1 w-fit">{b.cta_text}</Link>
+                ) : (
+                  <a href={b.cta_url} target="_blank" rel="noreferrer" className="btn-primary mt-1 w-fit">{b.cta_text}</a>
+                )
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      {banners.length > 1 && (
+        <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5">
+          {banners.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              aria-label={'Campanha ' + (i + 1)}
+              onClick={() => goTo(i)}
+              className={'h-1.5 rounded-full transition-all ' + (i === active ? 'w-5 bg-white' : 'w-1.5 bg-white/60')}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 

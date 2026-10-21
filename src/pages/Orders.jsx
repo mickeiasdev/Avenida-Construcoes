@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, Loader2, Package, QrCode, RotateCcw, Truck, X } from 'lucide-react'
-import { supabase } from '../lib/supabaseClient'
+import { AlertCircle, Bell, CheckCircle2, ImagePlus, Loader2, Package, QrCode, RotateCcw, Star, Truck, X } from 'lucide-react'
+import { supabase, uploadImage } from '../lib/supabaseClient'
+import { pushSupported, pushConfigured, pushEnabled, enableOrderPush, disableOrderPush } from '../lib/push'
 import { useAuth } from '../context/AuthContext'
 import { formatBRL, formatDateTime, onlyDigits, ORDER_CLS, ORDER_LABELS, ORDER_PIPELINE, ORDER_SHORT } from '../lib/utils'
 import { PAYMENT_LABELS } from '../lib/storeOrder'
@@ -26,8 +27,35 @@ export default function Orders() {
   const [actionError, setActionError] = useState(null)
   const [mpModal, setMpModal] = useState(null) // { order, mpPix }
   const [mpLoading, setMpLoading] = useState(false)
+  const [reviewOrder, setReviewOrder] = useState(null) // pedido em avaliação (migration-33)
+  const [pushOn, setPushOn] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
   const { getOrderPaymentStatus, checkMpOrderAgain, clearCart, showNotice } = useCart()
   useModalA11y(!!mpModal, () => setMpModal(null))
+  useModalA11y(!!reviewOrder, () => setReviewOrder(null))
+
+  // notificações push: estado real da assinatura (migration-35)
+  useEffect(() => {
+    if (!user) return
+    pushEnabled().then(setPushOn).catch(() => setPushOn(false))
+  }, [user])
+
+  async function togglePush() {
+    setPushBusy(true)
+    try {
+      if (pushOn) {
+        await disableOrderPush()
+        setPushOn(false)
+      } else {
+        await enableOrderPush(user.id)
+        setPushOn(true)
+      }
+    } catch (e) {
+      setActionError(e?.message ?? 'Não foi possível alterar as notificações.')
+    } finally {
+      setPushBusy(false)
+    }
+  }
 
   useEffect(() => {
     const load = async () => {
@@ -192,6 +220,29 @@ export default function Orders() {
         </div>
       )}
 
+      {/* NOTIFICAÇÕES PUSH (PWA — migration-35): "saiu para entrega" no celular */}
+      {pushSupported() && pushConfigured() && orders.length > 0 && (
+        <div className="card flex flex-wrap items-center justify-between gap-2 !p-3.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <Bell className="h-4 w-4 shrink-0 text-primary" />
+            <p className="min-w-0 text-sm font-medium text-gray-700">
+              {pushOn
+                ? 'Notificações ativas — avisamos quando o pedido sair para entrega. 🔔'
+                : 'Quer avisar no celular quando o pedido sair para entrega?'}
+            </p>
+          </div>
+          <button
+            type="button"
+            className={(pushOn ? 'btn-soft' : 'btn-primary') + ' btn-sm shrink-0'}
+            onClick={togglePush}
+            disabled={pushBusy}
+          >
+            {pushBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {pushOn ? 'Desativar' : 'Ativar notificações'}
+          </button>
+        </div>
+      )}
+
       {orders.length === 0 ? (
         <div className="card flex flex-col items-center gap-2 py-16 text-center text-gray-500">
           <Package className="h-8 w-8 text-gray-300" />
@@ -264,6 +315,17 @@ export default function Orders() {
                     Confirmar entrega
                   </button>
                 )}
+
+                {/* AVALIAR (migration-33): só pedido ENTREGUE — prova social com moderação */}
+                {o.status === STATUS_DELIVERED && (
+                  <button
+                    type="button"
+                    className="btn-soft min-h-11 w-full sm:w-auto"
+                    onClick={() => setReviewOrder(o)}
+                  >
+                    <Star className="h-4 w-4" /> Avaliar compra
+                  </button>
+                )}
                 {['mercado_pago', 'pix'].includes(o.payment_method) && String(o.payment_status).toLowerCase() !== 'approved' && o.status !== 'cancelled' && (
                   <button
                     type="button"
@@ -280,6 +342,12 @@ export default function Orders() {
           })}
         </div>
       )}
+
+      {/* MODAL DE AVALIAÇÃO (migration-33) */}
+      {reviewOrder && (
+        <ReviewModal order={reviewOrder} onClose={() => setReviewOrder(null)} />
+      )}
+
       {/* Modal Pix QR + Copia e Cola (Orders API) */}
       {mpModal && mpModal.mpPix && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setMpModal(null)}>
@@ -306,6 +374,183 @@ export default function Orders() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// MODAL DE AVALIAÇÃO (migration-33): nota + comentário + foto opcional.
+// A RLS só aceita review de pedido ENTREGUE do próprio cliente que
+// contenha o produto — a interface só desenha o caminho válido.
+function ReviewModal({ order, onClose }) {
+  const { user } = useAuth()
+  const items = (order.order_items ?? []).filter((it) => it.product_id)
+  const [productId, setProductId] = useState(items[0]?.product_id ?? '')
+  const [rating, setRating] = useState(5)
+  const [comment, setComment] = useState('')
+  const [photoUrl, setPhotoUrl] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(false)
+  const [err, setErr] = useState(null)
+
+  async function handleUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      setPhotoUrl(await uploadImage(file, 'reviews'))
+    } catch (e2) {
+      setErr('Falha no upload: ' + e2.message)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function submit() {
+    if (!productId) { setErr('Escolha o produto que quer avaliar.'); return }
+    setBusy(true)
+    setErr(null)
+    try {
+      const { error } = await supabase.from('product_reviews').insert({
+        product_id: productId,
+        user_id: user.id,
+        order_id: order.id,
+        rating,
+        comment: comment.trim() || null,
+        photo_url: photoUrl || null,
+      })
+      if (error) throw error
+      setDone(true)
+    } catch (e) {
+      setErr(e?.message ?? 'Não foi possível enviar a avaliação.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function reset() {
+    setDone(false)
+    setRating(5)
+    setComment('')
+    setPhotoUrl('')
+    setErr(null)
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[92vh] w-full max-w-md space-y-4 overflow-y-auto rounded-t-2xl bg-white p-5 pb-7 shadow-2xl safe-bottom sm:rounded-2xl sm:pb-5"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={'Avaliar pedido ' + String(order.id).slice(0, 8)}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold text-gray-800">Avaliar sua compra</h3>
+          <button type="button" className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" onClick={onClose} aria-label="Fechar">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {done ? (
+          <div className="flex flex-col items-center gap-2 py-8 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-green-600">
+              <CheckCircle2 className="h-6 w-6" />
+            </span>
+            <p className="font-bold text-gray-800">Obrigado pela avaliação! 🎉</p>
+            <p className="text-sm text-gray-500">A loja revisa e publica na página do produto — ajuda outros clientes a decidirem.</p>
+            <div className="mt-2 flex w-full flex-col gap-2 sm:flex-row">
+              {items.length > 1 && (
+                <button type="button" className="btn-soft flex-1" onClick={reset}>Avaliar outro produto</button>
+              )}
+              <button type="button" className="btn-primary flex-1" onClick={onClose}>Concluir</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div>
+              <label htmlFor="f_rev_produto" className="field-label">Produto</label>
+              <select
+                id="f_rev_produto"
+                className="input"
+                value={productId}
+                onChange={(e) => setProductId(e.target.value)}
+              >
+                {items.map((it) => (
+                  <option key={it.product_id} value={it.product_id}>{it.product_name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <p className="field-label">Sua nota</p>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setRating(n)}
+                    aria-label={n + ' estrela' + (n > 1 ? 's' : '')}
+                    className="rounded-lg p-1 transition hover:scale-110"
+                  >
+                    <Star className={'h-7 w-7 ' + (n <= rating ? 'fill-amber-400 text-amber-400' : 'text-gray-200')} />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="f_rev_comentario" className="field-label">Comentário (opcional)</label>
+              <textarea
+                id="f_rev_comentario"
+                className="input min-h-20"
+                placeholder="Ex.: chegou rapidinho e a qualidade é ótima"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                maxLength={500}
+              />
+            </div>
+
+            <div>
+              <p className="field-label">Foto do produto na obra (opcional)</p>
+              <div className="flex items-center gap-3">
+                {photoUrl ? (
+                  <span className="relative">
+                    <img src={photoUrl} alt="" className="h-16 w-16 rounded-lg object-cover ring-1 ring-gray-200" />
+                    <button
+                      type="button"
+                      className="absolute -right-1.5 -top-1.5 rounded-full bg-black/60 p-0.5 text-white hover:bg-black/80"
+                      onClick={() => setPhotoUrl('')}
+                      aria-label="Remover foto"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ) : (
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-50">
+                    {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                    {uploading ? 'Enviando...' : 'Adicionar foto'}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleUpload} />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {err && <p role="alert" className="rounded-lg bg-red-50 p-2.5 text-sm text-red-700 ring-1 ring-red-200">{err}</p>}
+
+            <button type="button" className="btn-primary w-full" onClick={submit} disabled={busy || uploading}>
+              {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+              Enviar avaliação
+            </button>
+            <p className="text-[11px] leading-relaxed text-gray-400">
+              Sua nota aparece na loja depois da moderação da loja. Nada além de nota, comentário e foto é compartilhado.
+            </p>
+          </>
+        )}
+      </div>
     </div>
   )
 }

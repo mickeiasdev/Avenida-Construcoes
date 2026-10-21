@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { effectivePrice, onlyDigits } from '../lib/utils'
 import { isMigrationMissing } from '../lib/storeOrder'
@@ -55,13 +55,26 @@ function escapeLike(value) {
 // + checkout que grava orders/order_items, atualiza o perfil do cliente
 // e abre o WhatsApp da loja com o resumo formatado.
 export function CartProvider({ children }) {
-  const { user, refreshProfile } = useAuth()
+  const { user, profile, refreshProfile } = useAuth()
   const [items, setItems] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
       return saved ? JSON.parse(saved) : []
     } catch { return [] }
   })
+  // device id estável: liga o carrinho do visitante ao painel de
+  // "carrinhos abandonados" (migration-35). Dado não sensível.
+  const [deviceId] = useState(() => {
+    try {
+      let id = localStorage.getItem('wl_device_id')
+      if (!id) {
+        id = (crypto.randomUUID ? crypto.randomUUID() : 'dev-' + Date.now())
+        localStorage.setItem('wl_device_id', id)
+      }
+      return id
+    } catch { return null }
+  })
+  const snapTimer = useRef(null)
   const [lastAdded, setLastAdded] = useState(null) // modal (só na primeira vez)
   const [addedToast, setAddedToast] = useState(null) // aviso do 2º item em diante
   const [notice, setNotice] = useState(null) // aviso geral (ex.: itens indisponíveis ao refazer compra)
@@ -70,6 +83,36 @@ export function CartProvider({ children }) {
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)) } catch { /* storage indisponível */ }
   }, [items])
+
+  // CARRINHO ABANDONADO (migration-35): sincroniza a sacola (itens+total,
+  // nada sensível) com o banco — o painel lista carrinhos parados > 2h.
+  // Debounce de 4s para não escrever a cada toque no stepper.
+  useEffect(() => {
+    if (!deviceId) return undefined
+    if (snapTimer.current) clearTimeout(snapTimer.current)
+    snapTimer.current = setTimeout(async () => {
+      try {
+        await supabase.from('cart_snapshots').upsert({
+          device_id: deviceId,
+          user_id: user?.id ?? null,
+          phone: onlyDigits(profile?.phone ?? '') || null,
+          items: items.map((i) => ({ product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price })),
+          total: Math.max(0, items.reduce((s, i) => s + i.price * i.quantity, 0)),
+          updated_at: new Date().toISOString(),
+        })
+      } catch { /* sem a tabela ou sem rede: a loja segue 100% funcional */ }
+    }, 4000)
+    return () => { if (snapTimer.current) clearTimeout(snapTimer.current) }
+  }, [items, deviceId, user?.id, profile?.phone])
+
+  // telefone digitado no checkout de VISITANTE: liga o snapshot a um contato
+  // que o painel pode chamar de volta ("seu carrinho continua aqui").
+  const patchSnapshotPhone = useCallback((phone) => {
+    if (!deviceId) return
+    const clean = onlyDigits(phone ?? '')
+    if (clean.length < 10) return
+    supabase.from('cart_snapshots').update({ phone: clean }).eq('device_id', deviceId).then(() => {}, () => {})
+  }, [deviceId])
 
   // ATENÇÃO: total/count PRECISAM vir antes de discountValue — `const` fica
   // em TDZ e ler `total` antes da inicialização quebra o render inteiro.
@@ -164,19 +207,48 @@ export function CartProvider({ children }) {
     }))
   }, [])
 
-  // valida o cupom no banco (público pode ler cupons ativos)
+  // valida o cupom no banco (público pode ler cupons ativos) — as regras
+  // AVANÇADAS da migration-31 (janela de validade, categoria e primeira
+  // compra) são pré-checadas aqui para o erro aparecer na hora, e o
+  // place_order REVALIDA tudo no servidor ao finalizar.
   async function applyCoupon(code) {
     const clean = String(code ?? '').trim().toUpperCase()
     if (!clean) return { error: 'Digite um código de cupom.' }
     const { data, error } = await supabase
       .from('coupons')
-      .select('code, kind, value, min_total')
+      .select('code, kind, value, min_total, valid_from, valid_until, first_purchase_only, category_id')
       .ilike('code', escapeLike(clean))
       .eq('active', true)
       .maybeSingle()
     if (error || !data) return { error: 'Cupom inválido ou inativo.' }
+    const now = Date.now()
+    if (data.valid_from && new Date(data.valid_from).getTime() > now) {
+      return { error: 'Este cupom ainda não está valendo.' }
+    }
+    if (data.valid_until && new Date(data.valid_until).getTime() < now) {
+      return { error: 'Este cupom venceu.' }
+    }
     if (Number(data.min_total) > 0 && total < Number(data.min_total)) {
       return { error: 'Esse cupom vale para compras a partir de R$ ' + Number(data.min_total).toFixed(2).replace('.', ',') }
+    }
+    if (data.category_id) {
+      const ids = items.map((i) => i.product_id).filter(Boolean)
+      let daCategoria = false
+      if (ids.length > 0) {
+        const { data: prods } = await supabase
+          .from('products')
+          .select('id, category_id')
+          .in('id', ids)
+        daCategoria = (prods ?? []).some((p) => p.category_id === data.category_id)
+      }
+      if (!daCategoria) return { error: 'Este cupom vale só para produtos de uma categoria específica — inclua um item dela na sacola.' }
+    }
+    if (data.first_purchase_only && user) {
+      const { count } = await supabase
+        .from('orders')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+      if (count && count > 0) return { error: 'Este cupom vale só para a primeira compra.' }
     }
     setCoupon(data)
     return { data }
@@ -219,6 +291,10 @@ export function CartProvider({ children }) {
     const paymentMethod = ['pix', 'dinheiro', 'cartao', 'mercado_pago'].includes(options.paymentMethod)
       ? options.paymentMethod
       : 'mercado_pago'
+    // zona de entrega (migration-31): o servidor relê a taxa no place_order
+    const deliveryZone = deliveryMethod === 'entrega'
+      ? (String(options.deliveryZone ?? '').trim() || null)
+      : null
 
     // 2) endereço em linhas legíveis (usado no pedido e na mensagem);
     //    retirada no balcão não grava endereço
@@ -256,6 +332,7 @@ export function CartProvider({ children }) {
       p_is_guest: !user,
       p_customer_cpf: onlyDigits(form.cpf) || null,
       p_customer_note: observacao || null,
+      p_delivery_zone: deliveryZone,
     })
 
     if (!rpc.error) {
@@ -385,7 +462,7 @@ export function CartProvider({ children }) {
 
   return (
     <CartContext.Provider
-      value={{ items, count, total, lastAdded, dismissLastAdded, addedToast, dismissAddedToast, notice, showNotice, dismissNotice, addItem, updateQuantity, removeItem, clearCart, checkout, coupon, applyCoupon, removeCoupon, discountValue, refreshPrices, getOrderPaymentStatus, checkMpOrderAgain }}
+      value={{ items, count, total, lastAdded, dismissLastAdded, addedToast, dismissAddedToast, notice, showNotice, dismissNotice, addItem, updateQuantity, removeItem, clearCart, checkout, coupon, applyCoupon, removeCoupon, discountValue, refreshPrices, getOrderPaymentStatus, checkMpOrderAgain, patchSnapshotPhone }}
     >
       {children}
     </CartContext.Provider>
