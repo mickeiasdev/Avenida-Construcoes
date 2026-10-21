@@ -6,6 +6,7 @@ import { useStore } from '../context/StoreContext'
 import { getOpenStatus, formatBusinessHoursText } from '../lib/utils'
 import { ProductCard } from '../components/ProductCard'
 import { MenuProductRow } from '../components/MenuProductRow'
+import { ProductQuickView } from '../components/ProductQuickView'
 
 const PAGE_SIZE = 6
 const BEST_LIMIT = 12
@@ -58,6 +59,7 @@ export default function Home() {
   const [sort, setSort] = useState('recent')
   const [bestFallback, setBestFallback] = useState(false) // sem vendas → destaques
   const rankedAllRef = useRef(null) // ranking do modo "Todos" (vive entre páginas)
+  const [quickView, setQuickView] = useState(null) // amostragem do produto (modal do cardápio)
 
   const activeCat = categories.find((c) => c.slug === catSlug)
   const isBest = !q && !catSlug
@@ -368,7 +370,7 @@ export default function Home() {
                 <span className="text-xs font-normal normal-case text-gray-400">({items.length})</span>
               </h3>
               <div className="space-y-2">
-                {items.map((p) => <MenuProductRow key={p.id} product={p} />)}
+                {items.map((p) => <MenuProductRow key={p.id} product={p} onOpen={setQuickView} />)}
               </div>
             </section>
           ))}
@@ -398,6 +400,9 @@ export default function Home() {
           )}
         </>
       )}
+
+      {/* modal de amostragem (clicou numa linha do cardápio) */}
+      <ProductQuickView product={quickView} onClose={() => setQuickView(null)} />
     </div>
   )
 }

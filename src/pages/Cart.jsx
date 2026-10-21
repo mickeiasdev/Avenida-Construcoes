@@ -13,6 +13,7 @@ import { readFunctionError } from '../lib/functionError'
 import { GuestCheckoutModal } from '../components/GuestCheckoutModal'
 import { MpPixDisplay } from '../components/MpPixDisplay'
 import { useModalA11y } from '../lib/useModalA11y'
+import { useConfirmDialog } from '../components/ConfirmDialog'
 import { useCpfAccount } from '../lib/useCpfAccount'
 import { CpfAccountModal } from '../components/CpfAccountModal'
 
@@ -50,6 +51,8 @@ export default function Cart() {
   const [couponMsg, setCouponMsg] = useState(null)
   const [listName, setListName] = useState('')     // salvar sacola como lista (migration-32)
   const [savingList, setSavingList] = useState(false)
+  const [editingQty, setEditingQty] = useState(null) // { id, value } — número digitado no stepper
+  const confirm = useConfirmDialog()
   const [doneOrder, setDoneOrder] = useState(null) // pedido concluído como visitante
   const [mpPendingOrder, setMpPendingOrder] = useState(null) // { id, mpPix, total } do Pix MP
   const [mpRetry, setMpRetry] = useState(null)               // pedido já gravado SÓ faltando o Pix
@@ -80,6 +83,31 @@ export default function Cart() {
   function set(key, value) {
     setForm((f) => ({ ...f, [key]: value }))
     setMissing((prev) => (prev ? prev.filter((k) => k !== key) : null))
+  }
+
+  // NÚMERO DIGITADO: Enter/foco perdido confirma o valor (0 = remove o item)
+  function commitQty(item) {
+    const ed = editingQty
+    setEditingQty(null)
+    if (!ed || ed.id !== item.product_id) return
+    const n = parseInt(ed.value, 10)
+    if (!Number.isFinite(n) || n === item.quantity) return
+    if (n <= 0) { removeItem(item.product_id); return }
+    const max = item.stock ?? 999
+    updateQuantity(item.product_id, Math.min(Math.max(1, n), max))
+  }
+
+  // lixeira agora pede confirmação (antes removia no clique único)
+  async function handleRemove(item) {
+    const ok = await confirm.ask({
+      title: 'Remover "' + item.name + '" da sacola?',
+      message: item.quantity > 1
+        ? 'São ' + item.quantity + ' unidades deste produto (total de ' + formatBRL(item.price * item.quantity) + ').'
+        : undefined,
+      confirmLabel: 'Remover',
+      danger: true,
+    })
+    if (ok) removeItem(item.product_id)
   }
 
   // SALVAR SACOLA COMO LISTA DA OBRA (migration-32): repete o pedido
@@ -348,7 +376,7 @@ export default function Cart() {
                   type="button"
                   className="rounded-lg p-2 text-red-400 hover:bg-red-50 hover:text-red-600"
                   aria-label="Remover item"
-                  onClick={() => removeItem(i.product_id)}
+                  onClick={() => handleRemove(i)}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -358,7 +386,15 @@ export default function Cart() {
                   <button type="button" className="p-2 hover:bg-gray-50" aria-label="Diminuir" onClick={() => updateQuantity(i.product_id, i.quantity - 1)}>
                     <Minus className="h-4 w-4" />
                   </button>
-                  <span className="w-9 text-center text-sm font-medium">{i.quantity}</span>
+                  <input
+                    className="w-12 bg-transparent text-center text-sm font-bold tabular-nums outline-none focus:bg-primary/5"
+                    inputMode="numeric"
+                    aria-label={'Quantidade de ' + i.name}
+                    value={editingQty?.id === i.product_id ? editingQty.value : String(i.quantity)}
+                    onChange={(e) => setEditingQty({ id: i.product_id, value: e.target.value.replace(/\D/g, '').slice(0, 3) })}
+                    onBlur={() => commitQty(i)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                  />
                   <button type="button" className="p-2 hover:bg-gray-50" aria-label="Aumentar" onClick={() => updateQuantity(i.product_id, Math.min(i.stock ?? 999, i.quantity + 1))}>
                     <Plus className="h-4 w-4" />
                   </button>
@@ -674,6 +710,9 @@ export default function Cart() {
         onContinueGuest={finishCheckout}
         from="/carrinho"
       />
+
+      {/* confirmação da lixeira */}
+      {confirm.dialog}
 
       {/* CPF digitado já tem conta: entrar ou seguir como visitante */}
       <CpfAccountModal

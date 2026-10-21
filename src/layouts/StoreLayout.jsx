@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { ShoppingCart, User, LogOut, Package, Settings as SettingsIcon, Home as HomeIcon, Phone, MessageCircle, Menu, X, Heart, ClipboardList } from 'lucide-react'
+import { ShoppingCart, User, LogOut, Package, Settings as SettingsIcon, Home as HomeIcon, Phone, MessageCircle, Menu, X, Heart, ClipboardList, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { formatBusinessHoursText, waNumber } from '../lib/utils'
 import { useCart } from '../context/CartContext'
@@ -23,6 +23,28 @@ export default function StoreLayout() {
   const [showNav, setShowNav] = useState(false)
   const [drawer, setDrawer] = useState(false)
   const accountRef = useRef(null)
+  // NAV DE CATEGORIAS: setas laterais aparecem só quando há conteúdo além da borda
+  const catNavRef = useRef(null)
+  const [navCan, setNavCan] = useState({ left: false, right: false })
+
+  function updateCatArrows() {
+    const el = catNavRef.current
+    if (!el) return
+    setNavCan({
+      left: el.scrollLeft > 4,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
+    })
+  }
+
+  function scrollCatNav(dir) {
+    catNavRef.current?.scrollBy({ left: dir * 240, behavior: 'smooth' })
+  }
+
+  useEffect(() => {
+    updateCatArrows()
+    window.addEventListener('resize', updateCatArrows)
+    return () => window.removeEventListener('resize', updateCatArrows)
+  }, [categories])
 
   // PERFIL INCOMPLETO: conta criada sem telefone ou endereço → ponto
   // pulsante no ícone da conta (lá em cima) e no item "Meu perfil" do
@@ -178,20 +200,49 @@ export default function StoreLayout() {
           </details>
         </div>
 
-        {/* NAV DE CATEGORIAS — aparece só quando o usuário rola (desktop) */}
+        {/* NAV DE CATEGORIAS — aparece só quando o usuário rola (desktop).
+          "Início" fica FIXO fora da faixa rolável; as categorias rolam sem
+          scrollbar (as SETAS laterais indicam mais conteúdo nas duas pontas). */}
         <nav
           className={'hidden overflow-hidden border-t border-white/10 bg-white/5 transition-all duration-300 md:block ' +
             (showNav ? 'max-h-14 opacity-100' : 'max-h-0 opacity-0')}
         >
-          <div className="mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-4 py-2 text-sm">
+          <div className="mx-auto flex max-w-6xl items-center gap-1 px-4 py-2 text-sm">
             <NavLink to="/" end className="flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-white/90 transition hover:bg-white/10">
               <HomeIcon className="h-4 w-4" /> Início
             </NavLink>
-            {categories.map((c) => (
-              <NavLink key={c.id} to={'/?cat=' + c.slug} className="shrink-0 rounded-full px-3 py-1.5 text-white/90 transition hover:bg-white/10">
-                {c.name}
-              </NavLink>
-            ))}
+            <span className="h-5 w-px shrink-0 bg-white/15" aria-hidden="true" />
+            {navCan.left && (
+              <button
+                type="button"
+                onClick={() => scrollCatNav(-1)}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20 hover:text-white"
+                aria-label="Ver categorias anteriores"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            )}
+            <div
+              ref={catNavRef}
+              onScroll={updateCatArrows}
+              className="flex min-w-0 flex-1 gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {categories.map((c) => (
+                <NavLink key={c.id} to={'/?cat=' + c.slug} className="shrink-0 rounded-full px-3 py-1.5 text-white/90 transition hover:bg-white/10">
+                  {c.name}
+                </NavLink>
+              ))}
+            </div>
+            {navCan.right && (
+              <button
+                type="button"
+                onClick={() => scrollCatNav(1)}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20 hover:text-white"
+                aria-label="Ver mais categorias"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </nav>
       </header>
