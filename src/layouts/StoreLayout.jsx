@@ -340,7 +340,7 @@ export default function StoreLayout() {
           className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-green-500 text-white shadow-lg transition hover:scale-105 md:bottom-5 md:right-5"
           aria-label="Falar no WhatsApp"
         >
-          <MessageCircle className="h-6 w-6" />
+          <MessageCircle className="h-6 w-6 icon-breathe" />
         </a>
       )}
 

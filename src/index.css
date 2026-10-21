@@ -310,8 +310,18 @@
 .nav-arrow-left  { animation: nav-arrow-nudge-left  1.2s ease-in-out infinite; }
 .nav-arrow-right { animation: nav-arrow-nudge-right 1.2s ease-in-out infinite; }
 
-/* Acessibilidade: quem pediu "reduzir movimento" ao sistema não vê o pisca */
+/* ÍCONE DO WHATSAPP (botão flutuante da vitrine): "respiração" sutil —
+   cresce 7% e volta, num ciclo lento de 3s. O círculo verde fica estável;
+   só o ícone pulsa, chamando sem gritar. */
+@keyframes icon-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.07); }
+}
+.icon-breathe { animation: icon-breathe 3s ease-in-out infinite; }
+
+/* Acessibilidade: quem pediu "reduzir movimento" ao sistema não vê pisca */
 @media (prefers-reduced-motion: reduce) {
   .nav-arrow-left,
-  .nav-arrow-right { animation: none; }
+  .nav-arrow-right,
+  .icon-breathe { animation: none; }
 }
