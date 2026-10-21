@@ -78,6 +78,11 @@ supabase db push --yes
 | [migration-34](supabase/migration-34.sql) | ⭐ Banners promocionais da vitrine (carrossel de campanhas na Home) |
 | [migration-35](supabase/migration-35.sql) | ⭐ Carrinho abandonado (snapshots) + notificações push do PWA (push_subscriptions) |
 
+**Dados de teste:** [seed-produtos-pedidos.sql](supabase/seed-produtos-pedidos.sql) cria 100 produtos fictícios de depósito
+(10 categorias, fotos, todos com preço final de R$ 0,01 — ~34 em promoção que caem sozinhos no filtro Ofertas)
+e 25 pedidos variados para movimentar Dashboard, Mais Vendidos e Automações. Cole no SQL Editor uma vez;
+há um bloco de LIMPEZA comentado no fim do arquivo para desfazer tudo.
+
 ---
 
 ## 👤 Passo 3 — Criar o usuário admin

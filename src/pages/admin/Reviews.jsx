@@ -23,7 +23,9 @@ export default function Reviews() {
       .limit(300)
     if (error) {
       setRows([])
-      setMsg({ type: 'err', text: 'Avaliações indisponíveis — rode a migration-33 no Supabase.' })
+      // mostra o MOTIVO real (antes o texto genérico escondia o problema)
+      setMsg({ type: 'err', text: 'Avaliações indisponíveis: ' + (error?.message ?? 'erro desconhecido') +
+        ' — rode a migration-33 no Supabase se ainda não rodou (ela é re-executável).' })
       return
     }
     setRows(data ?? [])

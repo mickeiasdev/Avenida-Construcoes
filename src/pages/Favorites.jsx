@@ -50,7 +50,7 @@ export default function Favorites() {
         </h1>
         <span className="text-xs text-gray-500">{products.length} produto(s)</span>
       </div>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         {products.map((p) => <ProductCard key={p.id} product={p} />)}
       </div>
     </div>

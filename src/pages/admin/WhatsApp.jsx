@@ -6,7 +6,7 @@ import {
   Smartphone, Square, Tag, TicketPercent, X, Zap,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
-import { waCall, toJid } from '../../lib/whatsappChat'
+import { waCall, toJid, translateWaError } from '../../lib/whatsappChat'
 import { formatBRL, formatDateTime, effectivePrice, hasActivePromo, maskPhone, onlyDigits, ORDER_CLS, ORDER_NEXT_ACTION, ORDER_PIPELINE, ORDER_SHORT, waLocal, waNumber } from '../../lib/utils'
 import { PAYMENT_LABELS } from '../../lib/storeOrder'
 import { useStore } from '../../context/StoreContext'
@@ -349,7 +349,7 @@ export default function WhatsAppAdmin() {
         loadChats()
       }
     } catch (e2) {
-      window.alert('Falha ao enviar a mídia (' + (e2?.message ?? 'erro') + '). Tente novamente.')
+      window.alert('Falha ao enviar a mídia (' + translateWaError(e2?.message) + '). Tente novamente.')
     }
     setMediaPreview((prev) => (prev ? { ...prev, busy: false } : null))
   }
@@ -606,7 +606,7 @@ export default function WhatsAppAdmin() {
           return false
         }
       } catch (e) {
-        window.alert('Não foi possível confirmar este número agora (' + (e?.message ?? 'erro') + '). Tente novamente.')
+        window.alert('Não foi possível confirmar este número agora (' + translateWaError(e?.message) + '). Tente novamente.')
         return false
       }
     } else {
@@ -698,7 +698,7 @@ export default function WhatsAppAdmin() {
       audioElRef.current.play()
       setPlayingId(msg.id)
     } catch (e) {
-      window.alert('Não foi possível reproduzir o áudio (' + (e?.message ?? 'erro') + ').')
+      window.alert('Não foi possível reproduzir o áudio (' + translateWaError(e?.message) + ').')
     }
   }
 
@@ -709,7 +709,7 @@ export default function WhatsAppAdmin() {
       setLightbox({ base64: url })
     } catch (e) {
       setLightbox(null)
-      window.alert('Não foi possível abrir a mídia (' + (e?.message ?? 'erro') + ').')
+      window.alert('Não foi possível abrir a mídia (' + translateWaError(e?.message) + ').')
     }
   }
 
@@ -721,7 +721,7 @@ export default function WhatsAppAdmin() {
       a.download = msg.text?.replace(/^📄 /, '') || 'arquivo'
       a.click()
     } catch (e) {
-      window.alert('Não foi possível baixar (' + (e?.message ?? 'erro') + ').')
+      window.alert('Não foi possível baixar (' + translateWaError(e?.message) + ').')
     }
   }
 
@@ -760,7 +760,7 @@ export default function WhatsAppAdmin() {
       if (String(e?.name) === 'NotAllowedError') {
         window.alert('Permissão de microfone negada. Libere o microfone nas configurações do site para gravar.')
       } else {
-        window.alert('Não foi possível acessar o microfone (' + (e?.message ?? 'erro') + ').')
+        window.alert('Não foi possível acessar o microfone (' + translateWaError(e?.message) + ').')
       }
     }
   }
@@ -794,7 +794,7 @@ export default function WhatsAppAdmin() {
         loadChats()
       }
     } catch (e) {
-      window.alert('Falha ao enviar o áudio (' + (e?.message ?? 'erro') + '). Tente novamente.')
+      window.alert('Falha ao enviar o áudio (' + translateWaError(e?.message) + '). Tente novamente.')
       setVoicePreview((prev) => (prev ? { ...prev, busy: false } : null))
     }
   }
@@ -998,13 +998,8 @@ export default function WhatsAppAdmin() {
         window.alert('Status atualizado ✔\nAviso no WhatsApp NÃO enviado: ' + (motivos[res.reason] ?? res.reason ?? 'motivo desconhecido') + '.')
       }
     } catch (e) {
-      const raw = String(e?.message ?? '')
-      const causa = /edge function|non-2xx|fetch failed/i.test(raw)
-        ? 'serviço de WhatsApp fora do ar agora'
-        : /timeout|não respondeu/i.test(raw)
-          ? 'a conexão com o WhatsApp não respondeu'
-          : (raw || 'erro inesperado')
-      window.alert('Status atualizado ✔\nAviso no WhatsApp indisponível: ' + causa + '. Tente de novo mais tarde.')
+      // waCall já devolve a mensagem traduzida e explicada (lib/whatsappChat)
+      window.alert('Status atualizado ✔\nAviso no WhatsApp indisponível: ' + translateWaError(e?.message) + '. Tente de novo mais tarde.')
     }
     await loadContactOrders()
     setDetailBusy(false)

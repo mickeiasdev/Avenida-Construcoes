@@ -7,7 +7,7 @@ import { STATUS_CLIENT_TEMPLATES, applyTemplate, pickVariant } from '../../lib/w
 import { supabase } from '../../lib/supabaseClient'
 import { DELIVERY_LABELS, fulfillmentTotals, PAYMENT_LABELS } from '../../lib/storeOrder'
 import { maskCpf } from '../../lib/checkout'
-import { waCall } from '../../lib/whatsappChat'
+import { waCall , translateWaError } from '../../lib/whatsappChat'
 import { formatBRL, formatDateTime, onlyDigits, ORDER_CLS, ORDER_LABELS, ORDER_NEXT_ACTION, ORDER_PIPELINE, ORDER_SHORT } from '../../lib/utils'
 import { useStore } from '../../context/StoreContext'
 
@@ -81,14 +81,8 @@ export default function OrdersAdmin() {
         window.alert('Pedido avançado ✔\nAviso no WhatsApp NÃO enviado: ' + (motivos[res.reason] ?? res.reason ?? 'motivo desconhecido') + '.')
       }
     } catch (e) {
-      // falha REAL de sistema (rede/timeout): traduz o jargão técnico
-      const raw = String(e?.message ?? '')
-      const causa = /edge function|non-2xx|fetch failed/i.test(raw)
-        ? 'serviço de WhatsApp fora do ar agora'
-        : /timeout|não respondeu/i.test(raw)
-          ? 'a conexão com o WhatsApp não respondeu'
-          : (raw || 'erro inesperado')
-      window.alert('Pedido avançado ✔\nAviso no WhatsApp indisponível: ' + causa + '. Tente de novo mais tarde.')
+      // waCall já devolve a mensagem traduzida e explicada (lib/whatsappChat)
+      window.alert('Pedido avançado ✔\nAviso no WhatsApp indisponível: ' + translateWaError(e?.message) + '. Tente de novo mais tarde.')
     }
   }
 

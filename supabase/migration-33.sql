@@ -15,7 +15,9 @@
 create table if not exists public.product_reviews (
   id uuid primary key default uuid_generate_v4(),
   product_id uuid not null references public.products(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
+  -- FK para PROFILES (não auth.users): o PostgREST só resolve o embed
+  -- "profiles(full_name)" quando o FK aponta para a tabela pública.
+  user_id uuid not null references public.profiles(id) on delete cascade,
   order_id uuid references public.orders(id) on delete set null,
   rating smallint not null check (rating between 1 and 5),
   comment text,
@@ -61,5 +63,16 @@ create policy "own insert from delivered order" on public.product_reviews
 drop policy if exists "admin manage reviews" on public.product_reviews;
 create policy "admin manage reviews" on public.product_reviews
   for all using (public.is_admin()) with check (public.is_admin());
+
+-- CORREÇÃO (v2 — rode o arquivo inteiro de novo se já tinha rodado a v1):
+-- a primeira versão criava o FK user_id apontando para auth.users, e o
+-- PostgREST não consegue resolver o embed "profiles(full_name)" assim
+-- (erro "Could not find a relationship"). Reaponta para public.profiles.
+alter table public.product_reviews
+  drop constraint if exists product_reviews_user_id_fkey;
+-- (mesmo nome que o Postgres daria ao FK de user_id — drop e add idempotentes)
+alter table public.product_reviews
+  add constraint product_reviews_user_id_fkey
+  foreign key (user_id) references public.profiles(id) on delete cascade;
 
 notify pgrst, 'reload schema';
