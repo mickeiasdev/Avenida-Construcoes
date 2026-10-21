@@ -219,7 +219,7 @@ export default function StoreLayout() {
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20 hover:text-white"
                 aria-label="Ver categorias anteriores"
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4 nav-arrow-left" />
               </button>
             )}
             <div
@@ -240,7 +240,7 @@ export default function StoreLayout() {
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20 hover:text-white"
                 aria-label="Ver mais categorias"
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-4 w-4 nav-arrow-right" />
               </button>
             )}
           </div>

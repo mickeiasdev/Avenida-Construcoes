@@ -295,3 +295,23 @@
   to   { opacity: 1; transform: none; }
 }
 .toast-in { animation: toast-in 0.25s ease-out; }
+
+/* SETAS DA NAV DE CATEGORIAS: piscam (opacidade) e dão um leve empurrão
+   na própria direção — chamam atenção para "tem mais conteúdo aqui".
+   Aplicadas ao ÍCONE (o círculo do botão fica estável). */
+@keyframes nav-arrow-nudge-left {
+  0%, 100% { transform: translateX(0);    opacity: 1; }
+  50%      { transform: translateX(-3px); opacity: 0.45; }
+}
+@keyframes nav-arrow-nudge-right {
+  0%, 100% { transform: translateX(0);   opacity: 1; }
+  50%      { transform: translateX(3px);  opacity: 0.45; }
+}
+.nav-arrow-left  { animation: nav-arrow-nudge-left  1.2s ease-in-out infinite; }
+.nav-arrow-right { animation: nav-arrow-nudge-right 1.2s ease-in-out infinite; }
+
+/* Acessibilidade: quem pediu "reduzir movimento" ao sistema não vê o pisca */
+@media (prefers-reduced-motion: reduce) {
+  .nav-arrow-left,
+  .nav-arrow-right { animation: none; }
+}
