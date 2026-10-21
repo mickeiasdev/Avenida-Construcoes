@@ -90,7 +90,7 @@ supabase db push --yes
 ## ⚡ Passo 4 — Edge Functions
 
 ```bash
-supabase functions deploy create-mp-order webhook-mercadopago whatsapp-chat whatsapp-webhook whatsapp-notify push-order-status wa-sms-hook
+supabase functions deploy create-mp-order webhook-mercadopago whatsapp-chat whatsapp-webhook whatsapp-notify push-order-status
 ```
 
 ### Secrets
@@ -119,16 +119,10 @@ supabase secrets set NOTIFY_SECRET=sua-senha-interna
    ```
 4. Deploy da function `push-order-status`. O cliente ativa em **Meus pedidos → Ativar notificações**.
 
-### 📲 Login por WhatsApp com código OTP (opcional)
+### 🔐 Autenticação
 
-O cliente entra só com o telefone — o código chega no WhatsApp da Evolution:
-
-1. Dashboard → **Authentication → Sign In / Providers → Phone**: ative o provedor.
-2. Dashboard → **Authentication → SMS Provider → Custom SMS Hook**, URL:
-   `https://SEU-REF.supabase.co/functions/v1/wa-sms-hook`
-3. Deploy da function `wa-sms-hook` (usa os secrets EVOLUTION_* já configurados).
-
-Sem essa configuração a aba "Entrar com WhatsApp" mostra erro claro — nada mais quebra.
+Login por **Google** e **e-mail** (senha ou magic link) — configurados direto no Supabase
+(Dashboard → Authentication → Providers).
 
 ### Webhooks (cadastro manual)
 
