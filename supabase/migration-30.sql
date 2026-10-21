@@ -18,10 +18,17 @@
 alter table public.products
   add column if not exists min_stock int;
 
--- 2) rendimento por unidade p/ calculadora (null = produto sem calculadora)
+-- 2) rendimento por unidade p/ calculadora (null = produto sem calculadora).
+--    coverage_unit sem NOT NULL: a unidade só tem sentido JUNTO de um
+--    coverage_value — produto sem calculadora não precisa de unidade.
 alter table public.products
   add column if not exists coverage_value numeric(10,2) check (coverage_value is null or coverage_value > 0),
-  add column if not exists coverage_unit text not null default 'm²';
+  add column if not exists coverage_unit text default 'm²';
+
+-- quem já tinha rodado a v1 (coluna NOT NULL): solta a restrição.
+-- Rodar duas vezes não faz mal (idempotente).
+alter table public.products
+  alter column coverage_unit drop not null;
 
 -- 3) meta diária de vendas (R$) — 0 = medidor escondido
 alter table public.store_settings
