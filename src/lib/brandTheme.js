@@ -11,14 +11,63 @@ export const BRAND_CACHE_KEY = 'wls.brand.v1'
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i
 
+// ===== CONTRASTE GARANTIDO (WCAG AA) =====
+// A cor da marca aparece como TEXTO sobre branco (preços, links) e como
+// FUNDO de texto branco (botões .btn-primary). Nas duas direções o WCAG AA
+// pede >= 4.5:1 — cor muito clara (ex.: laranja #f97316: 3:1) reprova.
+// Aqui escurecemos a cor (mistura com preto, matiz preservado) até passar,
+// ANTES de aplicar E de gravar no cache — quem abre a página já vê a cor
+// final, e o script inline do index.html pinta o mesmo valor.
+const CONTRAST_TARGET = 4.5
+
+function hexToRgb(hex) {
+  const h = hex.replace('#', '')
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
+  return [parseInt(full.slice(0, 2), 16), parseInt(full.slice(2, 4), 16), parseInt(full.slice(4, 6), 16)]
+}
+
+function channelLuminance(c) {
+  const s = c / 255
+  return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
+}
+
+// luminância relativa do WCAG; branco puro = 1
+function luminance(hex) {
+  const [r, g, b] = hexToRgb(hex)
+  return 0.2126 * channelLuminance(r) + 0.7152 * channelLuminance(g) + 0.0722 * channelLuminance(b)
+}
+
+// razão de contraste da cor contra o BRANCO (textos claros sobre a cor e
+// a cor usada como texto sobre fundo branco — mesma razão, espelhada)
+function contrastWithWhite(hex) {
+  return (1 + 0.05) / (luminance(hex) + 0.05)
+}
+
+// Escurece a cor (mistura com preto) até contraste >= 4.5:1 contra branco.
+// Passa ilesa se já for legível; cor inválida volta como veio (sem surpresa).
+export function ensureAccessible(hex) {
+  if (typeof hex !== 'string' || !HEX.test(hex.trim())) return hex
+  const clean = hex.trim()
+  if (contrastWithWhite(clean) >= CONTRAST_TARGET) return clean
+  const [r, g, b] = hexToRgb(clean)
+  for (let k = 0.05; k <= 0.6; k += 0.05) {
+    const mixed = '#' + [r, g, b]
+      .map((c) => Math.round(c * (1 - k)).toString(16).padStart(2, '0'))
+      .join('')
+    if (contrastWithWhite(mixed) >= CONTRAST_TARGET) return mixed
+  }
+  return '#000000' // caso extremo (cor quase branca): legibilidade acima de tudo
+}
+
 // Aplica no <html> (vence o :root do CSS) e na barra do navegador mobile
 export function applyBrand(primary, secondary) {
   if (!primary) return
+  const safe = ensureAccessible(primary)
   const root = document.documentElement
-  root.style.setProperty('--brand-primary', primary)
-  if (secondary) root.style.setProperty('--brand-secondary', secondary)
+  root.style.setProperty('--brand-primary', safe)
+  if (secondary) root.style.setProperty('--brand-secondary', ensureAccessible(secondary))
   const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.setAttribute('content', primary)
+  if (meta) meta.setAttribute('content', safe)
 }
 
 // ===== Escala de fonte do sistema =====
@@ -64,7 +113,12 @@ export function readCachedBrand() {
 export function writeCachedBrand(primary, secondary, fontScale) {
   if (!HEX.test(String(primary ?? ''))) return
   const fs = Number(fontScale)
-  const payload = { primary, secondary: secondary ?? null }
+  // grava a versão ACESSÍVEL: o script inline do index.html aplica este
+  // valor antes do primeiro paint — precisa ser o mesmo que o React aplica
+  const payload = {
+    primary: ensureAccessible(String(primary)),
+    secondary: secondary ? ensureAccessible(String(secondary)) : null,
+  }
   if (Number.isFinite(fs) && fs >= FONT_SCALE_MIN && fs <= FONT_SCALE_MAX) {
     payload.fontScale = Math.round(fs)
   }

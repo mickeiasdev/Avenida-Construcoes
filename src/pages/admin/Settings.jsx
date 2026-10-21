@@ -212,6 +212,7 @@ export default function Settings() {
         </div>
         <p className="text-xs leading-relaxed text-gray-500">
           Defina as cores da sua vitrine. A cor primária é usada em botões, links e destaques; a secundária é usada em textos e ícones.
+          Cores muito claras são escurecidas automaticamente (mantendo o tom) para garantir contraste de leitura — padrão de acessibilidade WCAG AA.
         </p>
       </section>
 
