@@ -295,6 +295,14 @@ export function CartProvider({ children }) {
     const deliveryZone = deliveryMethod === 'entrega'
       ? (String(options.deliveryZone ?? '').trim() || null)
       : null
+    // frete por CEP (migration-36): modo + CEP; a taxa é REVALIDADA no servidor
+    const deliveryMode = deliveryMethod === 'entrega' ? (options.deliveryMode ?? null) : null
+    const deliveryCep = deliveryMethod === 'entrega'
+      ? (onlyDigits(options.deliveryCep ?? '').length === 8 ? onlyDigits(options.deliveryCep) : null)
+      : null
+    const deliveryFee = deliveryMethod === 'entrega' ? Math.max(0, Number(options.deliveryFee ?? 0) || 0) : 0
+    // agendamento (migration-36): serviço OU retirada com hora marcada
+    const scheduledAt = options.scheduledAt ?? null
 
     // 2) endereço em linhas legíveis (usado no pedido e na mensagem);
     //    retirada no balcão não grava endereço
@@ -333,6 +341,10 @@ export function CartProvider({ children }) {
       p_customer_cpf: onlyDigits(form.cpf) || null,
       p_customer_note: observacao || null,
       p_delivery_zone: deliveryZone,
+      p_delivery_cep: deliveryCep,
+      p_delivery_mode: deliveryMode,
+      p_delivery_fee: deliveryMethod === 'entrega' ? deliveryFee : null,
+      p_scheduled_at: scheduledAt,
     })
 
     if (!rpc.error) {

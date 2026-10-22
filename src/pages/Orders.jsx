@@ -258,6 +258,11 @@ export default function Orders() {
                   <div>
                     <p className="font-semibold text-gray-800">Pedido nº {o.id.slice(0, 8)}</p>
                     <p className="text-xs text-gray-500">{formatDateTime(o.created_at)}</p>
+                    {o.scheduled_at && (
+                      <p className="mt-1 w-fit rounded-lg bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary">
+                        🗓️ {o.delivery_method === 'retirada' ? 'Retirada' : 'Atendimento'}: {new Date(o.scheduled_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    )}
                   </div>
                   <span className={'rounded-lg px-3 py-1 text-xs font-medium ' + (ORDER_CLS[o.status] ?? ORDER_CLS.pending)}>
                     {ORDER_LABELS[o.status] ?? o.status}

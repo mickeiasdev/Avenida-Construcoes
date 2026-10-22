@@ -77,6 +77,7 @@ supabase db push --yes
 | [migration-33](supabase/migration-33.sql) | ⭐ Avaliações de produto com foto (anti-fake: só pedido entregue; moderação no painel) |
 | [migration-34](supabase/migration-34.sql) | ⭐ Banners promocionais da vitrine (carrossel de campanhas na Home) |
 | [migration-35](supabase/migration-35.sql) | ⭐ Carrinho abandonado (snapshots) + notificações push do PWA (push_subscriptions) |
+| [migration-36](supabase/migration-36.sql) | ⭐ Nichos e presets + agendamento de serviços + retirada com horário + frete por faixa de CEP + editor visual (fonte/raios) + place_order v6 |
 
 **Dados de teste:** [seed-produtos-pedidos.sql](supabase/seed-produtos-pedidos.sql) cria 100 produtos fictícios de depósito
 (10 categorias, fotos, todos com preço final de R$ 0,01 — ~34 em promoção que caem sozinhos no filtro Ofertas)
@@ -95,7 +96,7 @@ há um bloco de LIMPEZA comentado no fim do arquivo para desfazer tudo.
 ## ⚡ Passo 4 — Edge Functions
 
 ```bash
-supabase functions deploy create-mp-order webhook-mercadopago whatsapp-chat whatsapp-webhook whatsapp-notify push-order-status
+supabase functions deploy create-mp-order webhook-mercadopago whatsapp-chat whatsapp-webhook whatsapp-notify push-order-status melhor-envio-quote
 ```
 
 ### Secrets
@@ -112,6 +113,9 @@ supabase secrets set EVOLUTION_INSTANCE=loja
 
 # Notificações automáticas
 supabase secrets set NOTIFY_SECRET=sua-senha-interna
+
+# Frete automático fora da área própria (opcional — Melhor Envio)
+supabase secrets set MELHOR_ENVIO_TOKEN=seu-token-pessoal
 ```
 
 ### 🔔 Push "seu pedido saiu para entrega" (opcional, migration-35)

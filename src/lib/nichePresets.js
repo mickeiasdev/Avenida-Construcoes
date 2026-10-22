@@ -1,0 +1,55 @@
+// PRESETS DE NICHO — o lojista escolhe o mercado dele com 1 clique e a
+// loja nasce com cara do segmento (cores, layout, slogan). Depois tudo é
+// editável normalmente em Configurações — o preset é só o ponto de partida.
+export const NICHE_PRESETS = [
+  {
+    id: 'geral',
+    label: 'Geral',
+    emoji: '🛍️',
+    desc: 'Cinza neutro, serve para qualquer segmento',
+    primary_color: '#9ca3af',
+    secondary_color: '#18181b',
+    layout: 'loja',
+    about: 'Qualidade, preço justo e atendimento rápido.',
+  },
+  {
+    id: 'construcao',
+    label: 'Construção',
+    emoji: '🧱',
+    desc: 'Laranja de obra com azul-marinho',
+    primary_color: '#cc6d2e',
+    secondary_color: '#18283e',
+    layout: 'loja',
+    about: 'Tudo para sua obra, do alicerce ao acabamento.',
+  },
+  {
+    id: 'moda',
+    label: 'Moda e Loja',
+    emoji: '👗',
+    desc: 'Rosa/sobria, foco em vitrine',
+    primary_color: '#be3455',
+    secondary_color: '#1f2233',
+    layout: 'loja',
+    about: 'Moda com estilo, do dia a dia à festa.',
+  },
+  {
+    id: 'comida',
+    label: 'Comida',
+    emoji: '🍽️',
+    desc: 'Vermelho apetitoso, layout cardápio',
+    primary_color: '#c0392b',
+    secondary_color: '#231a15',
+    layout: 'cardapio',
+    about: 'Feito na hora, com o sabor de sempre.',
+  },
+  {
+    id: 'servicos',
+    label: 'Serviços',
+    emoji: '🗓️',
+    desc: 'Verde confiança, agenda de horários',
+    primary_color: '#0e7f5f',
+    secondary_color: '#132a24',
+    layout: 'cardapio',
+    about: 'Agende online e receba o atendimento em casa.',
+  },
+]

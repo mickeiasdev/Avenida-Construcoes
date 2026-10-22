@@ -1,6 +1,9 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Percent, Users, Menu, X, PlusCircle, MessageCircle, Home, Zap, Star, FileText, Image as ImageIcon } from 'lucide-react';import { useAuth } from '../context/AuthContext'
+import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Percent, Users, Menu, X, PlusCircle, MessageCircle, Home, Zap, Star, FileText, Image as ImageIcon, CalendarDays, Moon, LifeBuoy } from 'lucide-react';import { useAuth } from '../context/AuthContext'
+import { AdminTour, TourRestartButton } from '../components/AdminTour'
+import { toggleTheme } from '../lib/theme'
+import { devWhatsappLink, DEVELOPER } from '../lib/branding'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabaseClient'
 import { ORDER_PIPELINE } from '../lib/utils'
@@ -32,6 +35,7 @@ const ITEMS = [
   { to: '/admin/whatsapp', label: 'WhatsApp', icon: MessageCircle, waBadge: true },
   { to: '/admin/automacoes', label: 'Automações', icon: Zap },
   { to: '/admin/pedidos', label: 'Pedidos', icon: ClipboardList },
+  { to: '/admin/agendamentos', label: 'Agendamentos', icon: CalendarDays },
   { to: '/admin/nova-venda', label: 'Nova venda', icon: PlusCircle },
   { to: '/admin/produtos', label: 'Produtos', icon: Package, group: 'Catálogo' },
   { to: '/admin/categorias', label: 'Categorias', icon: Tags },
@@ -190,6 +194,16 @@ export default function AdminLayout() {
           <Link to="/" className="flex items-center gap-3 rounded-lg px-3 py-2 text-white/70 transition hover:bg-white/10 hover:text-white">
             <Store className="h-4 w-4" /> Ver loja
           </Link>
+          <TourRestartButton />
+          <button
+            type="button"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-white/70 transition hover:bg-white/10 hover:text-white"
+            onClick={() => toggleTheme()}
+            aria-label="Alternar tema claro/escuro"
+          >
+            <Moon className="h-4 w-4" />
+            Alternar tema
+          </button>
           <div className="px-3 py-2 text-[11px] text-white/70">{profile?.full_name || 'Admin'}</div>
           <button type="button" onClick={signOut} className="flex items-center gap-3 rounded-lg px-3 py-2 text-left text-red-300 transition hover:bg-red-500/10">
             <LogOut className="h-4 w-4" /> Sair
@@ -223,6 +237,20 @@ export default function AdminLayout() {
           </Suspense>
         </main>
       </div>
+
+      {/* ============ SUPORTE DO SISTEMA (fale com o desenvolvedor) ============ */}
+      <a
+        href={devWhatsappLink('Olá! Estou no painel da loja e preciso de ajuda com o sistema.')}
+        target="_blank"
+        rel="noreferrer"
+        className="fixed bottom-4 right-4 z-[80] flex items-center gap-2 rounded-full bg-green-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg transition hover:scale-105"
+        aria-label={'Suporte do sistema — falar com ' + DEVELOPER.name}
+      >
+        <LifeBuoy className="h-4 w-4" /> Suporte
+      </a>
+
+      {/* TOUR DE BOAS-VINDAS (primeira visita) */}
+      <AdminTour />
 
       {/* ============ TOAST DO WHATSAPP (novo contato / nova mensagem) ============ */}
       {waToast && (

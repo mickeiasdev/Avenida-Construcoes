@@ -5,6 +5,7 @@ import { useConfirmDialog } from '../../components/ConfirmDialog'
 import { applyFontScale, FONT_BASE_PX } from '../../lib/brandTheme'
 import { supabase, uploadImage, deleteImagesByUrls } from '../../lib/supabaseClient'
 import { formatBusinessHoursText, maskCnpj, maskPhone, onlyDigits, waLocal, waNumber } from '../../lib/utils'
+import { NICHE_PRESETS } from '../../lib/nichePresets'
 
 const HEX = /^#[0-9a-fA-F]{6}$/
 
@@ -46,6 +47,9 @@ export default function Settings() {
       whatsapp: maskPhone(waLocal(settings.whatsapp)),
       cnpj: settings.cnpj ? maskCnpj(settings.cnpj) : '',
       layout: settings.layout ?? 'loja',
+      font_family: settings.font_family ?? 'jakarta',     // editor visual (migration-36)
+      radius_style: settings.radius_style ?? 'normal',    // editor visual (migration-36)
+      pickup_scheduled: settings.pickup_scheduled ?? false, // retirada com horário
       primary_color: settings.primary_color ?? '#9ca3af',
       secondary_color: settings.secondary_color ?? '#18181b',
       font_scale: settings.font_scale ?? 100,
@@ -110,6 +114,9 @@ export default function Settings() {
       business_hours: formatBusinessHoursText(form),
       // meta diária: '' vira 0 (medidor escondido no Dashboard)
       daily_goal: Number(String(form.daily_goal ?? '').replace(',', '.')) || 0,
+      pickup_scheduled: Boolean(form.pickup_scheduled),
+      font_family: form.font_family === 'inter' ? 'inter' : 'jakarta',
+      radius_style: ['normal', 'compact', 'roundy'].includes(form.radius_style) ? form.radius_style : 'normal',
     }
     const { error } = await updateSettings(payload)
     if (!error) {
@@ -133,6 +140,43 @@ export default function Settings() {
         <h1 className="text-2xl font-bold text-gray-800">Personalização visual</h1>
         <p className="text-sm text-gray-500">Nome, logo, banner, cores, endereço e WhatsApp da loja.</p>
       </div>
+
+      {/* PRESETS DE NICHO — a loja nasce com a cara do segmento */}
+      <section className="card space-y-3">
+        <div>
+          <h2 className="font-bold text-gray-800">Preset de nicho</h2>
+          <p className="text-sm text-gray-500">Escolha o mercado da sua loja: aplicamos cores, layout e slogan prontos. Ajuste tudo depois como quiser.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {NICHE_PRESETS.map((p) => {
+            const active = form.primary_color?.toLowerCase() === p.primary_color && form.layout === p.layout
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => {
+                  dirtyRef.current = true
+                  setForm((f) => ({ ...f, primary_color: p.primary_color, secondary_color: p.secondary_color, layout: p.layout, about: p.about }))
+                }}
+                className={'flex flex-col items-start gap-1.5 rounded-xl border-2 p-3 text-left transition ' +
+                  (active ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300')}
+                aria-pressed={active}
+              >
+                <span className="flex items-center gap-1.5">
+                  <span className="text-lg">{p.emoji}</span>
+                  <span className="text-sm font-bold text-gray-800">{p.label}</span>
+                </span>
+                <span className="flex gap-1" aria-hidden="true">
+                  <span className="h-4 w-4 rounded-full ring-1 ring-black/10" style={{ background: p.primary_color }} />
+                  <span className="h-4 w-4 rounded-full ring-1 ring-black/10" style={{ background: p.secondary_color }} />
+                </span>
+                <span className="text-[11px] leading-tight text-gray-500">{p.desc}</span>
+              </button>
+            )
+          })}
+        </div>
+        <p className="text-xs text-gray-500">O preset muda o formulário acima — toque em <b>Salvar configurações</b> para publicar na vitrine.</p>
+      </section>
 
       {/* IDENTIDADE */}
       <section className="card space-y-4">
@@ -265,6 +309,56 @@ export default function Settings() {
         </p>
       </section>
 
+      {/* EDITOR VISUAL — fonte e cantos (migration-36) */}
+      <section className="card space-y-4">
+        <h2 className="font-bold text-gray-800">Editor visual</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="f_font_family" className="mb-1 block text-sm font-medium text-gray-700">Fonte dos textos</label>
+            <select
+              id="f_font_family"
+              className="input"
+              value={form.font_family}
+              onChange={(e) => set('font_family', e.target.value)}
+            >
+              <option value="jakarta">Plus Jakarta Sans (atual)</option>
+              <option value="inter">Inter (mais neutra)</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="f_radius_style" className="mb-1 block text-sm font-medium text-gray-700">Cantos das caixas e botões</label>
+            <select
+              id="f_radius_style"
+              className="input"
+              value={form.radius_style}
+              onChange={(e) => set('radius_style', e.target.value)}
+            >
+              <option value="normal">Padrão (atual)</option>
+              <option value="compact">Retinhos (ferramenta)</option>
+              <option value="roundy">Bem arredondados (amigável)</option>
+            </select>
+          </div>
+        </div>
+        <p className="text-xs text-gray-500">O modo escuro é escolha de quem visita (botão na vitrine) — cada cliente vê como preferir.</p>
+      </section>
+
+      {/* RETIRADA COM HORÁRIO (migration-36) */}
+      <section className="card space-y-3">
+        <h2 className="font-bold text-gray-800">Retirada no balcão</h2>
+        <label className="flex items-start gap-2.5 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 accent-[var(--brand-primary)]"
+            checked={Boolean(form.pickup_scheduled)}
+            onChange={(e) => set('pickup_scheduled', e.target.checked)}
+          />
+          <span>
+            <b>Retirada com horário marcado</b> — o cliente escolhe a hora na finalização (slots de 30 min dentro do seu funcionamento).
+            <span className="block text-xs text-gray-500">Desligado, a retirada segue como hoje: "buscar quando quiser".</span>
+          </span>
+        </label>
+      </section>
+
       {/* META DE VENDAS DO DIA (migration-30) */}
       <section className="card space-y-4">
         <h2 className="flex items-center gap-2 font-bold text-gray-800">
@@ -351,6 +445,9 @@ export default function Settings() {
       {/* ZONAS DE ENTREGA (frete por zona — migration-31) */}
       <DeliveryZonesSection />
 
+      {/* FRETE POR FAIXA DE CEP (migration-36) */}
+      <CepRangesSection />
+
       {msg && (
         <div className={'flex items-start gap-2 rounded-lg p-3 text-sm ' +
           (msg.type === 'ok' ? 'bg-green-50 text-green-700 ring-1 ring-green-200' : 'bg-red-50 text-red-700 ring-1 ring-red-200')}>
@@ -369,6 +466,120 @@ export default function Settings() {
       {/* confirmação em popup (salvar configurações da loja) */}
       {confirm.dialog}
     </form>
+  )
+}
+
+// Faixas de CEP (frete por CEP — migration-36): o cliente digita o CEP no
+// checkout e a taxa da faixa entra no total (validada de novo no servidor).
+// CEP fora das faixas: cotação Melhor Envio (se configurado) ou aviso.
+function CepRangesSection() {
+  const { reloadCepRanges } = useStore()
+  const [rows, setRows] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+  const [novo, setNovo] = useState({ label: '', cep_start: '', cep_end: '', fee: '', eta: '' })
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    const { data, error } = await supabase.from('delivery_cep_ranges').select('*').order('cep_start')
+    if (error) {
+      setRows([])
+      setMsg({ type: 'err', text: 'Faixas de CEP indisponíveis — rode a migration-36 no Supabase.' })
+      return
+    }
+    setRows(data ?? [])
+  }
+
+  function only8(v) { return v.replace(/\D/g, '').slice(0, 8) }
+
+  async function addRange() {
+    if (only8(novo.cep_start).length !== 8 || only8(novo.cep_end).length !== 8) {
+      setMsg({ type: 'err', text: 'CEP inicial e final precisam de 8 dígitos (ex.: 60000000 a 60999999).' })
+      return
+    }
+    if (only8(novo.cep_start) > only8(novo.cep_end)) {
+      setMsg({ type: 'err', text: 'O CEP inicial precisa ser menor que o final.' })
+      return
+    }
+    setBusy(true)
+    const { error } = await supabase.from('delivery_cep_ranges').insert({
+      label: novo.label.trim() || 'Faixa',
+      cep_start: only8(novo.cep_start),
+      cep_end: only8(novo.cep_end),
+      fee: Math.max(0, Number(String(novo.fee).replace(',', '.')) || 0),
+      eta: novo.eta.trim() || null,
+      active: true,
+    })
+    setBusy(false)
+    if (error) setMsg({ type: 'err', text: 'Erro ao criar: ' + error.message })
+    else {
+      setNovo({ label: '', cep_start: '', cep_end: '', fee: '', eta: '' })
+      setMsg(null)
+      reloadCepRanges()
+      await load()
+    }
+  }
+
+  async function removeRange(id) {
+    setBusy(true)
+    const { error } = await supabase.from('delivery_cep_ranges').delete().eq('id', id)
+    setBusy(false)
+    if (error) setMsg({ type: 'err', text: 'Erro ao excluir: ' + error.message })
+    else { reloadCepRanges(); await load() }
+  }
+
+  return (
+    <section className="card space-y-4">
+      <div>
+        <h2 className="flex items-center gap-2 font-bold text-gray-800">
+          <Truck className="h-5 w-5 text-primary" /> Frete por faixa de CEP
+        </h2>
+        <p className="text-sm text-gray-500">
+          O cliente digita o CEP no checkout e a taxa da faixa entra no total — sem escolher zona. Use junto ou no lugar das zonas.
+          CEP fora das faixas tenta cotação automática do Melhor Envio (se configurado).
+        </p>
+      </div>
+
+      {msg && (
+        <div className={'rounded-lg p-3 text-sm ' + (msg.type === 'ok'
+          ? 'bg-green-50 text-green-700 ring-1 ring-green-200'
+          : 'bg-red-50 text-red-700 ring-1 ring-red-200')}>
+          {msg.text}
+        </div>
+      )}
+
+      <div className="grid gap-2 rounded-xl bg-gray-50 p-3 ring-1 ring-gray-100 sm:grid-cols-[1fr_7rem_7rem_6rem_1fr_auto]">
+        <input className="input" placeholder="Nome (ex.: Fortaleza centro)" value={novo.label} onChange={(e) => setNovo({ ...novo, label: e.target.value })} aria-label="Nome da faixa" />
+        <input className="input" inputMode="numeric" placeholder="CEP de" value={novo.cep_start} onChange={(e) => setNovo({ ...novo, cep_start: only8(e.target.value) })} aria-label="CEP inicial" />
+        <input className="input" inputMode="numeric" placeholder="CEP até" value={novo.cep_end} onChange={(e) => setNovo({ ...novo, cep_end: only8(e.target.value) })} aria-label="CEP final" />
+        <input className="input" type="number" min="0" step="0.01" placeholder="Taxa R$" value={novo.fee} onChange={(e) => setNovo({ ...novo, fee: e.target.value })} aria-label="Taxa da faixa" />
+        <input className="input" placeholder="Prazo (ex.: 2 dias)" value={novo.eta} onChange={(e) => setNovo({ ...novo, eta: e.target.value })} aria-label="Prazo da faixa" />
+        <button type="button" className="btn-primary" onClick={addRange} disabled={busy}>
+          <Plus className="h-4 w-4" /> Adicionar
+        </button>
+      </div>
+
+      {rows === null ? (
+        <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+      ) : rows.length === 0 ? (
+        <p className="py-4 text-center text-sm text-gray-400">Nenhuma faixa cadastrada — o frete por CEP fica desligado.</p>
+      ) : (
+        <div className="divide-y divide-gray-50">
+          {rows.map((r) => (
+            <div key={r.id} className="flex flex-wrap items-center gap-3 py-2.5 text-sm">
+              <span className="min-w-0 flex-1 truncate font-medium text-gray-800">{r.label}</span>
+              <span className="font-mono text-xs text-gray-500">{r.cep_start} → {r.cep_end}</span>
+              <span className="font-bold text-primary">R$ {Number(r.fee).toFixed(2).replace('.', ',')}</span>
+              {r.eta && <span className="text-xs text-gray-400">{r.eta}</span>}
+              <button type="button" className="p-1.5 text-gray-400 transition hover:text-red-500" onClick={() => removeRange(r.id)} aria-label={'Excluir faixa ' + r.label}>
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 

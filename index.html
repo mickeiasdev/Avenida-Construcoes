@@ -6,6 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#9ca3af" />
     <script>
+      // Tema escuro escolhido pelo visitante: aplica ANTES do primeiro
+      // paint (senão a tela clara piscaria em cada visita no escuro).
+      (function () {
+        try {
+          if (localStorage.getItem('wls.theme') === 'dark') {
+            document.documentElement.classList.add('dark')
+          }
+        } catch (e) { /* modo privado: segue claro */ }
+      })()
+    </script>
+    <script>
       // Pinta a loja com a cor que o lojista configurou ANTES do primeiro paint.
       // Sem isto o tema padrão do template (cinza neutro) pisca até o
       // StoreContext buscar store_settings no Supabase e aplicar a cor real.
@@ -46,7 +57,7 @@
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <title>Depósito Avenida Construção</title>
   </head>
   <body>

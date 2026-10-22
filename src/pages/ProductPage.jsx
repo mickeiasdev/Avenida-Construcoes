@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Banknote, Calculator, Check, ChevronLeft, ChevronRight, CreditCard, Loader2, MessageCircle, Minus, Package, Plus, QrCode, Share2, ShoppingBag, ShoppingCart, Star, X } from 'lucide-react'
+import { ArrowLeft, Banknote, Calculator, CalendarDays, Check, ChevronLeft, ChevronRight, CreditCard, Loader2, MessageCircle, Minus, Package, Plus, QrCode, Share2, ShoppingBag, ShoppingCart, Star, X } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { useStore } from '../context/StoreContext'
 import { DeliveryZonePicker, zoneFee } from '../components/DeliveryZonePicker'
+import { BookingSlotPicker } from '../components/BookingSlotPicker'
 import { formatBRL, effectivePrice, hasActivePromo, promoPercent } from '../lib/utils'
 import { CheckoutForm, CheckoutRetiradaFields } from '../components/CheckoutForm'
-import { profileToForm, missingFields, requiredFieldsFor, fieldLabel, maskCpf } from '../lib/checkout'
+import { profileToForm, missingFields, requiredFieldsFor, fieldLabel } from '../lib/checkout'
 import { FavoriteButton } from '../components/FavoriteButton'
 import { GuestCheckoutModal } from '../components/GuestCheckoutModal'
 import { MpPixDisplay } from '../components/MpPixDisplay'
@@ -54,8 +55,9 @@ export default function ProductPage() {
   useModalA11y(!!buyMissing, () => setBuyMissing(null))
   const [buyDelivery, setBuyDelivery] = useState('entrega')
   const [buyZone, setBuyZone] = useState('')   // zona de entrega (migration-31)
+  const [buySlot, setBuySlot] = useState('')   // agendamento de serviço (migration-36)
   const [buyPayment, setBuyPayment] = useState('mercado_pago')
-  const { zones } = useStore()
+  const { settings, zones } = useStore()
   // Visitante com CPF já cadastrado: "entrar na sua conta?" — continuar como
   // visitante segue normal e não pergunta de novo neste checkout.
   const cpfAccount = useCpfAccount({ loggedIn: !!user })
@@ -105,6 +107,11 @@ export default function ProductPage() {
       setBuyError('Escolha a sua zona de entrega para calcular a taxa.')
       return
     }
+    // serviço: o horário É o produto — sem slot não sai
+    if (product.is_service && !buySlot) {
+      setBuyError('Escolha o dia e a hora do atendimento.')
+      return
+    }
     // Deslogado? CPF já cadastrado sugere entrar a conta; senão pergunta
     // entrar/criar conta ou seguir como visitante
     if (!user) {
@@ -126,7 +133,9 @@ export default function ProductPage() {
         name: product.name,
         price: effectivePrice(product),
         quantity: qty,
-      }], { deliveryMethod: buyDelivery, paymentMethod: buyPayment, deliveryZone: buyZone })
+      }], product.is_service
+        ? { deliveryMethod: 'retirada', paymentMethod: buyPayment, scheduledAt: buySlot }
+        : { deliveryMethod: buyDelivery, paymentMethod: buyPayment, deliveryZone: buyZone })
       setBuyOpen(false)
       setBuyMissing(null)
 
@@ -400,6 +409,11 @@ export default function ProductPage() {
           </div>
           <p className={'text-sm font-medium ' + (out ? 'text-red-500' : 'text-green-600')}>{stockLabel}</p>
 
+          {product.is_service ? (
+          <button type="button" className="btn-primary mt-auto w-full" disabled={out} onClick={openBuyNow}>
+            <CalendarDays className="h-4 w-4" /> Agendar agora
+          </button>
+          ) : (
           <div className="mt-auto space-y-2">
             <div className="flex items-center gap-3">
               <div className="flex items-center rounded-lg ring-1 ring-gray-200">
@@ -426,6 +440,7 @@ export default function ProductPage() {
               <MessageCircle className="h-4 w-4" /> Finalizar pedido agora
             </button>
           </div>
+          )}
 
           {/* ===== CALCULADORA DE MATERIAL (rendimento da migration-30) ===== */}
           {Number(product.coverage_value) > 0 && (
@@ -519,7 +534,20 @@ export default function ProductPage() {
               <span className="font-bold text-primary">{formatBRL(qty * effectivePrice(product))}</span>
             </div>
 
+            {product.is_service && (
+              <BookingSlotPicker
+                settings={settings}
+                title="Escolha o dia e a hora do atendimento"
+                durationMin={product.duration_min ?? 30}
+                productId={product.id}
+                value={buySlot}
+                onChange={(v) => { setBuySlot(v); setBuyError(null) }}
+                compact
+              />
+            )}
+
             {/* recebimento: entrega x retirada */}
+            {!product.is_service && (
             <div className="grid grid-cols-2 gap-2">
               {[
                 { id: 'entrega', label: 'Entrega', icon: Package },
@@ -539,6 +567,7 @@ export default function ProductPage() {
                 </button>
               ))}
             </div>
+            )}
 
             {/* zona de entrega (taxa/prazo) — só quando a loja cadastrou zonas */}
             {buyDelivery === 'entrega' && (
@@ -591,7 +620,7 @@ export default function ProductPage() {
 
             <button type="button" className="btn-primary w-full" disabled={buyBusy} onClick={confirmBuyNow}>
               {buyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
-              {buyBusy ? 'Processando...' : buyPayment === 'mercado_pago' ? 'Gerar QR Pix (Copia e Cola)' : 'Confirmar pedido via WhatsApp'}
+              {buyBusy ? 'Processando...' : product.is_service ? 'Confirmar agendamento' : buyPayment === 'mercado_pago' ? 'Gerar QR Pix (Copia e Cola)' : 'Confirmar pedido via WhatsApp'}
             </button>
 
             <p className="text-[11px] leading-relaxed text-gray-400">

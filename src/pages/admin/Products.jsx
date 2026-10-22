@@ -11,6 +11,8 @@ const EMPTY = {
   category_id: '', stock: '', image_url: '', images: [], active: true,
   min_stock: '',                       // alerta de reposição (migration-30)
   coverage_value: '', coverage_unit: 'm²', // calculadora de material (migration-30)
+  is_service: false, duration_min: '',     // agendamento de serviços (migration-36)
+  weight_gram: '',                        // peso p/ Melhor Envio (migration-36)
 }
 
 // CRUD de produtos: categoria opcional, estoque opcional (vazio = sem
@@ -79,6 +81,9 @@ export default function Products() {
       min_stock: modal.min_stock === '' ? null : Math.max(0, Number(modal.min_stock) || 0),
       coverage_value: modal.coverage_value === '' ? null : Math.max(0.01, Number(String(modal.coverage_value).replace(',', '.')) || 0.01),
       coverage_unit: modal.coverage_unit || 'm²',
+      is_service: Boolean(modal.is_service),
+      duration_min: modal.duration_min === '' ? null : Math.min(480, Math.max(15, Number(modal.duration_min) || 30)),
+      weight_gram: modal.weight_gram === '' ? 300 : Math.max(100, Number(modal.weight_gram) || 300),
       image_url: modal.image_url || null,
       images: modal.images ?? [],
       active: modal.active,
@@ -152,6 +157,9 @@ export default function Products() {
       min_stock: p.min_stock == null ? '' : String(p.min_stock),
       coverage_value: p.coverage_value == null ? '' : String(p.coverage_value),
       coverage_unit: p.coverage_unit || 'm²',
+      is_service: Boolean(p.is_service),
+      duration_min: p.duration_min == null ? '' : String(p.duration_min),
+      weight_gram: p.weight_gram == null ? '' : String(p.weight_gram),
       images: p.images ?? [],
     })
   }
@@ -333,6 +341,30 @@ export default function Products() {
                   onChange={(e) => setModal({ ...modal, min_stock: e.target.value })}
                   placeholder="Vazio = sem alerta de reposição"
                 />
+              </div>
+            </div>
+
+            {/* SERVIÇO COM AGENDAMENTO + PESO (migration-36) */}
+            <div className="rounded-xl bg-gray-50 p-3 ring-1 ring-gray-200">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-primary"
+                  checked={Boolean(modal.is_service)}
+                  onChange={(e) => setModal({ ...modal, is_service: e.target.checked, stock: e.target.checked ? null : modal.stock })}
+                />
+                É um SERVIÇO com agendamento (o cliente escolhe dia e hora)
+              </label>
+              {Boolean(modal.is_service) && (
+                <div className="mt-2">
+                  <label className="field-label">Duração do atendimento (minutos)</label>
+                  <input className="input" type="number" min="15" max="480" step="15" value={modal.duration_min} onChange={(e) => setModal({ ...modal, duration_min: e.target.value })} placeholder="30" />
+                  <p className="mt-1 text-[11px] text-gray-400">Serviços não consomem estoque e são agendados na página do produto.</p>
+                </div>
+              )}
+              <div className="mt-2">
+                <label className="field-label">Peso para frete (gramas) — Melhor Envio</label>
+                <input className="input" type="number" min="100" step="50" value={modal.weight_gram} onChange={(e) => setModal({ ...modal, weight_gram: e.target.value })} placeholder="300 (padrão)" />
               </div>
             </div>
 

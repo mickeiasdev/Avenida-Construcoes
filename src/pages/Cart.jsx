@@ -7,8 +7,10 @@ import { useCart } from '../context/CartContext'
 import { useStore } from '../context/StoreContext'
 import { formatBRL, onlyDigits } from '../lib/utils'
 import { DeliveryZonePicker, zoneFee } from '../components/DeliveryZonePicker'
+import { BookingSlotPicker } from '../components/BookingSlotPicker'
+import { feeFromCepRanges, melhorEnvioQuote } from '../lib/shipping'
 import { CheckoutForm, CheckoutRetiradaFields } from '../components/CheckoutForm'
-import { profileToForm, missingFields, requiredFieldsFor, fieldLabel, formatAddress, maskCpf } from '../lib/checkout'
+import { profileToForm, missingFields, requiredFieldsFor, fieldLabel, formatAddress } from '../lib/checkout'
 import { readFunctionError } from '../lib/functionError'
 import { GuestCheckoutModal } from '../components/GuestCheckoutModal'
 import { MpPixDisplay } from '../components/MpPixDisplay'
@@ -31,7 +33,7 @@ const STEPS = [
 export default function Cart() {
   const { user, profile } = useAuth()
   const { items, count, total, updateQuantity, removeItem, checkout, coupon, applyCoupon, removeCoupon, discountValue, getOrderPaymentStatus, checkMpOrderAgain, clearCart, refreshPrices, showNotice, patchSnapshotPhone } = useCart()
-  const { zones } = useStore()
+  const { settings, zones, cepRanges } = useStore()
   const navigate = useNavigate()
 
   const [step, setStep] = useState(1)
@@ -42,10 +44,40 @@ export default function Cart() {
   const [askGuest, setAskGuest] = useState(false)
   const [deliveryMethod, setDeliveryMethod] = useState('entrega') // 'entrega' | 'retirada'
   const [deliveryZone, setDeliveryZone] = useState('')  // zona escolhida (migration-31)
+  const [pickupSlot, setPickupSlot] = useState('')        // retirada com hora (migration-36)
+  const [cepQuote, setCepQuote] = useState(null)         // { label, fee, eta } da faixa de CEP
+  const [cepError, setCepError] = useState(null)
   const [paymentMethod, setPaymentMethod] = useState('mercado_pago')       // 'mercado_pago' | 'cartao' | 'dinheiro'
 
-  // taxa relida da lista pública (o servidor confirma no place_order)
-  const fee = deliveryMethod === 'entrega' ? zoneFee(zones, deliveryZone) : 0
+  // FRETE: faixa de CEP (migration-36) tem prioridade sobre zonas.
+  // CEP fora das faixas → cotação Melhor Envio (se configurada) ou bloqueia.
+  const useCep = cepRanges.length > 0
+  const cepOk = onlyDigits(form?.zip ?? '').length === 8
+  useEffect(() => {
+    if (deliveryMethod !== 'entrega' || !useCep) return
+    if (!cepOk) { setCepQuote(null); setCepError(null); return }
+    let cancelled = false
+    const faixa = feeFromCepRanges(cepRanges, form.zip)
+    if (faixa) { setCepQuote(faixa); setCepError(null); return }
+    // fora da área: tenta o Melhor Envio
+    setCepQuote(null)
+    melhorEnvioQuote({ destZip: form.zip, weightGram: 500, total }).then((r) => {
+      if (cancelled) return
+      if (r.error) { setCepError(r.error); setCepQuote(null) }
+      else {
+        const best = (r.options ?? []).sort((a, b) => a.price - b.price)[0]
+        if (best) { setCepQuote({ label: best.name ?? 'Melhor Envio', fee: best.price, eta: best.eta ?? null }); setCepError(null) }
+        else { setCepError('Não encontramos frete para este CEP agora.'); setCepQuote(null) }
+      }
+    })
+    return () => { cancelled = true }
+  }, [deliveryMethod, useCep, cepOk, form?.zip, cepRanges, total])
+
+  // taxa final (o servidor REVALIDA a de zona/CEP no place_order)
+  const fee = deliveryMethod === 'entrega'
+    ? (useCep ? (cepQuote?.fee ?? 0) : zoneFee(zones, deliveryZone))
+    : 0
+  const deliveryMode = deliveryMethod === 'entrega' ? (useCep ? 'cep' : (deliveryZone ? 'zona' : null)) : null
   const grandTotal = Math.max(0, total - discountValue + fee)
   const [couponInput, setCouponInput] = useState('')
   const [couponMsg, setCouponMsg] = useState(null)
@@ -146,8 +178,18 @@ export default function Cart() {
         return
       }
       // loja com zonas cadastradas exige a escolha (a taxa entra no total)
-      if (deliveryMethod === 'entrega' && zones.length > 0 && !deliveryZone) {
+      if (deliveryMethod === 'entrega' && !useCep && zones.length > 0 && !deliveryZone) {
         setMsg({ type: 'err', text: 'Escolha a sua zona de entrega para calcular a taxa.' })
+        return
+      }
+      // CEP obrigatório/da área quando o frete é por faixa
+      if (deliveryMethod === 'entrega' && useCep && (!cepOk || (!cepQuote && cepError))) {
+        setMsg({ type: 'err', text: cepError ?? 'Digite um CEP de entrega válido para calcular o frete.' })
+        return
+      }
+      // retirada com hora marcada exige o horário
+      if (deliveryMethod === 'retirada' && settings.pickup_scheduled && !pickupSlot) {
+        setMsg({ type: 'err', text: 'Escolha o horário da retirada.' })
         return
       }
     }
@@ -164,9 +206,19 @@ export default function Cart() {
       setMissing(miss)
       return
     }
-    if (deliveryMethod === 'entrega' && zones.length > 0 && !deliveryZone) {
+    if (deliveryMethod === 'entrega' && !useCep && zones.length > 0 && !deliveryZone) {
       setStep(2)
       setMsg({ type: 'err', text: 'Escolha a sua zona de entrega para calcular a taxa.' })
+      return
+    }
+    if (deliveryMethod === 'entrega' && useCep && (!cepOk || (!cepQuote && cepError))) {
+      setStep(2)
+      setMsg({ type: 'err', text: cepError ?? 'Digite um CEP de entrega válido para calcular o frete.' })
+      return
+    }
+    if (deliveryMethod === 'retirada' && settings.pickup_scheduled && !pickupSlot) {
+      setStep(2)
+      setMsg({ type: 'err', text: 'Escolha o horário da retirada.' })
       return
     }
     // Deslogado? Se o CPF digitado já tem conta, sugere ENTRAR — quem escolhe
@@ -185,7 +237,15 @@ export default function Cart() {
     setBusy(true)
     setMsg(null)
     try {
-      const order = await checkout(form, null, { deliveryMethod, paymentMethod, deliveryZone })
+      const order = await checkout(form, null, {
+        deliveryMethod,
+        paymentMethod,
+        deliveryZone: useCep ? null : deliveryZone,
+        deliveryMode,
+        deliveryCep: useCep ? onlyDigits(form.zip) : null,
+        deliveryFee: useCep ? (cepQuote?.fee ?? 0) : 0,
+        scheduledAt: pickupSlot || null,
+      })
 
       // PIX: mostra o QR aqui mesmo. Antes o retorno era descartado, a tela de
       // Pix abaixo nunca era alcançada e o cliente ficava sem o código.
@@ -533,8 +593,39 @@ export default function Cart() {
           </div>
 
           {/* zonas de entrega (migration-31): taxa e prazo antes de fechar */}
-          {deliveryMethod === 'entrega' && (
+          {deliveryMethod === 'entrega' && !useCep && (
             <DeliveryZonePicker value={deliveryZone} onChange={(v) => { setDeliveryZone(v); setMsg(null) }} />
+          )}
+
+          {/* frete por CEP (migration-36): calculado do CEP do endereço */}
+          {deliveryMethod === 'entrega' && useCep && (
+            <div className="rounded-xl bg-gray-50 p-3 text-sm ring-1 ring-gray-100">
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Frete para o seu CEP</p>
+              {!cepOk ? (
+                <p className="mt-1 text-gray-500">Digite o CEP no endereço acima para calcularmos o frete.</p>
+              ) : cepQuote ? (
+                <p className="mt-1 flex items-baseline justify-between gap-2">
+                  <span className="text-gray-600">{cepQuote.label}{cepQuote.eta ? ' · ' + cepQuote.eta : ''}</span>
+                  <b className="text-primary">{feeFromCepRanges(cepRanges, form.zip)?.fee === 0 || cepQuote.fee === 0 ? 'Grátis' : 'R$ ' + cepQuote.fee.toFixed(2).replace('.', ',')}</b>
+                </p>
+              ) : cepError ? (
+                <p className="mt-1 text-red-500">{cepError} Você pode retirar na loja ou falar com a gente no WhatsApp.</p>
+              ) : (
+                <p className="mt-1 text-gray-400">Calculando o frete…</p>
+              )}
+            </div>
+          )}
+
+          {/* retirada com hora marcada (migration-36) */}
+          {deliveryMethod === 'retirada' && settings.pickup_scheduled && (
+            <BookingSlotPicker
+              settings={settings}
+              title="Escolha o horário da retirada"
+              durationMin={30}
+              value={pickupSlot}
+              onChange={(v) => { setPickupSlot(v); setMsg(null) }}
+              compact
+            />
           )}
 
           {deliveryMethod === 'entrega'
@@ -591,8 +682,14 @@ export default function Cart() {
               )}
               {fee > 0 && (
                 <div className="flex justify-between font-normal text-gray-500">
-                  <span>Entrega · {deliveryZone}</span>
+                  <span>Entrega · {useCep ? 'CEP ' + onlyDigits(form.zip) : deliveryZone}</span>
                   <span>{formatBRL(fee)}</span>
+                </div>
+              )}
+              {deliveryMethod === 'retirada' && pickupSlot && (
+                <div className="flex justify-between font-normal text-gray-500">
+                  <span>Retirada agendada</span>
+                  <span>{new Date(pickupSlot).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
               )}
               <div className="flex justify-between">

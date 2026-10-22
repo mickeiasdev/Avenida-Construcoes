@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { ShoppingCart, User, LogOut, Package, Settings as SettingsIcon, Home as HomeIcon, Phone, MessageCircle, Menu, X, Heart, ClipboardList, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ShoppingCart, User, LogOut, Package, Settings as SettingsIcon, Home as HomeIcon, Phone, MessageCircle, Menu, X, Heart, ClipboardList, ChevronLeft, ChevronRight, Moon } from 'lucide-react'
+import { toggleTheme } from '../lib/theme'
+import { DEVELOPER, devWhatsappLink } from '../lib/branding'
 import { useAuth } from '../context/AuthContext'
 import { formatBusinessHoursText, waNumber } from '../lib/utils'
 import { useCart } from '../context/CartContext'
@@ -193,6 +195,9 @@ export default function StoreLayout() {
                     <HomeIcon className="h-4 w-4" /> Início
                   </Link>
                   <Link to="/favoritos" className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-gray-100"><Heart className="h-4 w-4" /> Meus favoritos</Link>
+                  <button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-gray-100" onClick={() => toggleTheme()}>
+                    <Moon className="h-4 w-4" /> Modo escuro / claro
+                  </button>
                   <Link to="/login" className="flex items-center gap-2 rounded-lg px-3 py-2 font-medium hover:bg-gray-100"><User className="h-4 w-4" /> Entrar / Criar conta</Link>
                 </>
               )}
@@ -321,12 +326,21 @@ export default function StoreLayout() {
         <div className="border-t border-white/10 py-4 pb-20 text-center text-xs text-white/50 md:pb-4">
           © {CURRENT_YEAR} {settings.store_name} · Desenvolvido por{' '}
           <a
-            href="https://github.com/mickeiasdev"
+            href={DEVELOPER.url}
             target="_blank"
             rel="noreferrer"
             className="font-semibold text-white/70 transition hover:text-white hover:underline"
           >
-            MickeiasDev
+            {DEVELOPER.name}
+          </a>
+          {' '}·{' '}
+          <a
+            href={devWhatsappLink('Olá! Vim pelo rodapé da loja e quero um site assim.')}
+            target="_blank"
+            rel="noreferrer"
+            className="font-semibold text-white/70 transition hover:text-white hover:underline"
+          >
+            Quero um site assim
           </a>
         </div>
       </footer>

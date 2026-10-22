@@ -33,12 +33,18 @@ function applyTheme(s) {
   applyBrand(s.primary_color, s.secondary_color)
   applyFontScale(s.font_scale ?? 100)
   writeCachedBrand(s.primary_color, s.secondary_color, s.font_scale ?? 100)
+  // editor visual (migration-36): fonte e raio dos cantos da loja
+  const root = document.documentElement
+  root.classList.toggle('font-alt', s.font_family === 'inter')
+  root.classList.toggle('radius-compact', s.radius_style === 'compact')
+  root.classList.toggle('radius-roundy', s.radius_style === 'roundy')
 }
 
 export function StoreProvider({ children }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const [categories, setCategories] = useState([])
   const [zones, setZones] = useState([]) // zonas de entrega (migration-31): taxa/prazo ANTES de finalizar
+  const [cepRanges, setCepRanges] = useState([]) // faixas de CEP (migration-36): frete pelo CEP digitado
   const [banners, setBanners] = useState([]) // banners promocionais (migration-34): carrossel da Home
   const [loading, setLoading] = useState(true)
   // Cor em cache = já sabemos a cor da loja: pinta na hora. Sem cache (primeira
@@ -75,6 +81,15 @@ export function StoreProvider({ children }) {
     if (!error) setZones(data ?? [])
   }
 
+  async function loadCepRanges() {
+    const { data, error } = await supabase
+      .from('delivery_cep_ranges')
+      .select('id, label, cep_start, cep_end, fee, eta')
+      .eq('active', true)
+      .order('cep_start')
+    if (!error) setCepRanges(data ?? [])
+  }
+
   async function loadBanners() {
     const { data, error } = await supabase
       .from('home_banners')
@@ -88,6 +103,7 @@ export function StoreProvider({ children }) {
     loadSettings()
     loadCategories()
     loadZones()
+    loadCepRanges()
     loadBanners()
 
     // Realtime: mudanças no banco refletem na vitrine sem refresh
@@ -96,6 +112,7 @@ export function StoreProvider({ children }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'store_settings' }, loadSettings)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, loadCategories)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_zones' }, loadZones)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_cep_ranges' }, loadCepRanges)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'home_banners' }, loadBanners)
       .subscribe()
 
@@ -144,7 +161,7 @@ export function StoreProvider({ children }) {
 
   return (
     <StoreContext.Provider
-      value={{ settings, categories, zones, banners, loading, updateSettings, createCategory, updateCategory, deleteCategory, reloadCategories: loadCategories, reloadZones: loadZones, reloadBanners: loadBanners }}
+      value={{ settings, categories, zones, cepRanges, banners, loading, updateSettings, createCategory, updateCategory, deleteCategory, reloadCategories: loadCategories, reloadZones: loadZones, reloadCepRanges: loadCepRanges, reloadBanners: loadBanners }}
     >
       {children}
     </StoreContext.Provider>
