@@ -4,6 +4,7 @@ import { Check, Loader2, Minus, Package, Plus, ShoppingCart, X } from 'lucide-re
 import { useCart } from '../context/CartContext'
 import { useModalA11y } from '../lib/useModalA11y'
 import { effectivePrice, formatBRL, hasActivePromo, promoPercent } from '../lib/utils'
+import { thumb } from '../lib/imageUrl'
 
 // AMOSTRAGEM RÁPIDA DO PRODUTO (modal estilo cardápio): a linha do cardápio
 // abre isto ao clicar — foto grande, nota, preço com promoção, quantidade
@@ -66,7 +67,7 @@ export function ProductQuickView({ product, onClose }) {
         {/* foto */}
         <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-gray-100">
           {image ? (
-            <img src={image} alt={product.name} className="h-full w-full object-cover" />
+            <img src={thumb(image, 700)} alt={product.name} className="h-full w-full object-cover" />
           ) : (
             <span className="flex h-full w-full items-center justify-center text-gray-300">
               <Package className="h-16 w-16" />

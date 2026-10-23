@@ -43,11 +43,14 @@ export function slotsForDate(settings, date, durationMin, takenISOs = []) {
   const dur = Math.max(15, durationMin || 30)
   const step = 30
   const [start, end] = hours.map(toMinutes)
-  const minStart = date.getTime() + 60 * 60 * 1000 // 1h de antecedência
+  const minStart = Date.now() + 60 * 60 * 1000 // 1h de antecedência a partir de AGORA
+  const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  const isHoje = dayStart <= Date.now()
   const out = []
   for (let m = start; m + dur <= end; m += step) {
     const slot = new Date(date.getFullYear(), date.getMonth(), date.getDate(), Math.floor(m / 60), m % 60)
-    if (slot.getTime() < minStart) continue
+    // dias futuros passam sempre; HOJE só entra o que está a 1h+ de distância
+    if (isHoje && slot.getTime() < minStart) continue
     const iso = localISO(slot)
     if (takenISOs.some((t) => Math.abs(new Date(t).getTime() - slot.getTime()) < step * 60 * 1000)) continue
     out.push(iso)

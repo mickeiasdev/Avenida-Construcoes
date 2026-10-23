@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { Minus, Plus } from 'lucide-react'
 import { effectivePrice, formatBRL, hasActivePromo } from '../lib/utils'
+import { thumb } from '../lib/imageUrl'
 import { useCart } from '../context/CartContext'
 import { useConfirmDialog } from './ConfirmDialog'
 
@@ -72,7 +73,7 @@ export function MenuProductRow({ product, onOpen }) {
       >
         {product.image_url ? (
           <img
-            src={product.image_url}
+            src={thumb(product.image_url, 200)}
             alt={product.name}
             loading="lazy"
             className="h-16 w-16 shrink-0 rounded-lg object-cover"

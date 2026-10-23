@@ -64,6 +64,7 @@ const ReviewsAdmin = lazyRetry(() => import('./pages/admin/Reviews'))
 const ReportsAdmin = lazyRetry(() => import('./pages/admin/Reports'))
 const AutomationsAdmin = lazyRetry(() => import('./pages/admin/Automations'))
 const BookingsAdmin = lazyRetry(() => import('./pages/admin/Bookings'))
+const ErrorsAdmin = lazyRetry(() => import('./pages/admin/Errors'))
 
 export default function App() {
   return (
@@ -106,6 +107,7 @@ export default function App() {
                 <Route path="avaliacoes" element={<ReviewsAdmin />} />
                 <Route path="configuracoes" element={<SettingsAdmin />} />
                 <Route path="relatorios" element={<ReportsAdmin />} />
+                <Route path="erros" element={<ErrorsAdmin />} />
                 <Route path="automacoes" element={<AutomationsAdmin />} />
               </Route>
 

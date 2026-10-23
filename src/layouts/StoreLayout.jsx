@@ -107,6 +107,10 @@ export default function StoreLayout() {
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
+      {/* acessibilidade: leitores de teclado pulam direto pro conteúdo */}
+      <a href="#conteudo" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[100] focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-gray-800 focus:shadow-lg">
+        Pular para o conteúdo
+      </a>
       {/* ================= HEADER (sticky) ================= */}
       <header className="sticky top-0 z-40 bg-secondary text-white shadow-lg shadow-black/20"
         style={{ backgroundImage: 'linear-gradient(120deg, var(--brand-secondary) 0%, color-mix(in srgb, var(--brand-primary) 35%, var(--brand-secondary)) 100%)' }}>
@@ -252,7 +256,7 @@ export default function StoreLayout() {
         </nav>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-3 py-6 sm:px-4">
+      <main id="conteudo" className="mx-auto w-full max-w-6xl flex-1 px-3 py-6 sm:px-4">
         <Outlet />
       </main>
 

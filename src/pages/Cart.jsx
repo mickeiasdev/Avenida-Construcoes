@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { useStore } from '../context/StoreContext'
 import { formatBRL, onlyDigits } from '../lib/utils'
+import { thumb } from '../lib/imageUrl'
 import { DeliveryZonePicker, zoneFee } from '../components/DeliveryZonePicker'
 import { BookingSlotPicker } from '../components/BookingSlotPicker'
 import { feeFromCepRanges, melhorEnvioQuote } from '../lib/shipping'
@@ -419,7 +420,7 @@ export default function Cart() {
               <div className="flex items-start gap-3">
                 <Link to={'/produto/' + i.product_id} className="shrink-0">
                   {i.image_url ? (
-                    <img src={i.image_url} alt="" className="h-16 w-16 rounded-lg object-cover" />
+                    <img src={thumb(i.image_url, 200)} alt="" className="h-16 w-16 rounded-lg object-cover" />
                   ) : (
                     <span className="flex h-16 w-16 items-center justify-center rounded-lg bg-gray-100 text-gray-300">
                       <Package className="h-6 w-6" />

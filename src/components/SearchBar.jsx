@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { effectivePrice, formatBRL } from '../lib/utils'
+import { thumb } from '../lib/imageUrl'
 
 // Barra de pesquisa global com DEBOUNCE (400ms) + SUGESTÕES instantâneas:
 // enquanto digita, um dropdown mostra até 5 produtos (nome + preço) e o
@@ -109,7 +110,7 @@ export function SearchBar({ value, onChange, placeholder, delay = 400 }) {
               className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-gray-50"
             >
               {p.image_url ? (
-                <img src={p.image_url} alt="" className="h-9 w-9 shrink-0 rounded-md bg-gray-100 object-cover" />
+                <img src={thumb(p.image_url, 80)} alt="" className="h-9 w-9 shrink-0 rounded-md bg-gray-100 object-cover" />
               ) : (
                 <span className="h-9 w-9 shrink-0 rounded-md bg-gray-100" aria-hidden="true" />
               )}

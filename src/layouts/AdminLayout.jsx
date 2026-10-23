@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Percent, Users, Menu, X, PlusCircle, MessageCircle, Home, Zap, Star, FileText, Image as ImageIcon, CalendarDays, Moon, LifeBuoy } from 'lucide-react';import { useAuth } from '../context/AuthContext'
+import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Percent, Users, Menu, X, PlusCircle, MessageCircle, Home, Zap, Star, FileText, Image as ImageIcon, CalendarDays, Moon, LifeBuoy, AlertTriangle } from 'lucide-react';import { useAuth } from '../context/AuthContext'
 import { AdminTour, TourRestartButton } from '../components/AdminTour'
 import { toggleTheme } from '../lib/theme'
 import { devWhatsappLink, DEVELOPER } from '../lib/branding'
@@ -45,6 +45,7 @@ const ITEMS = [
   { to: '/admin/cupons', label: 'Cupons', icon: TicketPercent },
   { to: '/admin/clientes', label: 'Clientes', icon: Users, group: 'Loja' },
   { to: '/admin/relatorios', label: 'Relatórios', icon: FileText },
+  { to: '/admin/erros', label: 'Erros', icon: AlertTriangle },
   { to: '/admin/configuracoes', label: 'Configurações', icon: SettingsIcon },
 ]
 
@@ -225,7 +226,7 @@ export default function AdminLayout() {
           <div className="min-w-0 flex-1">{brand}</div>
         </header>
 
-        <main className="flex-1 p-4 md:p-8">
+        <main id="conteudo-admin" className="flex-1 p-4 md:p-8">
           <Suspense
             fallback={
               <div className="flex justify-center py-24 text-gray-500">

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
 import { FavoriteButton } from './FavoriteButton'
 import { formatBRL, effectivePrice, hasActivePromo, promoPercent } from '../lib/utils'
+import { thumb } from '../lib/imageUrl'
 
 export function ProductCard({ product, compact = false }) {
   const { addItem } = useCart()
@@ -20,7 +21,7 @@ export function ProductCard({ product, compact = false }) {
         <Link to={'/produto/' + product.id} className="block h-full w-full">
           {product.image_url ? (
             <img
-              src={product.image_url}
+              src={thumb(product.image_url, 500)}
               alt={product.name}
               loading="lazy"
               className="h-full w-full object-cover transition duration-300 group-hover:scale-105"

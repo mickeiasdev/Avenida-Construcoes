@@ -44,3 +44,9 @@ tools/
 # Tooling local de agente (skills do assistente): não faz parte da loja
 .agents/
 skills-lock.json
+
+# arquivos auxiliares locais (não fazem parte do template)
+checks.json
+checks_pptx.json
+gerar_apresentacao.py
+gerar_contrato.py

@@ -78,6 +78,11 @@ supabase db push --yes
 | [migration-34](supabase/migration-34.sql) | ⭐ Banners promocionais da vitrine (carrossel de campanhas na Home) |
 | [migration-35](supabase/migration-35.sql) | ⭐ Carrinho abandonado (snapshots) + notificações push do PWA (push_subscriptions) |
 | [migration-36](supabase/migration-36.sql) | ⭐ Nichos e presets + agendamento de serviços + retirada com horário + frete por faixa de CEP + editor visual (fonte/raios) + place_order v6 |
+| [migration-37](supabase/migration-37.sql) | ⭐ Antispam no checkout (rate-limit por telefone) + profissionais no agendamento + base do SaaS (store_id, schema_migrations, billing) + rastreio de erros no painel |
+
+**Qualidade:** `npx vitest run` (77 testes unitários) · [teste-place-order.sql](supabase/teste-place-order.sql)
+(12 cenários de integração do checkout — cole no SQL Editor e confira a aba Messages).
+Documentação: [MANUAL-DO-LOJISTA.md](MANUAL-DO-LOJISTA.md) · [LICENSE](LICENSE) · [docs/PLANO-SAAS.md](docs/PLANO-SAAS.md)
 
 **Dados de teste:** [seed-produtos-pedidos.sql](supabase/seed-produtos-pedidos.sql) cria 100 produtos fictícios de depósito
 (10 categorias, fotos, todos com preço final de R$ 0,01 — ~34 em promoção que caem sozinhos no filtro Ofertas)
