@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary'
+import { installGlobalErrorTracking } from './lib/reportError'
+
+// erros do navegador (não capturados) viram linha no painel do lojista
+installGlobalErrorTracking()
 
 const container = document.getElementById('root')
 if (!container) throw new Error('Elemento #root não encontrado no index.html')
