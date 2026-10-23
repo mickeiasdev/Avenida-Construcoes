@@ -18,6 +18,14 @@ export default async function handler(req: Request): Promise<Response> {
       for (const p of list ?? []) {
         urls.push({ loc: origin + '/produto/' + p.id, changefreq: 'weekly', priority: '0.8' })
       }
+      // categorias também viram páginas indexáveis (/c/:slug)
+      const rc = await fetch(SB + '/rest/v1/categories?select=slug&limit=200', {
+        headers: { apikey: KEY, Authorization: 'Bearer ' + KEY },
+      })
+      const cats = await rc.json()
+      for (const c of cats ?? []) {
+        urls.push({ loc: origin + '/c/' + c.slug, changefreq: 'weekly', priority: '0.6' })
+      }
     } catch { /* banco fora: só a home */ }
   }
 

@@ -40,6 +40,7 @@ const ITEMS = [
   { to: '/admin/produtos', label: 'Produtos', icon: Package, group: 'Catálogo' },
   { to: '/admin/categorias', label: 'Categorias', icon: Tags },
   { to: '/admin/promocoes', label: 'Promoções', icon: Percent },
+  { to: '/admin/profissionais', label: 'Profissionais', icon: UserCheck },
   { to: '/admin/banners', label: 'Banners', icon: ImageIcon },
   { to: '/admin/avaliacoes', label: 'Avaliações', icon: Star },
   { to: '/admin/cupons', label: 'Cupons', icon: TicketPercent },

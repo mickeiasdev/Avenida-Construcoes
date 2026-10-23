@@ -1,5 +1,5 @@
 import { lazy, useEffect } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { StoreProvider } from './context/StoreContext'
 import { CartProvider } from './context/CartContext'
@@ -17,6 +17,12 @@ import Cart from './pages/Cart'
 import Favorites from './pages/Favorites'
 import Lists from './pages/Lists'
 import PageTitle from './components/PageTitle'
+// /c/:slug é a página SEO da categoria — o SPA abre direto no filtro
+function CategoryRedirect() {
+  const { slug } = useParams()
+  return <Navigate to={'/?cat=' + slug} replace />
+}
+
 // SPA mantém o scroll ao trocar de rota — voltamos sempre ao topo
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -65,6 +71,7 @@ const ReportsAdmin = lazyRetry(() => import('./pages/admin/Reports'))
 const AutomationsAdmin = lazyRetry(() => import('./pages/admin/Automations'))
 const BookingsAdmin = lazyRetry(() => import('./pages/admin/Bookings'))
 const ErrorsAdmin = lazyRetry(() => import('./pages/admin/Errors'))
+const ProfessionalsAdmin = lazyRetry(() => import('./pages/admin/Professionals'))
 
 export default function App() {
   return (
@@ -86,6 +93,7 @@ export default function App() {
                 <Route path="/login" element={<Login />} />
                 <Route path="/carrinho" element={<Cart />} />
                 <Route path="/favoritos" element={<Favorites />} />
+                <Route path="/c/:slug" element={<CategoryRedirect />} />
                 <Route path="/listas" element={<RequireAuth><Lists /></RequireAuth>} />
                 <Route path="/perfil" element={<RequireAuth><Profile /></RequireAuth>} />
                 <Route path="/pedidos" element={<RequireAuth><Orders /></RequireAuth>} />
@@ -96,6 +104,7 @@ export default function App() {
                 <Route index element={<Dashboard />} />
                 <Route path="pedidos" element={<OrdersAdmin />} />
                 <Route path="agendamentos" element={<BookingsAdmin />} />
+                <Route path="profissionais" element={<ProfessionalsAdmin />} />
                 <Route path="nova-venda" element={<NewOrderAdmin />} />
                 <Route path="produtos" element={<ProductsAdmin />} />
                 <Route path="categorias" element={<CategoriesAdmin />} />

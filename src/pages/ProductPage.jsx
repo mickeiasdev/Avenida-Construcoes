@@ -56,6 +56,8 @@ export default function ProductPage() {
   const [buyDelivery, setBuyDelivery] = useState('entrega')
   const [buyZone, setBuyZone] = useState('')   // zona de entrega (migration-31)
   const [buySlot, setBuySlot] = useState('')   // agendamento de serviço (migration-36)
+  const [buyPro, setBuyPro] = useState('')       // profissional escolhido ('' = qualquer um, migration-37)
+  const [professionals, setProfessionals] = useState([])
   const [buyPayment, setBuyPayment] = useState('mercado_pago')
   const { settings, zones } = useStore()
   // Visitante com CPF já cadastrado: "entrar na sua conta?" — continuar como
@@ -64,6 +66,19 @@ export default function ProductPage() {
 
   // carrega os dados direto do usuário; se não houver, o form fica vazio
   useEffect(() => { setBuyForm(profileToForm(profile)) }, [profile])
+
+  // serviços: profissionais ativos pra escolha no agendamento (migration-37)
+  useEffect(() => {
+    if (!buyOpen || !product?.is_service) return undefined
+    let cancelled = false
+    supabase
+      .from('professionals')
+      .select('id, name')
+      .eq('active', true)
+      .order('name')
+      .then(({ data }) => { if (!cancelled) setProfessionals(data ?? []) }, () => {})
+    return () => { cancelled = true }
+  }, [buyOpen, product?.is_service])
 
   function setBuyField(key, value) {
     setBuyForm((f) => ({ ...f, [key]: value }))
@@ -134,7 +149,7 @@ export default function ProductPage() {
         price: effectivePrice(product),
         quantity: qty,
       }], product.is_service
-        ? { deliveryMethod: 'retirada', paymentMethod: buyPayment, scheduledAt: buySlot }
+        ? { deliveryMethod: 'retirada', paymentMethod: buyPayment, scheduledAt: buySlot, professionalId: buyPro || null }
         : { deliveryMethod: buyDelivery, paymentMethod: buyPayment, deliveryZone: buyZone })
       setBuyOpen(false)
       setBuyMissing(null)
@@ -534,12 +549,28 @@ export default function ProductPage() {
               <span className="font-bold text-primary">{formatBRL(qty * effectivePrice(product))}</span>
             </div>
 
+            {product.is_service && professionals.length > 0 && (
+              <div>
+                <label htmlFor="f_buy_pro" className="field-label">Profissional</label>
+                <select
+                  id="f_buy_pro"
+                  className="input"
+                  value={buyPro}
+                  onChange={(e) => { setBuyPro(e.target.value); setBuySlot('') }}
+                >
+                  <option value="">Qualquer profissional</option>
+                  {professionals.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+            )}
+
             {product.is_service && (
               <BookingSlotPicker
                 settings={settings}
                 title="Escolha o dia e a hora do atendimento"
                 durationMin={product.duration_min ?? 30}
                 productId={product.id}
+                professionalId={buyPro || null}
                 value={buySlot}
                 onChange={(v) => { setBuySlot(v); setBuyError(null) }}
                 compact

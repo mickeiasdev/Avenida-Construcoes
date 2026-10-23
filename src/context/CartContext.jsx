@@ -303,6 +303,8 @@ export function CartProvider({ children }) {
     const deliveryFee = deliveryMethod === 'entrega' ? Math.max(0, Number(options.deliveryFee ?? 0) || 0) : 0
     // agendamento (migration-36): serviço OU retirada com hora marcada
     const scheduledAt = options.scheduledAt ?? null
+    // profissional escolhido no agendamento (migration-37; null = qualquer um)
+    const professionalId = options.professionalId ?? null
 
     // 2) endereço em linhas legíveis (usado no pedido e na mensagem);
     //    retirada no balcão não grava endereço
@@ -345,6 +347,7 @@ export function CartProvider({ children }) {
       p_delivery_mode: deliveryMode,
       p_delivery_fee: deliveryMethod === 'entrega' ? deliveryFee : null,
       p_scheduled_at: scheduledAt,
+      p_professional_id: professionalId,
     })
 
     if (!rpc.error) {

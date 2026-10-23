@@ -33,6 +33,8 @@ export default async function handler(req: Request): Promise<Response> {
           '<meta property="og:description" content="' + esc(desc) + '" />',
           p.image_url ? '<meta property="og:image" content="' + esc(p.image_url) + '" />' : '',
           '<meta name="twitter:card" content="summary_large_image" />',
+          '<meta property="og:url" content="' + origin + '/produto/' + id + '" />',
+          '<link rel="canonical" href="' + origin + '/produto/' + id + '" />',
           '<script type="application/ld+json">' + JSON.stringify({
             '@context': 'https://schema.org',
             '@type': 'Product',
