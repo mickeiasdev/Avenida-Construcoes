@@ -284,4 +284,7 @@ delete from public.delivery_cep_ranges where label = 'ZZ-TESTE-CEP';
 delete from public.professionals where name like 'ZZ-TESTE%';
 delete from public.categories where slug = 'zz-teste-cat';
 
-raise notice '========== FIM: 12 cenários — confira acima se algum ❌ apareceu ==========';
+do $$
+begin
+  raise notice '========== FIM: 12 cenários — confira acima se algum ❌ apareceu ==========';
+end $$;
