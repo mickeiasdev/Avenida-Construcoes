@@ -5,7 +5,7 @@
 export const config = { runtime: 'edge' }
 
 const esc = (s: string) => String(s ?? '')
-  .replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '"')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 export default async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url)

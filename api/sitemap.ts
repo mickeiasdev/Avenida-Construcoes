@@ -11,7 +11,7 @@ export default async function handler(req: Request): Promise<Response> {
   const KEY = process.env.VITE_SUPABASE_ANON_KEY ?? ''
   if (SB && KEY) {
     try {
-      const r = await fetch(SB + '/rest/v1/products?select=id,updated_at&active=eq.true&limit=2000', {
+      const r = await fetch(SB + '/rest/v1/products?select=id&active=eq.true&limit=2000', {
         headers: { apikey: KEY, Authorization: 'Bearer ' + KEY },
       })
       const list = await r.json()

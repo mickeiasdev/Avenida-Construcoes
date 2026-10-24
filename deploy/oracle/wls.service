@@ -1,0 +1,21 @@
+# systemd — mantém a loja sempre de pé (recomeça sozinho se cair
+# ou quando o servidor reinicia).
+# Instale com:
+#   sudo cp deploy/oracle/wls.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now wls
+[Unit]
+Description=Loja white-label-store (Node)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/loja
+ExecStart=/usr/bin/node server.js
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Restart=always
+RestartSec=5
+User=loja
+
+[Install]
+WantedBy=multi-user.target

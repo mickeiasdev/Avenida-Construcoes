@@ -1,0 +1,17 @@
+# Caddy — HTTPS grátis e automático (emite e renova o certificado
+# sozinho via Let's Encrypt). Instale com:
+#   sudo cp deploy/oracle/Caddyfile /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# TROQUE "sualoja.com.br" pelo SEU domínio (A record apontando pro IP
+# da VM) ou pelo subdomínio gratuito do DuckDNS (sualoja.duckdns.org).
+sualoja.com.br {
+	encode gzip
+	reverse_proxy 127.0.0.1:3000
+}
+
+# Ainda sem domínio? Comente o bloco de cima e descomente este para
+# testar só por HTTP (sem HTTPS) direto no IP da VM:
+# :80 {
+# 	reverse_proxy 127.0.0.1:3000
+# }
