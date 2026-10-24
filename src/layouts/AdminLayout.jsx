@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Percent, Users, Menu, X, PlusCircle, MessageCircle, Home, Zap, Star, FileText, Image as ImageIcon, CalendarDays, Moon, LifeBuoy, AlertTriangle, UserCheck } from 'lucide-react';import { useAuth } from '../context/AuthContext'
+import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Percent, Users, Menu, X, PlusCircle, MessageCircle, Home, Zap, Star, FileText, Image as ImageIcon, CalendarDays, Moon, LifeBuoy, AlertTriangle } from 'lucide-react';import { useAuth } from '../context/AuthContext'
 import { AdminTour, TourRestartButton } from '../components/AdminTour'
 import { toggleTheme } from '../lib/theme'
 import { devWhatsappLink, DEVELOPER } from '../lib/branding'
@@ -40,7 +40,6 @@ const ITEMS = [
   { to: '/admin/produtos', label: 'Produtos', icon: Package, group: 'Catálogo' },
   { to: '/admin/categorias', label: 'Categorias', icon: Tags },
   { to: '/admin/promocoes', label: 'Promoções', icon: Percent },
-  { to: '/admin/profissionais', label: 'Profissionais', icon: UserCheck },
   { to: '/admin/banners', label: 'Banners', icon: ImageIcon },
   { to: '/admin/avaliacoes', label: 'Avaliações', icon: Star },
   { to: '/admin/cupons', label: 'Cupons', icon: TicketPercent },

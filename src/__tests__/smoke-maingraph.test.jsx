@@ -12,7 +12,7 @@ describe('smoke: grafo estático do bundle principal', () => {
     expect(typeof mod.default).toBe('function')
   })
 
-  it('AdminLayout carrega (UserCheck precisa estar importado — bug da tela branca)', async () => {
+  it('AdminLayout carrega sem explodir (o bug da tela branca estourava aqui)', async () => {
     const mod = await import('../layouts/AdminLayout.jsx')
     expect(typeof mod.default).toBe('function')
   })

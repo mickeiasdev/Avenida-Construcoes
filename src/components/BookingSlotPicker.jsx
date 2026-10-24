@@ -9,10 +9,8 @@ import { bookableDays, humanDayLabel, humanHourLabel, slotsForDate } from '../li
 //   title      → rótulo do bloco ("Escolha o horário do serviço")
 //   durationMin → duração (serviços) ou 30 (retirada)
 //   productId   → null na retirada (considera TODOS os agendamentos)
-//   professionalId → profissional específico: só os horários DELE ocupam
-//   slots (2 cadeiras = 2 horários livres no mesmo horário)
 //   value/onChange → ISO do slot escolhido
-export function BookingSlotPicker({ settings, title, durationMin = 30, productId = null, professionalId = null, value, onChange, compact = false }) {
+export function BookingSlotPicker({ settings, title, durationMin = 30, productId = null, value, onChange, compact = false }) {
   const days = useMemo(() => bookableDays(settings), [settings])
   const [day, setDay] = useState(0)
   const [taken, setTaken] = useState(null)
@@ -20,9 +18,7 @@ export function BookingSlotPicker({ settings, title, durationMin = 30, productId
   const date = days[day] ?? days[0]
   const dayKey = date ? date.toDateString() : null
 
-  // horários ocupados: pedidos agendados no dia. PROFISSIONAL específico
-  // → só os horários DELE contam; "qualquer profissional" conta todos (v1:
-  // o atendimento "de qualquer um" não trava a agenda dos específicos).
+  // horários ocupados: pedidos agendados no dia (um atendimento por horário).
   useEffect(() => {
     if (!dayKey) return undefined
     const from = new Date(dayKey + 'T00:00:00')
@@ -33,7 +29,6 @@ export function BookingSlotPicker({ settings, title, durationMin = 30, productId
       .not('scheduled_at', 'is', null)
       .gte('scheduled_at', from.toISOString())
       .lt('scheduled_at', to.toISOString())
-    if (professionalId) q = q.eq('professional_id', professionalId)
     let cancelled = false
     q.then(({ data }) => {
       if (cancelled) return
@@ -43,7 +38,7 @@ export function BookingSlotPicker({ settings, title, durationMin = 30, productId
       setTaken(list)
     }, () => { if (!cancelled) setTaken([]) })
     return () => { cancelled = true }
-  }, [dayKey, productId, professionalId])
+  }, [dayKey, productId])
 
   const slots = useMemo(
     () => (date && taken ? slotsForDate(settings, date, durationMin, taken) : []),

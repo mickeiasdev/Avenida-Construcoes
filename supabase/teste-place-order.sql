@@ -225,10 +225,9 @@ begin
   if v_ok then raise notice '✅ 10. agendamento no passado recusado'; else raise notice '❌ 10. deveria recusar agendamento no passado — %', coalesce(v_err, 'passou!'); end if;
 end $$;
 
-do $$ -- 11. agendamento com PROFISSIONAL grave o id dele no pedido
-declare v_res jsonb; v_pro uuid; v_ok boolean := true;
+do $$ -- 11. p_professional_id (feature removida na migration-38): aceito e IGNORADO
+declare v_res jsonb; v_ok boolean := true;
 begin
-  insert into public.professionals (name, active) values ('ZZ-TESTE Pro', true) returning id into v_pro;
   insert into public.products (id, name, price, is_service, active)
   values ('10000000-0000-4000-8000-000000000011', 'ZZ-TESTE servico2', 50, true, true);
   begin
@@ -237,13 +236,13 @@ begin
       p_items => '[{"product_id":"10000000-0000-4000-8000-000000000011","quantity":1}]'::jsonb,
       p_delivery_method => 'retirada',
       p_scheduled_at => now() + interval '2 days',
-      p_professional_id => v_pro,
+      p_professional_id => '10000000-0000-4000-8000-000000000099', -- aceito, ignorado
       p_customer_phone => '5599900000011', p_is_guest => true
     ) into v_res;
-    if v_res is null or (v_res->>'professional_id')::uuid is distinct from v_pro then v_ok := false; end if;
+    if v_res is null or (v_res->>'professional_id') is not null then v_ok := false; end if;
   exception when others then v_ok := false;
   end;
-  if v_ok then raise notice '✅ 11. agendamento com profissional gravado'; else raise notice '❌ 11. profissional deveria ir no pedido — %', coalesce(v_res->>'professional_id','ERRO'); end if;
+  if v_ok then raise notice '✅ 11. p_professional_id ignorado e resposta sem o campo (feature removida)'; else raise notice '❌ 11. pedido deveria seguir com p_professional_id ignorado — %', coalesce(v_res::text,'ERRO'); end if;
 end $$;
 
 do $$ -- 12. ANTI-SPAM: terceiro pedido do mesmo telefone em 2 min é recusado
@@ -281,7 +280,6 @@ delete from public.products    where name like 'ZZ-TESTE%';
 delete from public.coupons     where code like 'ZZTESTE%';
 delete from public.delivery_zones     where name = 'ZZ-TESTE-ZONA';
 delete from public.delivery_cep_ranges where label = 'ZZ-TESTE-CEP';
-delete from public.professionals where name like 'ZZ-TESTE%';
 delete from public.categories where slug = 'zz-teste-cat';
 
 do $$
