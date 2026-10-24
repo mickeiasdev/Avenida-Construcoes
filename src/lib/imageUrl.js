@@ -6,6 +6,6 @@ export function thumb(url, width = 400) {
   if (!u) return ''
   if (!u.includes('/storage/v1/object/public/')) return u
   return u
-    .replace('/storage/v1/object/public/', '/storage/v1/render/public/')
+    .replace('/storage/v1/object/public/', '/storage/v1/render/image/public/')
     + '?width=' + width + '&quality=75'
 }
