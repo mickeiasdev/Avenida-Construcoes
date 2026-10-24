@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Percent, Users, Menu, X, PlusCircle, MessageCircle, Home, Zap, Star, FileText, Image as ImageIcon, CalendarDays, Moon, LifeBuoy, AlertTriangle } from 'lucide-react';import { useAuth } from '../context/AuthContext'
+import { LayoutDashboard, Package, Tags, Settings as SettingsIcon, Store, LogOut, ClipboardList, TicketPercent, Percent, Users, Menu, X, PlusCircle, MessageCircle, Home, Zap, Star, FileText, Image as ImageIcon, CalendarDays, Moon, LifeBuoy, AlertTriangle, UserCheck } from 'lucide-react';import { useAuth } from '../context/AuthContext'
 import { AdminTour, TourRestartButton } from '../components/AdminTour'
 import { toggleTheme } from '../lib/theme'
 import { devWhatsappLink, DEVELOPER } from '../lib/branding'
